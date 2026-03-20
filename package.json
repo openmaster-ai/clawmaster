@@ -1,6 +1,6 @@
 {
   "name": "openclaw-manager",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "龙虾管家 - OpenClaw 图形化管理工具",
   "workspaces": [

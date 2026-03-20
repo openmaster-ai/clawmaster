@@ -1,144 +1,17 @@
 import { PlatformAdapter, SystemInfo, GatewayStatus, OpenClawConfig, ChannelInfo, ChannelConfig, ModelInfo, SkillInfo, AgentInfo, LogEntry, AgentConfig } from '@/lib/types'
-import { isTauri } from '@/lib/types'
+
+// 动态检测 Tauri 环境
+function getIsTauri(): boolean {
+  return typeof window !== 'undefined' && '__TAURI__' in window
+}
 
 // Tauri invoke helper
 async function invoke<T>(cmd: string, args?: Record<string, any>): Promise<T> {
-  if (typeof window !== 'undefined' && '__TAURI__' in window) {
-    const { invoke: tauriInvoke } = await import('@tauri-apps/api/core')
-    return tauriInvoke(cmd, args)
+  if (!getIsTauri()) {
+    throw new Error('Not running in Tauri environment')
   }
-  throw new Error('Not running in Tauri environment')
-}
-
-// Web API 适配器
-const webAdapter: PlatformAdapter = {
-  async detectSystem(): Promise<SystemInfo> {
-    const res = await fetch('/api/system/detect')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return res.json()
-  },
-  
-  async getGatewayStatus(): Promise<GatewayStatus> {
-    const res = await fetch('/api/gateway/status')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return res.json()
-  },
-  
-  async startGateway(): Promise<void> {
-    await fetch('/api/gateway/start', { method: 'POST' })
-  },
-  
-  async stopGateway(): Promise<void> {
-    await fetch('/api/gateway/stop', { method: 'POST' })
-  },
-  
-  async restartGateway(): Promise<void> {
-    await fetch('/api/gateway/restart', { method: 'POST' })
-  },
-  
-  async getConfig(): Promise<OpenClawConfig> {
-    const res = await fetch('/api/config')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return res.json()
-  },
-  
-  async setConfig(path: string, value: any): Promise<void> {
-    await fetch(`/api/config/${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value }),
-    })
-  },
-  
-  async getChannels(): Promise<ChannelInfo[]> {
-    const res = await fetch('/api/channels')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return res.json()
-  },
-  
-  async addChannel(channel: ChannelConfig): Promise<void> {
-    await fetch('/api/channels', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(channel),
-    })
-  },
-  
-  async removeChannel(id: string): Promise<void> {
-    await fetch(`/api/channels/${id}`, { method: 'DELETE' })
-  },
-  
-  async getModels(): Promise<ModelInfo[]> {
-    const res = await fetch('/api/models')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return res.json()
-  },
-  
-  async setDefaultModel(modelId: string): Promise<void> {
-    await fetch('/api/models/default', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ modelId }),
-    })
-  },
-  
-  async getSkills(): Promise<SkillInfo[]> {
-    const res = await fetch('/api/skills')
-    if (!res.ok) return []
-    return res.json()
-  },
-  
-  async searchSkills(query: string): Promise<SkillInfo[]> {
-    const res = await fetch(`/api/skills/search?q=${encodeURIComponent(query)}`)
-    if (!res.ok) return []
-    return res.json()
-  },
-  
-  async installSkill(slug: string): Promise<void> {
-    await fetch('/api/skills/install', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug }),
-    })
-  },
-  
-  async uninstallSkill(slug: string): Promise<void> {
-    await fetch('/api/skills/uninstall', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug }),
-    })
-  },
-  
-  async getAgents(): Promise<AgentInfo[]> {
-    const res = await fetch('/api/agents')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return res.json()
-  },
-  
-  async createAgent(agent: AgentConfig): Promise<void> {
-    await fetch('/api/agents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(agent),
-    })
-  },
-  
-  async deleteAgent(id: string): Promise<void> {
-    await fetch(`/api/agents/${id}`, { method: 'DELETE' })
-  },
-  
-  async getLogs(lines: number): Promise<LogEntry[]> {
-    const res = await fetch(`/api/logs?lines=${lines}`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return res.json()
-  },
-  
-  streamLogs(callback: (entry: LogEntry) => void): () => void {
-    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/logs/stream`)
-    ws.onmessage = (e) => callback(JSON.parse(e.data))
-    return () => ws.close()
-  },
+  const { invoke: tauriInvoke } = await import('@tauri-apps/api/core')
+  return tauriInvoke(cmd, args)
 }
 
 // Tauri 适配器 - 直接调用本地命令
@@ -341,5 +214,144 @@ const tauriAdapter: PlatformAdapter = {
   },
 }
 
-// 导出当前平台适配器
-export const platform: PlatformAdapter = isTauri ? tauriAdapter : webAdapter
+// Web API 适配器（仅用于 Web 版本）
+const webAdapter: PlatformAdapter = {
+  async detectSystem(): Promise<SystemInfo> {
+    const res = await fetch('/api/system/detect')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.json()
+  },
+  
+  async getGatewayStatus(): Promise<GatewayStatus> {
+    const res = await fetch('/api/gateway/status')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.json()
+  },
+  
+  async startGateway(): Promise<void> {
+    await fetch('/api/gateway/start', { method: 'POST' })
+  },
+  
+  async stopGateway(): Promise<void> {
+    await fetch('/api/gateway/stop', { method: 'POST' })
+  },
+  
+  async restartGateway(): Promise<void> {
+    await fetch('/api/gateway/restart', { method: 'POST' })
+  },
+  
+  async getConfig(): Promise<OpenClawConfig> {
+    const res = await fetch('/api/config')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.json()
+  },
+  
+  async setConfig(path: string, value: any): Promise<void> {
+    await fetch(`/api/config/${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value }),
+    })
+  },
+  
+  async getChannels(): Promise<ChannelInfo[]> {
+    const res = await fetch('/api/channels')
+    if (!res.ok) return []
+    return res.json()
+  },
+  
+  async addChannel(channel: ChannelConfig): Promise<void> {
+    await fetch('/api/channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(channel),
+    })
+  },
+  
+  async removeChannel(id: string): Promise<void> {
+    await fetch(`/api/channels/${id}`, { method: 'DELETE' })
+  },
+  
+  async getModels(): Promise<ModelInfo[]> {
+    const res = await fetch('/api/models')
+    if (!res.ok) return []
+    return res.json()
+  },
+  
+  async setDefaultModel(modelId: string): Promise<void> {
+    await fetch('/api/models/default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelId }),
+    })
+  },
+  
+  async getSkills(): Promise<SkillInfo[]> {
+    const res = await fetch('/api/skills')
+    if (!res.ok) return []
+    return res.json()
+  },
+  
+  async searchSkills(query: string): Promise<SkillInfo[]> {
+    const res = await fetch(`/api/skills/search?q=${encodeURIComponent(query)}`)
+    if (!res.ok) return []
+    return res.json()
+  },
+  
+  async installSkill(slug: string): Promise<void> {
+    await fetch('/api/skills/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug }),
+    })
+  },
+  
+  async uninstallSkill(slug: string): Promise<void> {
+    await fetch('/api/skills/uninstall', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug }),
+    })
+  },
+  
+  async getAgents(): Promise<AgentInfo[]> {
+    const res = await fetch('/api/agents')
+    if (!res.ok) return []
+    return res.json()
+  },
+  
+  async createAgent(agent: AgentConfig): Promise<void> {
+    await fetch('/api/agents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(agent),
+    })
+  },
+  
+  async deleteAgent(id: string): Promise<void> {
+    await fetch(`/api/agents/${id}`, { method: 'DELETE' })
+  },
+  
+  async getLogs(lines: number): Promise<LogEntry[]> {
+    const res = await fetch(`/api/logs?lines=${lines}`)
+    if (!res.ok) return []
+    return res.json()
+  },
+  
+  streamLogs(callback: (entry: LogEntry) => void): () => void {
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/logs/stream`)
+    ws.onmessage = (e) => callback(JSON.parse(e.data))
+    return () => ws.close()
+  },
+}
+
+// 导出当前平台适配器 - 动态检测
+export const platform: PlatformAdapter = new Proxy({} as PlatformAdapter, {
+  get(_target, prop: keyof PlatformAdapter) {
+    const adapter = getIsTauri() ? tauriAdapter : webAdapter
+    return adapter[prop]
+  }
+})
+
+// 导出检测函数供外部使用
+export { getIsTauri as isTauri }
