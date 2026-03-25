@@ -2,6 +2,32 @@ import { useEffect, useState } from 'react'
 import { platform } from '@/adapters'
 import type { SkillInfo } from '@/lib/types'
 
+// ─── 场景推荐数据 ───
+
+const RECOMMENDED_SCENES = [
+  {
+    id: 'photo-qa',
+    title: '拍照答题',
+    desc: '拍照 → OCR 识别 → AI 解题 → 返回答案，通过飞书/微信/钉钉直接使用',
+    skills: ['paddleocr-doc-parsing', 'paddleocr-text-recognition'],
+    icon: '📸',
+  },
+  {
+    id: 'invoice',
+    title: '发票整理',
+    desc: '拍照/转发发票 → 自动识别抬头金额类型 → 归档整理 → 导出报表',
+    skills: ['paddleocr-doc-parsing'],
+    icon: '🧾',
+  },
+  {
+    id: 'mistakes',
+    title: '错题本',
+    desc: '自动收集错题、分类归档、定期推送复习，结合记忆管理长期记忆',
+    skills: ['paddleocr-text-recognition'],
+    icon: '📝',
+  },
+]
+
 export default function Skills() {
   const [installedSkills, setInstalledSkills] = useState<SkillInfo[]>([])
   const [searchResults, setSearchResults] = useState<SkillInfo[]>([])
@@ -75,8 +101,45 @@ export default function Skills() {
     return <div className="flex items-center justify-center h-64">加载中...</div>
   }
 
+  async function handleSceneInstall(skills: string[]) {
+    setOperating('scene')
+    try {
+      for (const slug of skills) {
+        await platform.installSkill(slug)
+      }
+      await loadSkills()
+    } catch (err: any) {
+      alert(`安装失败: ${err.message}`)
+    } finally {
+      setOperating(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {/* 场景推荐 */}
+      <div>
+        <h3 className="font-medium mb-3">推荐场景</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {RECOMMENDED_SCENES.map((scene) => (
+            <div key={scene.id} className="bg-card border border-border rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">{scene.icon}</span>
+                <span className="font-medium">{scene.title}</span>
+              </div>
+              <p className="text-sm text-muted-foreground mb-3">{scene.desc}</p>
+              <button
+                onClick={() => handleSceneInstall(scene.skills)}
+                disabled={operating === 'scene'}
+                className="w-full py-1.5 text-sm bg-primary text-primary-foreground rounded hover:opacity-90 disabled:opacity-50"
+              >
+                {operating === 'scene' ? '安装中...' : '一键安装'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="flex gap-4">
         <button
           onClick={() => setView('installed')}

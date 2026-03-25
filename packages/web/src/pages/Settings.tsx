@@ -104,6 +104,40 @@ export default function Settings() {
         </div>
       </section>
 
+      {/* 花费预算 */}
+      <section className="bg-card border border-border rounded-lg p-4">
+        <h3 className="font-medium mb-3">花费预算</h3>
+        <p className="text-sm text-muted-foreground mb-3">
+          设置预算上限，超支时在可观测 Dashboard 显示告警
+        </p>
+        <div className="space-y-3">
+          {(['day', 'week', 'month'] as const).map((period) => {
+            const labels = { day: '日预算', week: '周预算', month: '月预算' }
+            const key = `clawmaster-budget-${period}`
+            return (
+              <div key={period} className="flex items-center gap-4">
+                <label className="w-20 text-sm text-muted-foreground">{labels[period]}:</label>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm">$</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="不限"
+                    defaultValue={localStorage.getItem(key) ?? ''}
+                    onChange={(e) => {
+                      if (e.target.value) localStorage.setItem(key, e.target.value)
+                      else localStorage.removeItem(key)
+                    }}
+                    className="w-24 px-2 py-1.5 bg-background border border-border rounded text-sm"
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
       {/* 系统信息 */}
       <section className="bg-card border border-border rounded-lg p-4">
         <h3 className="font-medium mb-3">系统信息</h3>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { platform } from '@/adapters'
+import { PasswordField } from '@/shared/components/PasswordField'
 import type { OpenClawConfig, ModelInfo } from '@/lib/types'
 
 export default function Models() {
@@ -77,12 +78,19 @@ export default function Models() {
               </div>
             </div>
             
+            {(provider.apiKey || provider.api_key) && (
+              <div className="flex items-center gap-2 text-sm mb-2">
+                <span className="text-muted-foreground w-16">API Key:</span>
+                <PasswordField value={provider.apiKey || provider.api_key} className="flex-1" />
+              </div>
+            )}
+
             {provider.models && (
               <div className="text-sm text-muted-foreground">
                 <p>可用模型: {provider.models.map((m: any) => m.name || m.id).join(', ')}</p>
               </div>
             )}
-            
+
             <p className="text-green-600 text-sm mt-2">✓ 已配置</p>
           </div>
         ))}
