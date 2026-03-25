@@ -10,7 +10,8 @@ async function invoke<T>(cmd: string, args?: Record<string, any>): Promise<T> {
   if (!getIsTauri()) {
     throw new Error('Not running in Tauri environment')
   }
-  const { invoke: tauriInvoke } = await import('@tauri-apps/api/core')
+  const tauriModule = '@tauri-apps/api' + '/core'
+  const { invoke: tauriInvoke } = await import(/* @vite-ignore */ tauriModule)
   return tauriInvoke(cmd, args)
 }
 

@@ -74,6 +74,12 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     try {
       await adapter.installCapabilities(missing, (progress) => {
         setInstallProgress((prev) => ({ ...prev, [progress.id]: progress }))
+        // 安装完成后更新 capabilities 状态
+        if (progress.status === 'done') {
+          setCapabilities((prev) =>
+            prev.map((c) => (c.id === progress.id ? { ...c, status: 'installed' } : c)),
+          )
+        }
       })
       setPhase('done')
     } catch (err) {
