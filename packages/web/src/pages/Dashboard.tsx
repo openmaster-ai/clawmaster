@@ -155,6 +155,31 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* 六大核心速览 */}
+      <div className="grid grid-cols-3 gap-4">
+        <Link to="/observe" className="bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">💰</span>
+            <h3 className="font-medium">费用追踪</h3>
+          </div>
+          <p className="text-sm text-muted-foreground">查看 Token 消耗、API 费用、上下文健康度</p>
+        </Link>
+        <Link to="/memory" className="bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">🧠</span>
+            <h3 className="font-medium">记忆管理</h3>
+          </div>
+          <p className="text-sm text-muted-foreground">PowerMem 智能记忆，Token 降 96%</p>
+        </Link>
+        <Link to="/skills" className="bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">⚡</span>
+            <h3 className="font-medium">技能市场</h3>
+          </div>
+          <p className="text-sm text-muted-foreground">拍照答题、错题本、发票整理，开箱即用</p>
+        </Link>
+      </div>
+
       {/* 快捷操作 */}
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="font-medium mb-3">快捷操作</h3>

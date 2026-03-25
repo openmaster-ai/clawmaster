@@ -1,14 +1,23 @@
 import { useLocation, Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { registeredModules } from '@/modules/registry'
 
 interface LayoutProps {
   children: React.ReactNode
 }
 
-const navItems = [
-  { path: '/', label: '概览', icon: '📊' },
-  { path: '/observe', label: '可观测', icon: '💰' },
-  { path: '/memory', label: '记忆', icon: '🧠' },
+// 固定导航项（概览 + 旧页面，第二周迁移到模块后移除 legacyNavItems）
+const homeNav = { path: '/', label: '概览', icon: '📊' }
+
+// 自动注册的模块导航（从 modules/registry 动态获取）
+const moduleNavItems = registeredModules.map((m) => ({
+  path: m.route.path,
+  label: m.name,
+  icon: m.icon,
+}))
+
+// 旧页面导航（第二周迁移后删除）
+const legacyNavItems = [
   { path: '/gateway', label: '网关', icon: '🔌' },
   { path: '/channels', label: '通道', icon: '📡' },
   { path: '/models', label: '模型', icon: '🤖' },
@@ -19,6 +28,8 @@ const navItems = [
   { path: '/logs', label: '日志', icon: '📝' },
   { path: '/settings', label: '设置', icon: '🔧' },
 ]
+
+const navItems = [homeNav, ...moduleNavItems, ...legacyNavItems]
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
