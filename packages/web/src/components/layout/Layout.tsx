@@ -8,6 +8,7 @@ interface LayoutProps {
 const navItems = [
   { path: '/', label: '概览', icon: '📊' },
   { path: '/observe', label: '可观测', icon: '💰' },
+  { path: '/memory', label: '记忆', icon: '🧠' },
   { path: '/gateway', label: '网关', icon: '🔌' },
   { path: '/channels', label: '通道', icon: '📡' },
   { path: '/models', label: '模型', icon: '🤖' },

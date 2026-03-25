@@ -14,8 +14,10 @@ import Docs from './pages/Docs'
 import Logs from './pages/Logs'
 import Settings from './pages/Settings'
 import observeModule from './modules/observe'
+import memoryModule from './modules/memory'
 
 const ObservePage = observeModule.route.component
+const MemoryPage = memoryModule.route.component
 
 function App() {
   const [appReady, setAppReady] = useState(false)
@@ -30,6 +32,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/observe" element={<ObservePage />} />
+        <Route path="/memory" element={<MemoryPage />} />
         <Route path="/gateway" element={<Gateway />} />
         <Route path="/channels" element={<Channels />} />
         <Route path="/models" element={<Models />} />
