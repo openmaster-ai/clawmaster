@@ -57,6 +57,8 @@ export const CAPABILITIES: CapabilityDef[] = [
       { cmd: 'openclaw', args: ['plugins', 'install', 'memory-powermem'] },
       // 4. 通过 ClawHub Skill 自动完成配置 + 槽位切换
       { cmd: 'clawhub', args: ['install', 'teingi/install-powermem-memory-minimal'] },
+      // 5. 启动 PowerMem HTTP API 服务（供大师 GUI 调用）
+      { cmd: 'bash', args: ['-c', 'cd ~/.openclaw/powermem && source .venv/bin/activate && nohup powermem-server --host 0.0.0.0 --port 8000 > powermem.log 2>&1 &'] },
     ],
   },
   {
