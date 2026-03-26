@@ -45,11 +45,18 @@ export const CAPABILITIES: CapabilityDef[] = [
   {
     id: 'memory',
     name: '记忆管理',
-    detectCmd: 'pmem',
-    detectArgs: ['--version'],
+    detectCmd: 'openclaw',
+    detectArgs: ['ltm', 'health'],
     installSteps: [
-      { cmd: 'pip', args: ['install', 'powermem'] },
+      // 1. 创建目录 + 虚拟环境
+      { cmd: 'mkdir', args: ['-p', '~/.openclaw/powermem'] },
+      { cmd: 'python3', args: ['-m', 'venv', '~/.openclaw/powermem/.venv'] },
+      // 2. 在虚拟环境中安装 PowerMem
+      { cmd: '~/.openclaw/powermem/.venv/bin/pip', args: ['install', 'powermem'] },
+      // 3. 安装 OpenClaw 插件
       { cmd: 'openclaw', args: ['plugins', 'install', 'memory-powermem'] },
+      // 4. 通过 ClawHub Skill 自动完成配置 + 槽位切换
+      { cmd: 'clawhub', args: ['install', 'teingi/install-powermem-memory-minimal'] },
     ],
   },
   {
