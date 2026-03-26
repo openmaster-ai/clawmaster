@@ -1,0 +1,190 @@
+suite: config-and-security
+name: 配置编辑 + 安全功能
+description: |
+  验证配置页面的可写能力和安全相关功能：
+  1. 配置可视化编辑
+  2. JSON 编辑器
+  3. 配置保存/导出
+  4. API Key 脱敏
+  5. 花费预算设置
+  6. 主题切换
+
+preconditions:
+  - dev server 已启动
+  - 已进入主界面
+
+viewport: { width: 1280, height: 800 }
+
+cases:
+  # === 配置编辑 ===
+
+  - id: cfg-01
+    name: 可视化编辑模式
+    steps:
+      - action: navigate_to
+        target: 配置页面
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: cfg-visual-mode
+    assertions:
+      - 显示"可视化编辑"和"JSON 编辑器"两个 tab
+      - "可视化编辑"tab 默认选中（高亮）
+      - 显示"网关 (Gateway)"折叠区（端口、模式、绑定、认证）
+      - 显示"代理默认设置 (Agents Defaults)"折叠区
+      - 输入框可编辑（非 readOnly）
+      - 显示"保存""刷新""导出"三个按钮
+
+  - id: cfg-02
+    name: 可视化编辑字段交互
+    steps:
+      - action: clear_and_fill
+        target: 端口输入框
+        value: "18800"
+      - action: select
+        target: 绑定模式下拉
+        value: "lan"
+      - action: screenshot
+        name: cfg-editing
+    assertions:
+      - 端口输入框值变为"18800"
+      - 绑定模式下拉值变为"LAN"
+      - 输入框支持数字类型校验
+
+  - id: cfg-03
+    name: JSON 编辑器模式
+    steps:
+      - action: click
+        target: text("JSON 编辑器")
+      - action: wait
+        duration: 500ms
+      - action: screenshot
+        name: cfg-json-mode
+    assertions:
+      - "JSON 编辑器"tab 高亮
+      - 显示 textarea 包含格式化的 JSON 文本
+      - textarea 可编辑
+      - JSON 内容与可视化编辑的字段一致
+
+  - id: cfg-04
+    name: JSON 语法校验
+    steps:
+      - action: clear_and_fill
+        target: JSON textarea
+        value: "{ invalid json"
+    assertions:
+      - 显示红色错误提示"JSON 语法错误: ..."
+      - "保存"按钮置灰（disabled）
+
+  - id: cfg-05
+    name: 配置保存
+    steps:
+      - action: click
+        target: text("可视化编辑")
+      - action: click
+        target: text("保存")
+      - action: wait
+        duration: 1000ms
+    assertions:
+      - 按钮变为"保存中..."
+      - 保存成功显示绿色"保存成功"提示
+      - 保存失败显示红色错误信息
+      - 提示 2 秒后自动消失
+
+  - id: cfg-06
+    name: 配置导出
+    steps:
+      - action: click
+        target: text("导出")
+    assertions:
+      - 触发文件下载
+      - 下载文件名为"openclaw-config.json"
+      - 文件内容为当前 JSON 配置
+
+  # === API Key 脱敏 ===
+
+  - id: sec-01
+    name: API Key 脱敏显示
+    preconditions:
+      - OpenClaw 配置中有模型提供商配置（含 apiKey 字段）
+    steps:
+      - action: navigate_to
+        target: 模型页面
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: sec-api-key-masked
+    assertions:
+      - API Key 显示为脱敏格式：前 3 位 + 省略号 + 后 4 位（如"sk-•••••1234"）
+      - 旁边有眼睛图标（👁️）和复制图标（📋）
+      - 不显示完整 Key
+
+  - id: sec-02
+    name: API Key 显示切换
+    steps:
+      - action: click
+        target: 眼睛图标（👁️）
+      - action: screenshot
+        name: sec-api-key-visible
+    assertions:
+      - 完整 API Key 显示
+      - 图标变为 🙈
+      - 再次点击恢复脱敏
+
+  # === 花费预算 ===
+
+  - id: sec-03
+    name: 花费预算设置
+    steps:
+      - action: navigate_to
+        target: 设置页面
+      - action: scroll_to
+        target: 花费预算区域
+      - action: screenshot
+        name: sec-budget-settings
+    assertions:
+      - 显示"花费预算"区块标题
+      - 显示说明文字"设置预算上限，超支时在可观测 Dashboard 显示告警"
+      - 显示 3 个输入框：日预算 / 周预算 / 月预算
+      - 输入框有 $ 前缀
+      - 输入框类型为 number
+      - placeholder 为"不限"
+
+  - id: sec-04
+    name: 预算值持久化
+    steps:
+      - action: fill
+        target: 日预算输入框
+        value: "5"
+      - action: fill
+        target: 周预算输入框
+        value: "20"
+      - action: navigate_to
+        target: 其他页面
+      - action: navigate_to
+        target: 设置页面
+    assertions:
+      - 日预算输入框仍显示"5"
+      - 周预算输入框仍显示"20"
+      - 值通过 localStorage 持久化
+
+  # === 主题切换 ===
+
+  - id: sec-05
+    name: 主题切换
+    steps:
+      - action: navigate_to
+        target: 设置页面
+      - action: click
+        target: "深色"主题 radio
+      - action: screenshot
+        name: sec-theme-dark
+      - action: click
+        target: "浅色"主题 radio
+      - action: screenshot
+        name: sec-theme-light
+    assertions:
+      - 选中"深色"后页面背景变暗，文字变浅
+      - 选中"浅色"后页面恢复亮色
+      - <html> 元素的 class 包含 "dark" 或 "light"
+      - 刷新后主题保持（localStorage 持久化）

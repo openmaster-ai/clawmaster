@@ -1,0 +1,99 @@
+suite: skills-marketplace
+name: 技能市场
+description: |
+  验证技能页面的场景推荐、技能列表、市场搜索、安装/卸载功能
+
+preconditions:
+  - dev server 已启动
+  - 已进入主界面
+
+viewport: { width: 1280, height: 800 }
+
+cases:
+  - id: skill-01
+    name: 场景推荐区块
+    steps:
+      - action: navigate_to
+        target: 技能页面
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: skill-scenes
+    assertions:
+      - 显示"推荐场景"标题
+      - 显示 3 张场景卡片，横向排列（md 及以上）
+      - 拍照答题卡片：📸 图标 + 描述含"OCR""飞书/微信/钉钉" + 一键安装按钮
+      - 发票整理卡片：🧾 图标 + 描述含"发票""归档" + 一键安装按钮
+      - 错题本卡片：📝 图标 + 描述含"错题""复习" + 一键安装按钮
+
+  - id: skill-02
+    name: 已安装技能 tab
+    steps:
+      - action: observe
+        target: "已安装"tab 区域
+    assertions:
+      - "已安装 (N)"tab 默认选中
+      - 显示过滤输入框"过滤已安装技能..."
+      - 如有技能：显示技能卡片（名称 + 版本 + 描述 + 卸载按钮）
+      - 如无技能：显示"暂无已安装技能"
+
+  - id: skill-03
+    name: 搜索市场 tab
+    steps:
+      - action: click
+        target: text("搜索市场")
+      - action: screenshot
+        name: skill-market-tab
+    assertions:
+      - "搜索市场"tab 高亮
+      - 显示搜索输入框"搜索 ClawHub 5400+ 技能..."
+      - 显示"搜索"按钮
+      - 显示"访问 ClawHub 在线市场 →"链接
+      - 初始状态显示"输入关键词搜索 ClawHub 技能市场"提示
+
+  - id: skill-04
+    name: 市场搜索交互
+    preconditions:
+      - clawhub CLI 可用
+    steps:
+      - action: fill
+        target: 搜索输入框
+        value: "paddleocr"
+      - action: click
+        target: text("搜索")
+      - action: wait
+        duration: 3000ms
+      - action: screenshot
+        name: skill-search-results
+    assertions:
+      - 搜索按钮变为"搜索中..."再恢复
+      - 搜索结果显示匹配的技能卡片
+      - 每张卡片有"安装"按钮
+      - 也支持按 Enter 触发搜索
+
+  - id: skill-05
+    name: 场景一键安装
+    steps:
+      - action: click
+        target: 拍照答题卡片的"一键安装"按钮
+      - action: observe
+        duration: 3000ms
+    assertions:
+      - 按钮变为"安装中..."
+      - 按钮置灰（disabled）
+      - 安装完成后按钮恢复
+      - 已安装 tab 数字更新
+
+  - id: skill-06
+    name: 技能卸载
+    preconditions:
+      - 有已安装的技能
+    steps:
+      - action: click
+        target: 某个技能的"卸载"按钮
+      - action: observe
+    assertions:
+      - 弹出确认对话框
+      - 按钮变为"处理中..."
+      - 卸载完成后技能从列表消失
+      - 已安装数字更新

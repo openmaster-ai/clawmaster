@@ -1,0 +1,157 @@
+suite: observe-module
+name: 可观测模块
+description: |
+  验证可观测 Dashboard 的完整功能：
+  1. ClawProbe 状态检测 + 降级 UI
+  2. 费用卡片（日/周/月 + 预算进度条）
+  3. 图表渲染（费用趋势/模型分布/Token 用量）
+  4. 上下文健康度
+  5. 智能优化建议
+  6. 会话列表
+
+preconditions:
+  - dev server 已启动
+  - 已进入主界面
+
+viewport: { width: 1280, height: 800 }
+
+cases:
+  # === ClawProbe 未运行 ===
+
+  - id: obs-01
+    name: ClawProbe 未运行时的降级 UI
+    preconditions:
+      - ClawProbe 未安装或未启动
+    steps:
+      - action: navigate_to
+        target: 可观测页面
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: obs-disconnected
+    assertions:
+      - 页面标题"可观测"
+      - 显示 ClawProbe 状态指示灯（灰色）+ "未启动"
+      - 显示"启动"按钮
+      - 显示"无法获取可观测数据"提示
+      - 显示"请确保 ClawProbe 已安装并启动"说明
+      - 显示"重试"按钮
+      - 无白屏、无 JS 异常
+
+  - id: obs-02
+    name: ClawProbe 启停控制
+    steps:
+      - action: click
+        target: 启动按钮
+      - action: observe
+        duration: 2000ms
+    assertions:
+      - 按钮变为"..."（操作中状态）
+      - 操作完成后状态刷新
+      - 如启动成功：指示灯变绿 + "运行中"，按钮变为"停止"
+
+  # === ClawProbe 运行中 ===
+
+  - id: obs-03
+    name: 费用汇总卡片
+    preconditions:
+      - ClawProbe 运行中，有费用数据
+    steps:
+      - action: navigate_to
+        target: 可观测页面
+      - action: wait
+        duration: 3000ms
+      - action: screenshot
+        name: obs-cost-cards
+    assertions:
+      - 显示 3 张费用卡片：今日花费 / 本周花费 / 本月花费
+      - 每张卡片显示美元金额（如"$2.45"）
+      - 每张卡片显示模型数量（如"3 个模型"）
+      - 如设置了预算：显示预算进度条
+      - 预算进度条颜色：绿色(<80%) / 黄色(80%-100%) / 红色(>100%)
+      - 超预算时卡片边框变红 + 显示"超出预算!"
+
+  - id: obs-04
+    name: 费用趋势折线图
+    preconditions:
+      - 有费用数据
+    steps:
+      - action: observe
+        target: 费用趋势图表区域
+    assertions:
+      - 显示"费用趋势"标题
+      - Recharts 折线图渲染（有坐标轴、数据点、线条）
+      - X 轴显示模型名称
+      - Y 轴显示美元金额
+      - 无数据时显示"暂无费用数据"占位
+
+  - id: obs-05
+    name: 模型费用分布饼图
+    preconditions:
+      - 有多个模型的费用数据
+    steps:
+      - action: observe
+        target: 模型分布图表区域
+    assertions:
+      - 显示"模型费用分布"标题
+      - Recharts 饼图渲染（有扇区、颜色区分、图例）
+      - 扇区标签显示模型名 + 百分比
+      - 无数据时显示"暂无模型分布数据"占位
+
+  - id: obs-06
+    name: Token 用量柱状图
+    preconditions:
+      - 有会话数据
+    steps:
+      - action: observe
+        target: Token 图表区域
+    assertions:
+      - 显示"Token 用量（最近 10 个会话）"标题
+      - Recharts 柱状图渲染（input 蓝色 + output 绿色）
+      - 有图例区分 Input / Output
+      - 无数据时显示"暂无 Token 数据"占位
+
+  - id: obs-07
+    name: 上下文健康度
+    preconditions:
+      - 有上下文数据
+    steps:
+      - action: observe
+        target: 上下文健康度区域
+    assertions:
+      - 显示"上下文健康度"标题
+      - 显示占用率百分比 + 进度条
+      - 进度条颜色：绿色(<70%) / 黄色(70%-90%) / 红色(>90%)
+      - 显示已用 Token / 最大 Token / 压缩次数 / 截断文件数
+      - 如有截断：显示红色告警区域列出被截断的文件名
+
+  - id: obs-08
+    name: 智能优化建议
+    preconditions:
+      - ClawProbe suggest 返回有建议
+    steps:
+      - action: observe
+        target: 优化建议区域
+    assertions:
+      - 显示"优化建议"标题
+      - 建议卡片按严重度着色：红色(critical) / 黄色(warning) / 蓝色(info)
+      - 每张卡片显示图标 + 消息 + 详情 + 规则名
+      - 无建议时该区域不显示
+
+  - id: obs-09
+    name: 会话列表
+    preconditions:
+      - 有会话记录
+    steps:
+      - action: observe
+        target: 会话列表区域
+      - action: click
+        target: 列表中第一条会话（展开详情）
+      - action: screenshot
+        name: obs-session-expanded
+    assertions:
+      - 显示"会话列表"标题 + "刷新"按钮
+      - 每条会话显示：key / 模型名 / Token 总数 / 费用 / 轮数
+      - 点击展开显示：开始时间 / Input Token / Output Token / 时长
+      - "刷新"按钮可点击，点击后显示"刷新中..."
+      - 无数据时显示"暂无会话记录"

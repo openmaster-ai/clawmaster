@@ -1,0 +1,93 @@
+suite: setup-wizard
+name: 安装向导 Demo 全流程
+description: |
+  验证安装向导在 demo 模式下的完整状态流转：
+  检测中 → 就绪（显示缺失能力）→ 安装中（进度条）→ 完成 → 进入主界面
+
+preconditions:
+  - dev server 已启动（{BASE_URL} 可访问）
+  - 使用 ?demo=install 参数触发 demo 模式
+
+viewport: { width: 1280, height: 800 }
+
+cases:
+  - id: setup-01
+    name: 检测中状态渲染
+    steps:
+      - action: navigate
+        url: "{BASE_URL}?demo=install"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: setup-detecting
+    assertions:
+      - 页面显示"龙虾管理大师"标题
+      - 页面显示"OpenClaw 生态的六边形战士"副标题
+      - 页面显示"Demo 模式"标签
+      - 页面显示"正在检测系统能力..."
+      - 能力列表开始出现（核心引擎、记忆管理等），部分状态为"检测中..."
+
+  - id: setup-02
+    name: 检测完成 → 就绪状态
+    steps:
+      - action: wait
+        duration: 4000ms
+        reason: demo adapter 每项检测有 400-700ms 延迟，5 项约需 3-4 秒
+      - action: screenshot
+        name: setup-ready
+    assertions:
+      - 5 项能力全部显示最终状态
+      - 核心引擎显示"v2026.3.13"（已安装）
+      - 记忆管理显示"v0.2.0"（已安装）
+      - 可观测性显示"未安装"（橙色）
+      - 文档与图像识别显示"未安装"（橙色）
+      - 智能体编排显示"v0.1.4"（已安装）
+      - 页面显示"检测到 2 项能力未安装"
+      - "一键安装全部能力"按钮可见且可点击
+
+  - id: setup-03
+    name: 安装中状态 + 进度条
+    steps:
+      - action: click
+        target: text("一键安装全部能力")
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: setup-installing
+    assertions:
+      - 页面显示"正在安装..."
+      - 已安装项显示"已就绪"（绿色）
+      - 当前安装项显示百分比进度（如"33%"或"67%"）
+      - 当前安装项有进度条（蓝色/橙色填充条）
+      - 当前安装项显示安装日志（如"> 正在下载..."）
+      - 等待安装项显示"等待中"（灰色）
+
+  - id: setup-04
+    name: 安装完成状态
+    steps:
+      - action: wait
+        duration: 5000ms
+        reason: demo adapter 每项安装有 1-2 秒延迟
+      - action: screenshot
+        name: setup-done
+    assertions:
+      - 页面显示"全部就绪!"（绿色）
+      - 5 项能力全部显示为已安装状态
+      - 可观测性和文档与图像识别从"未安装"变为"已安装"
+      - "进入管理大师"按钮可见且可点击
+
+  - id: setup-05
+    name: 进入主界面
+    steps:
+      - action: click
+        target: text("进入管理大师")
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: setup-enter-main
+    assertions:
+      - 安装向导消失
+      - 主界面 Layout 渲染（侧边栏 + 内容区）
+      - 侧边栏显示"龙虾管理大师"logo + "ClawMaster"文字
+      - 侧边栏包含至少 10 个导航项
+      - 状态栏可见（底部 Gateway 状态、模型、版本）
