@@ -17,15 +17,36 @@ preconditions:
 viewport: { width: 1280, height: 800 }
 
 cases:
-  # === 服务未启动场景 ===
+  # === 能力未安装场景 ===
 
-  - id: mem-01
-    name: PowerMem 未运行时的降级 UI
+  - id: mem-00
+    name: CapabilityGuard 引导安装
     preconditions:
-      - PowerMem server 未启动（localhost:8000 不可达）
+      - PowerMem 未安装（openclaw ltm health 失败）
     steps:
       - action: navigate_to
         target: 记忆页面（点击侧边栏"记忆"）
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: mem-guard
+    assertions:
+      - 页面显示"记忆管理尚未启用"
+      - 显示说明"记忆管理需要安装 PowerMem。安装后可管理 Agent 长期记忆，Token 消耗降低 96%。"
+      - 显示"安装记忆管理"按钮
+      - 显示"重新检测"按钮
+      - 不显示记忆列表/搜索等功能 UI
+
+  # === 已安装但服务未启动场景 ===
+
+  - id: mem-01
+    name: PowerMem 已安装但服务未运行
+    preconditions:
+      - PowerMem 已安装（CapabilityGuard 通过）
+      - PowerMem server 未启动（localhost:8000 不可达）
+    steps:
+      - action: navigate_to
+        target: 记忆页面
       - action: wait
         duration: 2000ms
       - action: screenshot
@@ -33,7 +54,6 @@ cases:
     assertions:
       - 页面标题"记忆管理"
       - 显示"无法连接到 PowerMem 记忆服务"错误提示
-      - 显示"请确保 PowerMem 已安装并启动（powermem-server --port 8000）"说明文字
       - 显示"一键启动服务"按钮（primary 样式）
       - 显示"重试"按钮
       - 无白屏、无 JS 异常

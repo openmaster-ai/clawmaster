@@ -29,6 +29,8 @@ export interface CapabilityDef {
   detectCmd: string
   detectArgs: string[]
   installSteps: Array<{ cmd: string; args: string[] }>
+  /** 是否必装。false 表示可在对应模块页面按需安装 */
+  required: boolean
 }
 
 /** 五项内置能力定义 */
@@ -38,6 +40,7 @@ export const CAPABILITIES: CapabilityDef[] = [
     name: '核心引擎',
     detectCmd: 'openclaw',
     detectArgs: ['--version'],
+    required: true,
     installSteps: [
       { cmd: 'npm', args: ['install', '-g', 'openclaw'] },
     ],
@@ -47,6 +50,7 @@ export const CAPABILITIES: CapabilityDef[] = [
     name: '记忆管理',
     detectCmd: 'openclaw',
     detectArgs: ['ltm', 'health'],
+    required: false,
     installSteps: [
       // 1. 创建目录 + 虚拟环境
       { cmd: 'mkdir', args: ['-p', '~/.openclaw/powermem'] },
@@ -66,6 +70,7 @@ export const CAPABILITIES: CapabilityDef[] = [
     name: '可观测性',
     detectCmd: 'clawprobe',
     detectArgs: ['--version'],
+    required: false,
     installSteps: [
       { cmd: 'npm', args: ['install', '-g', 'clawprobe'] },
     ],
@@ -75,6 +80,7 @@ export const CAPABILITIES: CapabilityDef[] = [
     name: '文档与图像识别',
     detectCmd: 'clawhub',
     detectArgs: ['list', '--json'],
+    required: false,
     installSteps: [
       { cmd: 'clawhub', args: ['install', 'paddleocr-doc-parsing'] },
       { cmd: 'clawhub', args: ['install', 'paddleocr-text-recognition'] },
@@ -85,6 +91,7 @@ export const CAPABILITIES: CapabilityDef[] = [
     name: '智能体编排',
     detectCmd: 'python3',
     detectArgs: ['-c', 'import deepagents; print(deepagents.__version__)'],
+    required: false,
     installSteps: [
       { cmd: 'pip', args: ['install', 'langchain', 'langgraph', 'deepagents'] },
     ],

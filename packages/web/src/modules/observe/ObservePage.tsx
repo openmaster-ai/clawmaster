@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
 import { LoadingState } from '@/shared/components/LoadingState'
+import { CapabilityGuard } from '@/shared/components/CapabilityGuard'
 import {
   getCost,
   getContextHealth,
@@ -24,10 +25,22 @@ import ContextHealthBar from './components/ContextHealthBar'
 import SuggestionCards from './components/SuggestionCards'
 import SessionList from './components/SessionList'
 
+async function checkObserveAvailable(): Promise<boolean> {
+  const result = await getProbeStatus()
+  // ClawProbe 已安装即可（不要求正在运行，页面内有启动按钮）
+  return result.success
+}
+
 export default function ObservePage() {
   return (
     <ErrorBoundary>
-      <ObserveContent />
+      <CapabilityGuard
+        capabilityId="observe"
+        checkAvailable={checkObserveAvailable}
+        unavailableMessage="可观测功能需要安装 ClawProbe。安装后可查看 Token 消耗、API 费用、上下文健康度等数据。"
+      >
+        <ObserveContent />
+      </CapabilityGuard>
     </ErrorBoundary>
   )
 }

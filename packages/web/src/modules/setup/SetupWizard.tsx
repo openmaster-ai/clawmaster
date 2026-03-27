@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { getSetupAdapter } from './adapters'
+import { CAPABILITIES } from './types'
 import type { CapabilityStatus, InstallProgress, SetupPhase, CapabilityId } from './types'
 
 interface SetupWizardProps {
@@ -38,8 +39,12 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         })
       })
 
-      const allInstalled = results.every((r) => r.status === 'installed')
-      setPhase(allInstalled ? 'done' : 'ready')
+      // 只看 required 能力是否全部就绪
+      const requiredIds = new Set(CAPABILITIES.filter((c) => c.required).map((c) => c.id))
+      const requiredAllInstalled = results
+        .filter((r) => requiredIds.has(r.id))
+        .every((r) => r.status === 'installed')
+      setPhase(requiredAllInstalled ? 'done' : 'ready')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setPhase('error')
@@ -53,8 +58,10 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
   // ─── 安装阶段 ───
   const startInstall = useCallback(async () => {
+    // 只安装 required 的缺失能力
+    const requiredIds = new Set(CAPABILITIES.filter((c) => c.required).map((c) => c.id))
     const missing = capabilities
-      .filter((c) => c.status === 'not_installed')
+      .filter((c) => c.status === 'not_installed' && requiredIds.has(c.id))
       .map((c) => c.id)
 
     if (missing.length === 0) {
@@ -90,7 +97,9 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
   // ─── 渲染 ───
 
-  const missingCount = capabilities.filter((c) => c.status === 'not_installed').length
+  const requiredIds = new Set(CAPABILITIES.filter((c) => c.required).map((c) => c.id))
+  const requiredMissing = capabilities.filter((c) => c.status === 'not_installed' && requiredIds.has(c.id))
+  const optionalMissing = capabilities.filter((c) => c.status === 'not_installed' && !requiredIds.has(c.id))
   const isDemo = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('demo') === 'install'
 
   return (
@@ -116,19 +125,40 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         </div>
       )}
 
-      {/* 检测完成，有缺失 → 显示安装按钮 */}
-      {phase === 'ready' && (
+      {/* 检测完成，required 有缺失 → 必须安装 */}
+      {phase === 'ready' && requiredMissing.length > 0 && (
         <div className="w-full max-w-md">
           <p className="text-center text-muted-foreground mb-4">
-            检测到 {missingCount} 项能力未安装
+            核心引擎未安装
           </p>
           <CapabilityList capabilities={capabilities} />
           <button
             onClick={startInstall}
             className="mt-6 w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition"
           >
-            一键安装全部能力
+            安装核心引擎
           </button>
+        </div>
+      )}
+
+      {/* 检测完成，required 全部就绪但有 optional 缺失 → 可跳过 */}
+      {phase === 'ready' && requiredMissing.length === 0 && (
+        <div className="w-full max-w-md">
+          <p className="text-center text-muted-foreground mb-4">
+            核心引擎已就绪{optionalMissing.length > 0 ? `，${optionalMissing.length} 项扩展能力可稍后安装` : ''}
+          </p>
+          <CapabilityList capabilities={capabilities} />
+          <button
+            onClick={onComplete}
+            className="mt-6 w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition"
+          >
+            进入管理大师
+          </button>
+          {optionalMissing.length > 0 && (
+            <p className="mt-2 text-center text-xs text-muted-foreground">
+              未安装的能力可在对应功能页面按需安装
+            </p>
+          )}
         </div>
       )}
 
@@ -143,10 +173,14 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         </div>
       )}
 
-      {/* 全部就绪 */}
+      {/* 全部就绪（或 required 就绪） */}
       {phase === 'done' && (
         <div className="w-full max-w-md">
-          <p className="text-center text-green-600 font-medium mb-4">全部就绪!</p>
+          <p className="text-center text-green-600 font-medium mb-4">
+            {optionalMissing.length > 0
+              ? `核心引擎已就绪！${optionalMissing.length} 项扩展能力可稍后安装`
+              : '全部就绪!'}
+          </p>
           <CapabilityList capabilities={capabilities} />
           <button
             onClick={onComplete}
@@ -154,6 +188,11 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           >
             进入管理大师
           </button>
+          {optionalMissing.length > 0 && (
+            <p className="mt-2 text-center text-xs text-muted-foreground">
+              未安装的能力可在对应功能页面按需安装
+            </p>
+          )}
         </div>
       )}
 

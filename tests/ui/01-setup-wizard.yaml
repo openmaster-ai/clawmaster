@@ -42,52 +42,53 @@ cases:
       - 可观测性显示"未安装"（橙色）
       - 文档与图像识别显示"未安装"（橙色）
       - 智能体编排显示"v0.1.4"（已安装）
-      - 页面显示"检测到 2 项能力未安装"
-      - "一键安装全部能力"按钮可见且可点击
+      - 核心引擎（required=true）已安装 → 不需要安装按钮
+      - 页面显示"核心引擎已就绪，2 项扩展能力可稍后安装"
+      - "进入管理大师"按钮可见且可点击（因为 required 全部满足）
+      - 显示"未安装的能力可在对应功能页面按需安装"提示
 
   - id: setup-03
-    name: 安装中状态 + 进度条
-    steps:
-      - action: click
-        target: text("一键安装全部能力")
-      - action: wait
-        duration: 1500ms
-      - action: screenshot
-        name: setup-installing
-    assertions:
-      - 页面显示"正在安装..."
-      - 已安装项显示"已就绪"（绿色）
-      - 当前安装项显示百分比进度（如"33%"或"67%"）
-      - 当前安装项有进度条（蓝色/橙色填充条）
-      - 当前安装项显示安装日志（如"> 正在下载..."）
-      - 等待安装项显示"等待中"（灰色）
-
-  - id: setup-04
-    name: 安装完成状态
-    steps:
-      - action: wait
-        duration: 5000ms
-        reason: demo adapter 每项安装有 1-2 秒延迟
-      - action: screenshot
-        name: setup-done
-    assertions:
-      - 页面显示"全部就绪!"（绿色）
-      - 5 项能力全部显示为已安装状态
-      - 可观测性和文档与图像识别从"未安装"变为"已安装"
-      - "进入管理大师"按钮可见且可点击
-
-  - id: setup-05
-    name: 进入主界面
+    name: 直接进入主界面（required 已满足时跳过安装）
     steps:
       - action: click
         target: text("进入管理大师")
       - action: wait
         duration: 2000ms
       - action: screenshot
-        name: setup-enter-main
+        name: setup-enter-direct
     assertions:
       - 安装向导消失
       - 主界面 Layout 渲染（侧边栏 + 内容区）
       - 侧边栏显示"龙虾管理大师"logo + "ClawMaster"文字
-      - 侧边栏包含至少 10 个导航项
-      - 状态栏可见（底部 Gateway 状态、模型、版本）
+      - 侧边栏包含至少 10 个导航项（含可观测、记忆）
+      - 可观测/记忆虽未安装，但导航项仍显示（进入后按需安装）
+
+  - id: setup-04
+    name: 可观测页面显示能力引导安装
+    steps:
+      - action: click
+        target: role(link, "可观测")
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: setup-observe-guard
+    assertions:
+      - 页面显示"可观测性尚未启用"
+      - 显示"安装可观测性"按钮
+      - 显示"重新检测"按钮
+      - 不显示费用卡片/图表（被 guard 拦截）
+
+  - id: setup-05
+    name: 记忆页面显示能力引导安装
+    steps:
+      - action: click
+        target: role(link, "记忆")
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: setup-memory-guard
+    assertions:
+      - 页面显示"记忆管理尚未启用"
+      - 显示"安装记忆管理"按钮
+      - 显示"重新检测"按钮
+      - 不显示记忆列表（被 guard 拦截）

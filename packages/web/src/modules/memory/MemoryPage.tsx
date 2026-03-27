@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
 import { LoadingState } from '@/shared/components/LoadingState'
+import { CapabilityGuard } from '@/shared/components/CapabilityGuard'
 import {
   getMemoryHealth,
   listMemories,
@@ -22,10 +23,21 @@ import MemoryHealthCard from './components/MemoryHealthCard'
 import MemoryStatsCard from './components/MemoryStatsCard'
 import MemoryList from './components/MemoryList'
 
+async function checkMemoryAvailable(): Promise<boolean> {
+  const result = await getMemoryHealth()
+  return result.success && result.data?.status !== 'disconnected'
+}
+
 export default function MemoryPage() {
   return (
     <ErrorBoundary>
-      <MemoryContent />
+      <CapabilityGuard
+        capabilityId="memory"
+        checkAvailable={checkMemoryAvailable}
+        unavailableMessage="记忆管理需要安装 PowerMem。安装后可管理 Agent 长期记忆，Token 消耗降低 96%。"
+      >
+        <MemoryContent />
+      </CapabilityGuard>
     </ErrorBoundary>
   )
 }

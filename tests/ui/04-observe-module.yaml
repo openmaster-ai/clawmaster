@@ -16,12 +16,33 @@ preconditions:
 viewport: { width: 1280, height: 800 }
 
 cases:
-  # === ClawProbe 未运行 ===
+  # === ClawProbe 未安装 ===
+
+  - id: obs-00
+    name: CapabilityGuard 引导安装
+    preconditions:
+      - ClawProbe 未安装（clawprobe --version 失败）
+    steps:
+      - action: navigate_to
+        target: 可观测页面
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: obs-guard
+    assertions:
+      - 页面显示"可观测性尚未启用"
+      - 显示说明"可观测功能需要安装 ClawProbe。安装后可查看 Token 消耗、API 费用、上下文健康度等数据。"
+      - 显示"安装可观测性"按钮
+      - 显示"重新检测"按钮
+      - 不显示费用卡片/图表
+
+  # === ClawProbe 已安装但未运行 ===
 
   - id: obs-01
-    name: ClawProbe 未运行时的降级 UI
+    name: ClawProbe 已安装但未运行
     preconditions:
-      - ClawProbe 未安装或未启动
+      - ClawProbe 已安装（CapabilityGuard 通过）
+      - ClawProbe daemon 未启动
     steps:
       - action: navigate_to
         target: 可观测页面
@@ -31,11 +52,8 @@ cases:
         name: obs-disconnected
     assertions:
       - 页面标题"可观测"
-      - 显示 ClawProbe 状态指示灯（灰色）+ "未启动"
-      - 显示"启动"按钮
-      - 显示"无法获取可观测数据"提示
-      - 显示"请确保 ClawProbe 已安装并启动"说明
-      - 显示"重试"按钮
+      - 显示 ClawProbe 状态"未启动" + 启动按钮
+      - 显示"无法获取可观测数据"提示 + 重试按钮
       - 无白屏、无 JS 异常
 
   - id: obs-02
