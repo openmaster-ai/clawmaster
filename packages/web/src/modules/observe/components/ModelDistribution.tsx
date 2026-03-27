@@ -26,14 +26,14 @@ export default function ModelDistribution({ data }: Props) {
               cy="50%"
               outerRadius={70}
               dataKey="value"
-              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`}
               labelLine={false}
             >
               {chartData.map((_, i) => (
                 <Cell key={i} fill={COLORS[i % COLORS.length]} />
               ))}
             </Pie>
-            <Tooltip formatter={(v: number) => `$${v.toFixed(4)}`} />
+            <Tooltip formatter={(v) => `$${Number(v).toFixed(4)}`} />
             <Legend />
           </PieChart>
         </ResponsiveContainer>

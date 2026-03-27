@@ -117,7 +117,7 @@ export function getMemoryHealth(): Promise<AdapterResult<MemoryHealth>> {
   return wrapAsync(async () => {
     try {
       const health = await pmemFetch<{ status: string }>('/api/v1/system/health')
-      const status = await pmemFetch<{ storage_type?: string; llm_provider?: string; version?: string }>('/api/v1/system/status').catch(() => ({}))
+      const status = await pmemFetch<{ storage_type?: string; llm_provider?: string; version?: string }>('/api/v1/system/status').catch((): { storage_type?: string; llm_provider?: string; version?: string } => ({}))
       return {
         status: health.status === 'healthy' ? 'healthy' : 'error',
         storage_type: status.storage_type,
@@ -292,8 +292,8 @@ export function getMemoryStats(): Promise<AdapterResult<MemoryStats>> {
   return wrapAsync(async () => {
     // 聚合统计信息
     const [status, memories] = await Promise.all([
-      pmemFetch<{ storage_type?: string }>('/api/v1/system/status').catch(() => ({})),
-      pmemFetch<MemoryEntry[]>('/api/v1/memories?limit=500').catch(() => []),
+      pmemFetch<{ storage_type?: string }>('/api/v1/system/status').catch((): { storage_type?: string } => ({})),
+      pmemFetch<MemoryEntry[]>('/api/v1/memories?limit=500').catch((): MemoryEntry[] => []),
     ])
 
     const list = Array.isArray(memories) ? memories : []

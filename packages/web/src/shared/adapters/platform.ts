@@ -38,7 +38,7 @@ async function execViaTauri(cmd: string, args: string[]): Promise<string> {
   // 动态拼接模块路径，避免 Vite 在 Web 模式静态分析时报错
   const tauriModule = '@tauri-apps/api' + '/core'
   const { invoke } = await import(/* @vite-ignore */ tauriModule)
-  const result = await invoke<string>('run_openclaw_command', {
+  const result = await (invoke as (cmd: string, args: Record<string, unknown>) => Promise<string>)('run_openclaw_command', {
     command: [cmd, ...args].join(' '),
   })
   return result

@@ -8,7 +8,6 @@ import {
   updateMemory,
   deleteMemory,
   getMemoryStats,
-  getAgentIds,
   isPowerMemServerRunning,
 } from '../powermem'
 
@@ -27,12 +26,13 @@ function mockFetchOk(data: unknown) {
   } as Response)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function mockFetchFail(status = 500, body = 'Internal Server Error') {
   vi.mocked(fetch).mockResolvedValue({
     ok: false,
     status,
     text: async () => body,
-  } as Response)
+  } as unknown as Response)
 }
 
 function mockFetchThrow() {

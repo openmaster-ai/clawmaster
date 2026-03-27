@@ -23,7 +23,7 @@ export default function CostTrend({ data }: Props) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-            <Tooltip formatter={(v: number) => [`$${v.toFixed(4)}`, '费用']} />
+            <Tooltip formatter={(v) => [`$${Number(v).toFixed(4)}`, '费用']} />
             <Line type="monotone" dataKey="cost" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
           </LineChart>
         </ResponsiveContainer>

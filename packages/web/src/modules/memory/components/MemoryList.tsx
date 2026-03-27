@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { MemoryEntry, MemoryListResult, MemorySearchResult, MemorySearchItem } from '@/shared/adapters/powermem'
+import type { MemoryEntry, MemoryListResult, MemorySearchResult, MemorySearchItem, MemoryIntelligence } from '@/shared/adapters/powermem'
 
 interface Props {
   listData?: MemoryListResult | null
@@ -84,7 +84,7 @@ interface UnifiedMemory {
   agentId?: string
   createdAt?: string
   score?: number
-  intelligence?: MemoryEntry['metadata'] extends { intelligence?: infer I } ? I : never
+  intelligence?: MemoryIntelligence
   memoryType?: string
   importanceScore?: number
   currentRetention?: number
