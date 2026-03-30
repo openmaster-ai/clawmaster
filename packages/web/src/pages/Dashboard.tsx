@@ -100,7 +100,7 @@ export default function Dashboard() {
             <p className="text-muted-foreground">认证: {config?.gateway?.auth?.mode || '-'}</p>
           </div>
           <div className="mt-3 flex gap-2">
-            <Link to="/gateway" className="px-3 py-1.5 text-sm bg-primary text-white rounded hover:bg-primary/90">
+            <Link to="/gateway" className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90">
               管理
             </Link>
           </div>
@@ -123,7 +123,7 @@ export default function Dashboard() {
               <p className="text-muted-foreground">暂无通道配置</p>
             )}
           </div>
-          <Link to="/channels" className="mt-3 inline-block px-3 py-1.5 text-sm border border-border rounded hover:bg-accent">
+          <Link to="/channels" className="mt-3 inline-block px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-accent">
             管理通道
           </Link>
         </div>
@@ -135,7 +135,7 @@ export default function Dashboard() {
           <p className="text-sm text-muted-foreground">
             工作区: {config?.agents?.defaults?.workspace || '-'}
           </p>
-          <Link to="/models" className="mt-3 inline-block px-3 py-1.5 text-sm border border-border rounded hover:bg-accent">
+          <Link to="/models" className="mt-3 inline-block px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-accent">
             配置模型
           </Link>
         </div>
@@ -149,7 +149,7 @@ export default function Dashboard() {
               • {agent.name || agent.id}
             </p>
           ))}
-          <Link to="/agents" className="mt-3 inline-block px-3 py-1.5 text-sm border border-border rounded hover:bg-accent">
+          <Link to="/agents" className="mt-3 inline-block px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-accent">
             管理代理
           </Link>
         </div>
@@ -188,14 +188,14 @@ export default function Dashboard() {
             href="http://localhost:18789" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="px-4 py-2 text-sm bg-primary text-white rounded hover:bg-primary/90"
+            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90"
           >
             📊 打开控制台
           </a>
-          <Link to="/logs" className="px-4 py-2 text-sm border border-border rounded hover:bg-accent">
+          <Link to="/logs" className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-accent">
             📝 查看日志
           </Link>
-          <Link to="/config" className="px-4 py-2 text-sm border border-border rounded hover:bg-accent">
+          <Link to="/config" className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-accent">
             ⚙️ 编辑配置
           </Link>
         </div>

@@ -98,13 +98,13 @@ export default function Gateway() {
             <>
               <button
                 onClick={() => handleGatewayAction('stop')}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                className="px-4 py-2 bg-red-500 text-primary-foreground rounded-lg hover:bg-red-600"
               >
                 停止
               </button>
               <button
                 onClick={() => handleGatewayAction('restart')}
-                className="px-4 py-2 border border-border rounded hover:bg-accent"
+                className="px-4 py-2 border border-border rounded-lg hover:bg-accent"
               >
                 重启
               </button>
@@ -112,7 +112,7 @@ export default function Gateway() {
           ) : (
             <button
               onClick={() => handleGatewayAction('start')}
-              className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90"
             >
               启动
             </button>
@@ -121,93 +121,39 @@ export default function Gateway() {
             href={`http://127.0.0.1:${config?.gateway?.port || 18789}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-2 border border-border rounded hover:bg-accent"
+            className="px-4 py-2 border border-border rounded-lg hover:bg-accent"
           >
             在浏览器打开
           </a>
         </div>
       </div>
 
-      {/* 配置 */}
+      {/* 配置概览 */}
       <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-4">配置</h3>
-        <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <label className="w-24 text-sm text-muted-foreground">端口:</label>
-            <input 
-              type="number" 
-              value={config?.gateway?.port || 18789} 
-              className="px-3 py-1.5 bg-muted rounded border border-border w-32" 
-              readOnly 
-            />
-            <span className="text-xs text-muted-foreground">（只读，需在配置文件中修改）</span>
+        <h3 className="font-medium mb-3">配置</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-muted-foreground">端口</p>
+            <p className="font-mono font-medium">{config?.gateway?.port || 18789}</p>
           </div>
-          <div className="flex items-center gap-4">
-            <label className="w-24 text-sm text-muted-foreground">绑定模式:</label>
-            <div className="flex gap-4 text-sm">
-              <label className="flex items-center gap-2">
-                <input type="radio" checked={config?.gateway?.bind === 'loopback'} readOnly />
-                <span>本地</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="radio" checked={config?.gateway?.bind === 'lan'} readOnly />
-                <span>局域网</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="radio" checked={config?.gateway?.bind === 'tailnet'} readOnly />
-                <span>Tailscale</span>
-              </label>
-            </div>
+          <div>
+            <p className="text-muted-foreground">绑定</p>
+            <p className="font-medium">{config?.gateway?.bind || 'loopback'}</p>
           </div>
-          <div className="flex items-center gap-4">
-            <label className="w-24 text-sm text-muted-foreground">认证方式:</label>
-            <div className="flex gap-4 text-sm">
-              <label className="flex items-center gap-2">
-                <input type="radio" checked={config?.gateway?.auth?.mode === 'token'} readOnly />
-                <span>Token</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="radio" checked={config?.gateway?.auth?.mode === 'password'} readOnly />
-                <span>密码</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="radio" checked={config?.gateway?.auth?.mode === 'none'} readOnly />
-                <span>无</span>
-              </label>
-            </div>
+          <div>
+            <p className="text-muted-foreground">认证</p>
+            <p className="font-medium">{config?.gateway?.auth?.mode || 'token'}</p>
           </div>
-          {config?.gateway?.auth?.mode === 'token' && config?.gateway?.auth?.token && (
-            <div className="flex items-center gap-4">
-              <label className="w-24 text-sm text-muted-foreground">Token:</label>
-              <input 
-                type="password" 
-                value={config.gateway.auth.token} 
-                className="flex-1 px-3 py-1.5 bg-muted rounded border border-border font-mono text-sm" 
-                readOnly 
-              />
-              <button 
-                onClick={copyToken}
-                className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent"
-              >
-                复制
-              </button>
+          {config?.gateway?.auth?.token && (
+            <div>
+              <p className="text-muted-foreground">Token</p>
+              <button onClick={copyToken} className="text-xs text-primary hover:underline">点击复制</button>
             </div>
           )}
         </div>
-        <p className="mt-4 text-xs text-muted-foreground">
-          💡 配置修改需要编辑配置文件，请前往「配置」页面
+        <p className="mt-3 text-xs text-muted-foreground">
+          修改配置请前往「配置」页面编辑 JSON
         </p>
-      </div>
-
-      {/* 最近日志 */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">最近日志</h3>
-        <div className="bg-muted rounded p-3 text-sm font-mono text-muted-foreground h-32 overflow-auto">
-          <p>12:34:56 [INFO] Gateway started on port {config?.gateway?.port || 18789}</p>
-          <p className="text-xs text-muted-foreground mt-2">
-            完整日志请前往「日志」页面查看
-          </p>
-        </div>
       </div>
     </div>
   )

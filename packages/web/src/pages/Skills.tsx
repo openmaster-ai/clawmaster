@@ -117,6 +117,8 @@ export default function Skills() {
 
   return (
     <div className="space-y-6">
+      <h1 className="text-2xl font-bold">技能市场</h1>
+
       {/* 场景推荐 */}
       <div>
         <h3 className="font-medium mb-3">推荐场景</h3>
@@ -131,7 +133,7 @@ export default function Skills() {
               <button
                 onClick={() => handleSceneInstall(scene.skills)}
                 disabled={operating === 'scene'}
-                className="w-full py-1.5 text-sm bg-primary text-primary-foreground rounded hover:opacity-90 disabled:opacity-50"
+                className="w-full py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50"
               >
                 {operating === 'scene' ? '安装中...' : '一键安装'}
               </button>
@@ -143,13 +145,13 @@ export default function Skills() {
       <div className="flex gap-4">
         <button
           onClick={() => setView('installed')}
-          className={`px-4 py-2 rounded ${view === 'installed' ? 'bg-primary text-white' : 'border border-border hover:bg-accent'}`}
+          className={`px-4 py-2 rounded-lg text-sm ${view === 'installed' ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-accent'}`}
         >
           已安装 ({installedSkills.length})
         </button>
         <button
           onClick={() => setView('market')}
-          className={`px-4 py-2 rounded ${view === 'market' ? 'bg-primary text-white' : 'border border-border hover:bg-accent'}`}
+          className={`px-4 py-2 rounded-lg text-sm ${view === 'market' ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-accent'}`}
         >
           搜索市场
         </button>
@@ -162,7 +164,7 @@ export default function Skills() {
             placeholder="过滤已安装技能..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2 bg-muted rounded border border-border"
+            className="w-full px-4 py-2 bg-card rounded-lg border border-border text-sm"
           />
 
           {filteredSkills.length === 0 ? (
@@ -186,7 +188,7 @@ export default function Skills() {
                   <button
                     onClick={() => handleUninstall(skill.slug)}
                     disabled={operating === skill.slug}
-                    className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent text-red-500 disabled:opacity-50"
+                    className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-accent text-red-500 disabled:opacity-50"
                   >
                     {operating === skill.slug ? '处理中...' : '卸载'}
                   </button>
@@ -204,12 +206,12 @@ export default function Skills() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              className="flex-1 px-4 py-2 bg-muted rounded border border-border"
+              className="flex-1 px-4 py-2 bg-card rounded-lg border border-border text-sm"
             />
             <button
               onClick={handleSearch}
               disabled={searching}
-              className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50"
             >
               {searching ? '搜索中...' : '搜索'}
             </button>
@@ -232,7 +234,7 @@ export default function Skills() {
                   <button
                     onClick={() => handleInstall(skill.slug)}
                     disabled={operating === skill.slug}
-                    className="px-3 py-1.5 text-sm bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50"
+                    className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50"
                   >
                     {operating === skill.slug ? '安装中...' : '安装'}
                   </button>
