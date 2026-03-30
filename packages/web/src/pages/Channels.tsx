@@ -1,7 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Wifi, WifiOff, RefreshCw } from 'lucide-react'
 import { platform } from '@/adapters'
 import { getSetupAdapter } from '@/modules/setup/adapters'
+import { getChannelStatus, probeChannels, type ChannelHealth } from '@/shared/adapters/channel-status'
+import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
 import { CHANNEL_TYPES } from '@/modules/setup/types'
 import type { OpenClawConfig } from '@/lib/types'
 
@@ -46,6 +49,9 @@ export default function Channels() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">{t('channels.title')}</h1>
+
+      {/* Channel Health */}
+      <ChannelHealthCard />
 
       {/* 已配置 */}
       {configuredChannels.length > 0 && (
@@ -196,6 +202,59 @@ function AddChannelPanel({
       >
         {busy ? t('channels.adding') : t('channels.addBtn')}
       </button>
+    </div>
+  )
+}
+
+// ─── Channel Health Card ───
+
+function ChannelHealthCard() {
+  const { t } = useTranslation()
+  const health = useAdapterCall<ChannelHealth>(() => getChannelStatus(), { pollInterval: 30000 })
+  const [probing, setProbing] = useState(false)
+
+  async function handleProbe() {
+    setProbing(true)
+    await probeChannels()
+    await health.refetch()
+    setProbing(false)
+  }
+
+  const channels = health.data?.channelOrder ?? []
+  if (channels.length === 0 && !health.loading) return null
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-medium">{t('channels.health')}</h3>
+        <button
+          onClick={handleProbe}
+          disabled={probing}
+          className="flex items-center gap-1 px-2 py-1 text-xs border border-border rounded-lg hover:bg-accent disabled:opacity-50"
+        >
+          <RefreshCw className={`w-3 h-3 ${probing ? 'animate-spin' : ''}`} />
+          {t('channels.probe')}
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {channels.map((ch) => {
+          const info = health.data?.channels[ch]
+          const isConnected = info?.status === 'connected' || info?.status === 'ready'
+          return (
+            <div key={ch} className="flex items-center gap-2 text-sm">
+              {isConnected ? (
+                <Wifi className="w-4 h-4 text-green-500" />
+              ) : (
+                <WifiOff className="w-4 h-4 text-red-500" />
+              )}
+              <span className="capitalize">{ch}</span>
+              <span className={`text-xs ${isConnected ? 'text-green-600' : 'text-red-500'}`}>
+                {info?.status ?? t('channels.unknown')}
+              </span>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

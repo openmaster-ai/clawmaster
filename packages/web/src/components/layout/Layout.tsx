@@ -38,12 +38,14 @@ interface LayoutProps {
 const moduleIconMap: Record<string, LucideIcon> = {
   observe: BarChart3,
   memory: Brain,
+  sessions: MessageSquare,
 }
 
 // Nav label keys map to layout.nav.* in translations
 const moduleNavLabelKeys: Record<string, string> = {
   observe: 'layout.nav.observe',
   memory: 'layout.nav.memory',
+  sessions: 'layout.nav.sessions',
 }
 
 const mainNav: NavItem[] = [
