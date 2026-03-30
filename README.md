@@ -1,124 +1,109 @@
-# 🦞 ClawMaster
+# ClawMaster
 
-[中文](./README_CN.md) | [Product Vision](./VISION.md)
+**The GUI for OpenClaw -- manage providers, channels, and agents from one place.**
 
-> **ClawMaster — The Hexagonal Champion of the OpenClaw Ecosystem: Takeover, Observe, Save, Apply, Build, Guard.**
-
-ClawMaster is a one-stop intelligent management platform for the OpenClaw ecosystem, collaboratively built by the open-source community, delivering six core capabilities to every user: Takeover, Observe, Save, Apply, Build, and Guard.
+[中文文档](./README_CN.md)
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-lightgrey.svg)
+![Build](https://img.shields.io/github/actions/workflow/status/clawmaster-ai/clawmaster/build.yml?branch=main)
+![Languages](https://img.shields.io/badge/i18n-中文%20%7C%20English%20%7C%20日本語-green.svg)
 
----
+ClawMaster wraps the OpenClaw CLI in a desktop app (Tauri 2) or web UI (Express + Vite), giving you a setup wizard, 16 LLM provider integrations, 6 channel types, observability dashboards, and memory management -- all config-driven with no database.
 
-## 🦞 Six Core Capabilities
+## Features
 
-| Capability | One-liner | Problem Solved |
-|------------|-----------|----------------|
-| **Takeover** | Install, manage, everything starts here | High installation barrier, complex configuration |
-| **Observe** | How much spent, how it runs, crystal clear | Token/cost/health are all black boxes |
-| **Save** | PowerMem + seekdb, 96% token reduction | Token burn rate out of control |
-| **Apply** | Photo Q&A, mistake notebook, invoice organizer — ready to use | "I installed it... now what?" |
-| **Build** | Chat with the butler, agents build themselves | Traditional dev too hard for normal users |
-| **Guard** | Encrypted keys, spending circuit breaker, access control | API keys exposed, spending unprotected |
+- **Setup wizard** -- detect, install, and onboard OpenClaw in guided steps (API key, model, gateway, channel)
+- **16 LLM providers** -- OpenAI, Anthropic, Google Gemini, xAI, Mistral, Groq, DeepSeek, MiniMax, Kimi, SiliconFlow, OpenRouter, Amazon Bedrock, Google Vertex, Azure OpenAI, Cerebras, and custom OpenAI-compatible endpoints
+- **API key validation** -- real HTTP test before saving any key
+- **6 channel types** -- Discord, Slack, Telegram, Feishu, WeChat (QR scan), WhatsApp (QR scan)
+- **Channel setup guides** -- step-by-step navigation paths with Feishu permissions template (26 scopes, one-click copy)
+- **Observability dashboard** -- cost, token usage, and context health via ClawProbe integration
+- **Memory management** -- PowerMem integration for memory lifecycle
+- **i18n** -- Chinese, English, Japanese (386 keys); language switcher in header and setup wizard
+- **Dark mode** and color themes (Lobster Orange, Ocean Blue)
+- **Responsive layout** with mobile hamburger menu
+- **Desktop builds** -- Linux (deb, rpm, AppImage), macOS (dmg), Windows (msi)
+- **CI/CD** -- test gate (tsc + vitest) then multi-platform Tauri build with release drafts
 
-> See [VISION.md](./VISION.md) for the full product positioning.
+## Quick Start
 
----
+### Download a Release
 
-## 🤝 Four Ecosystem Pillars
-
-| Partner | Role | Capabilities |
-|---------|------|-------------|
-| **OceanBase** | Data Layer | seekdb AI-native database, PowerMem memory engine |
-| **Baidu** | Model Layer | PaddleOCR and foundational models for inference |
-| **LangChain Community** | Orchestration Layer | DeepAgents, LangGraph workflows, LangSmith observability |
-| **Computing Cube** | Hardware Layer | Open-source hardware standard with built-in ClawMaster |
-
----
-
-## 🛠️ Tech Stack
-
-- **Desktop Framework**: [Tauri 2.x](https://tauri.app/) + [React 18](https://react.dev/)
-- **Language**: TypeScript + Rust
-- **UI**: [Shadcn/ui](https://ui.shadcn.com/) + [Tailwind CSS](https://tailwindcss.com/)
-- **State**: [Zustand](https://zustand-demo.pmnd.rs/)
-- **Dual Mode**: Desktop (Tauri) + Web (Vite + Node.js backend)
-- **Data Layer**: [seekdb](https://github.com/oceanbase/seekdb) + [PowerMem](https://github.com/oceanbase/powermem)
-- **Agent Framework**: [LangChain DeepAgents](https://docs.langchain.com/oss/python/deepagents/overview) + [LangGraph](https://github.com/langchain-ai/langgraph)
-- **OCR**: [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)
-
----
-
-## 📦 Installation
-
-### Download Release (Recommended)
-
-Download the latest release for your platform from the [Releases](https://github.com/stliuexp/openclawmaneger/releases) page.
+Grab the latest installer for your platform from [Releases](https://github.com/clawmaster-ai/clawmaster/releases).
 
 ### Build from Source
 
 ```bash
-# Clone the repository
-git clone https://github.com/stliuexp/openclawmaneger.git
-cd openclawmaneger
+git clone https://github.com/clawmaster-ai/clawmaster.git
+cd clawmaster
+npm install
 
-# Install dependencies
-pnpm install
+# Web (frontend + backend)
+npm run dev:web
 
-# Run in development mode (Web)
-pnpm dev:web
+# Desktop (Tauri)
+npm run tauri:dev
 
-# Run in development mode (Desktop)
-pnpm tauri dev
-
-# Build for production
-pnpm tauri build
+# Production build
+npm run build         # web
+npm run tauri:build   # desktop
 ```
 
----
+Requires Node.js 20+. Desktop builds also require Rust 1.77+ and platform-specific system libraries (see [Tauri prerequisites](https://tauri.app/start/prerequisites/)).
 
-## 🚀 Quick Start
+## Screenshots
 
-1. **Launch the app** — ClawMaster automatically detects your OpenClaw environment
-2. **Takeover or install** — Existing installation? One-click takeover. Fresh start? Guided installation
-3. **Start using** — Dashboard for status overview, built-in skills ready out of the box
-4. **Go deeper** — Cost tracking, memory management, agent building — six capabilities at your fingertips
+> Coming soon.
 
----
+## Architecture
 
-## 📸 Screenshots
+```
+clawmaster/
+├── packages/web/          React 18 + Vite + Tailwind CSS frontend
+│   └── src/
+│       ├── modules/       Capability modules (setup, observe, memory)
+│       ├── shared/        Adapters, hooks, components
+│       ├── pages/         Legacy page components
+│       └── i18n/          Translation files (zh, en, ja)
+├── packages/backend/      Express API server (port 3001) + WebSocket logs
+├── src-tauri/             Tauri 2 Rust backend (9 commands)
+├── tests/ui/              YAML-based UI test plans
+└── bin/clawmaster.mjs     CLI entry point
+```
 
-> Screenshots coming soon!
+Two runtime modes:
+- **Desktop**: React calls Rust via `@tauri-apps/api` invoke
+- **Web**: React proxies `/api` to Express backend (Vite dev proxy 3000 -> 3001)
 
----
+New features are built as capability modules in `packages/web/src/modules/` and auto-discovered via `import.meta.glob`.
 
-## 🤝 Contributing
+## Development
 
-ClawMaster is a community-driven open-source project. All contributors are welcome:
+```bash
+npm install               # install all workspace dependencies
+npm run dev               # frontend only (port 3000)
+npm run dev:web           # frontend + backend together
+npm run dev:backend       # Express backend only (port 3001)
+npm run tauri:dev         # desktop app
 
-- Submit Issues and Pull Requests
-- Develop built-in skills and application scenarios
-- Adapt to more hardware platforms
-- Improve documentation and internationalization
+npm test                  # run all tests (vitest)
+npm run build             # production web build
+npm run tauri:build       # production desktop build
+```
 
----
+## Contributing
 
-## 📄 License
+Contributions are welcome. Please:
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+1. Fork the repository
+2. Create a feature branch from `main`
+3. Make your changes with tests where applicable
+4. Run `npm test` and ensure TypeScript compiles cleanly
+5. Open a pull request
 
----
+See [CHANGELOG.md](./CHANGELOG.md) for release history.
 
-## 🙏 Acknowledgments
+## License
 
-- [OpenClaw](https://github.com/nicepkg/openclaw) — The open-source agent framework this project serves
-- [OceanBase](https://github.com/oceanbase) — seekdb + PowerMem data layer support
-- [Baidu PaddlePaddle](https://github.com/PaddlePaddle) — PaddleOCR model support
-- [LangChain](https://github.com/langchain-ai) — DeepAgents + LangGraph orchestration support
-- [Tauri](https://tauri.app/) — Lightweight desktop framework
-- [Shadcn/ui](https://ui.shadcn.com/) — Beautiful UI components
-
----
-
-Built with 🦞 by the OpenClaw open-source community
+MIT -- see [LICENSE](./LICENSE).

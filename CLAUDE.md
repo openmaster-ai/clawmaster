@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ClawMaster (龙虾管理大师) is a desktop/web management platform for the OpenClaw ecosystem. It wraps the OpenClaw CLI in a GUI using Tauri 2 (desktop) or Express (web), with a React frontend. All data is config-driven from `~/.openclaw/openclaw.json` — no database.
+ClawMaster (龙虾管理大师) is a desktop/web management platform for the OpenClaw ecosystem. It wraps the OpenClaw CLI in a GUI using Tauri 2 (desktop) or Express (web), with a React frontend. All data is config-driven from `~/.openclaw/openclaw.json` -- no database.
 
 ## Common Commands
 
@@ -35,17 +35,17 @@ export PKG_CONFIG_PATH_x86_64_unknown_linux_gnu=$PKG_CONFIG_PATH
 
 ### Monorepo Structure
 
-- **`packages/web/`** — React 18 frontend (Vite, TypeScript, Tailwind CSS, React Router 7)
-- **`packages/backend/`** — Express API server (port 3001) with WebSocket for log streaming
-- **`src-tauri/`** — Tauri 2 desktop backend (Rust), 9 commands that shell out to OpenClaw CLI
-- **`bin/clawmaster.mjs`** — CLI entry point
-- **`tests/ui/`** — YAML-based UI test plans (manual, not automated)
+- **`packages/web/`** -- React 18 frontend (Vite, TypeScript, Tailwind CSS, React Router 7)
+- **`packages/backend/`** -- Express API server (port 3001) with WebSocket for log streaming; uses `execFile` (not shell) to prevent injection
+- **`src-tauri/`** -- Tauri 2 desktop backend (Rust), 9 commands that shell out to OpenClaw CLI
+- **`bin/clawmaster.mjs`** -- CLI entry point
+- **`tests/ui/`** -- YAML-based UI test plans (manual, not automated)
 
 ### Two-Mode Runtime
 
 The app runs in two modes detected by `shared/adapters/platform.ts`:
-- **Desktop (Tauri)**: Frontend calls Rust commands via `@tauri-apps/api` → `invoke()`
-- **Web (Express)**: Frontend proxies `/api` to Express backend (Vite dev proxy on port 3000 → 3001)
+- **Desktop (Tauri)**: Frontend calls Rust commands via `@tauri-apps/api` -> `invoke()`
+- **Web (Express)**: Frontend proxies `/api` to Express backend (Vite dev proxy on port 3000 -> 3001)
 
 ### Module System
 
@@ -56,22 +56,35 @@ New features are built as **capability modules** in `packages/web/src/modules/`.
 export default {
   id: 'observe',
   name: '可观测',
-  icon: '📊',
+  icon: 'bar-chart',
   route: { path: '/observe', component: lazy(() => import('./ObservePage')) },
   navOrder: 20,
 } satisfies ClawModule
 ```
 
-Modules are auto-discovered via `import.meta.glob` in `modules/registry.ts` and registered in `App.tsx` for routing and sidebar navigation. To add a new module: create `modules/<name>/index.ts` exporting a `ClawModule` — it will appear automatically.
+Modules are auto-discovered via `import.meta.glob` in `modules/registry.ts` and registered in `App.tsx` for routing and sidebar navigation. To add a new module: create `modules/<name>/index.ts` exporting a `ClawModule` -- it will appear automatically.
 
-Current modules: `setup` (installation wizard), `observe` (cost/token monitoring with Recharts), `memory` (PowerMem management).
+Current modules: `setup` (installation wizard + onboarding), `observe` (cost/token monitoring with Recharts), `memory` (PowerMem management).
+
+The **setup module** is special: it exports `SetupWizard`, `getSetupAdapter` (with `demoSetupAdapter` and `realSetupAdapter` variants), and types. The onboarding flow covers API key entry, model selection, gateway config, and channel setup for all 16 supported providers and 6 channel types.
 
 ### Shared Layer
 
-- **`shared/adapters/`** — Split per-tool adapters (clawhub, clawprobe, powermem, mirror), each returning `AdapterResult<T>` from `shared/adapters/types.ts`. Use `ok()`, `fail()`, and `wrapAsync()` helpers.
-- **`shared/adapters/platform.ts`** — Single source for `isTauri()` detection, `execCommand()`, and `execCommandJson<T>()`. All CLI calls go through here.
-- **`shared/hooks/useAdapterCall.ts`** — Generic data-fetching hook replacing copy-paste `useState`/`useEffect` patterns. Supports polling and auto-fetch.
-- **`shared/components/`** — `ErrorBoundary`, `LoadingState`, `CapabilityGuard`, `PasswordField`
+- **`shared/adapters/`** -- Split per-tool adapters (clawhub, clawprobe, clawprobe-demo, powermem, mirror), each returning `AdapterResult<T>` from `shared/adapters/types.ts`. Use `ok()`, `fail()`, and `wrapAsync()` helpers.
+- **`shared/adapters/platform.ts`** -- Single source for `isTauri()` detection, `execCommand()`, and `execCommandJson<T>()`. All CLI calls go through here.
+- **`shared/hooks/useAdapterCall.ts`** -- Generic data-fetching hook replacing copy-paste `useState`/`useEffect` patterns. Supports polling and auto-fetch.
+- **`shared/components/`** -- `ErrorBoundary`, `LoadingState`, `CapabilityGuard`, `PasswordField`
+
+### i18n
+
+Uses **react-i18next** with bundled JSON translation files at `packages/web/src/i18n/`:
+- `zh.json` (Chinese, fallback), `en.json` (English), `ja.json` (Japanese)
+- 386 translation keys covering all UI text
+- Language preference stored in `localStorage` key `clawmaster-language`
+- `changeLanguage()` exported from `src/i18n/index.ts`
+- Language switcher appears in the header and in the setup wizard
+
+All UI text must go through `t()` from `useTranslation()`. Do not hardcode Chinese strings in components.
 
 ### Legacy Pages
 
@@ -83,10 +96,15 @@ Older pages in `packages/web/src/pages/` (Dashboard, Gateway, Config, Models, Sk
 - **Config**: `packages/web/vitest.config.ts`
 - **Tests location**: Co-located `__tests__/` directories (e.g., `shared/adapters/__tests__/`, `modules/setup/__tests__/`)
 - **Run single test**: `npx vitest run src/shared/adapters/__tests__/platform.test.ts --workspace=@openclaw-manager/web`
+- **Counts**: 74 unit tests, 85 YAML-based UI test cases
 
 ### UI
 
-All UI text is in Chinese. No i18n framework yet. Styling uses Tailwind CSS with Lucide React icons.
+- Styling: Tailwind CSS with Lucide React icons (no emoji in UI)
+- Dark mode toggle (independent from color theme)
+- Color themes: Lobster Orange, Ocean Blue
+- Responsive: mobile hamburger menu
+- All text goes through i18n -- see the i18n section above
 
 ## Rust / Tauri Notes
 
@@ -98,4 +116,7 @@ All UI text is in Chinese. No i18n framework yet. Styling uses Tailwind CSS with
 
 ## CI/CD
 
-GitHub Actions workflow (`.github/workflows/build.yml`) builds multi-platform Tauri releases but does not run tests or linting.
+GitHub Actions workflow (`.github/workflows/build.yml`):
+1. **Test job** (every push/PR): `npm ci` -> TypeScript check -> `npm test` -> `npm run build`
+2. **Build job** (tags, main, manual): multi-platform Tauri build (Linux x64, macOS x64/ARM64, Windows x64)
+3. Tag pushes create draft GitHub releases with platform installers; non-tag builds upload artifacts with 7-day retention

@@ -1,124 +1,109 @@
-# 🦞 龙虾管理大师 (ClawMaster)
+# 龙虾管理大师 (ClawMaster)
 
-[English](./README.md) | [产品定位](./VISION.md)
+**OpenClaw 生态的图形化管理工具 -- 在一个界面中管理供应商、频道和智能体。**
 
-> **龙虾管理大师——OpenClaw 生态的六边形战士：能接管、能观测、能省钱、能应用、能构建、能守护。**
-
-龙虾管理大师（ClawMaster）是 OpenClaw 生态的一站式智能管理平台，由开源社区协作共建，为每一位用户提供六大核心能力：接管、观测、省钱、应用、构建、守护。
+[English](./README.md)
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-lightgrey.svg)
+![Build](https://img.shields.io/github/actions/workflow/status/clawmaster-ai/clawmaster/build.yml?branch=main)
+![Languages](https://img.shields.io/badge/i18n-中文%20%7C%20English%20%7C%20日本語-green.svg)
 
----
+龙虾管理大师将 OpenClaw CLI 封装为桌面应用（Tauri 2）或 Web 界面（Express + Vite），提供安装向导、16 个 LLM 供应商集成、6 种频道类型、可观测仪表盘和记忆管理功能。纯配置驱动，无需数据库。
 
-## 🦞 六大核心能力
+## 核心功能
 
-| 能力 | 一句话 | 解决什么问题 |
-|------|--------|-------------|
-| **能接管** | 帮你装、帮你管、一切从这里开始 | 安装门槛高，配置复杂 |
-| **能观测** | 花了多少、跑得如何、一目了然 | Token/费用/健康度全是黑盒 |
-| **能省钱** | PowerMem + seekdb，Token 降 96% | 花钱如流水，记忆管理缺失 |
-| **能应用** | 拍照答题/错题本/发票整理，开箱即用 | 装完不知道能干什么 |
-| **能构建** | 跟管家聊天，智能体就建好了 | 传统开发门槛高，普通人玩不转 |
-| **能守护** | 密钥加密、花费熔断、权限管控 | API Key 裸奔，花费失控无保护 |
+- **安装向导** -- 检测、安装、引导配置 OpenClaw（API Key、模型、网关、频道一步到位）
+- **16 个 LLM 供应商** -- OpenAI、Anthropic、Google Gemini、xAI、Mistral、Groq、DeepSeek、MiniMax、Kimi、SiliconFlow、OpenRouter、Amazon Bedrock、Google Vertex、Azure OpenAI、Cerebras，以及自定义 OpenAI 兼容端点
+- **API Key 验证** -- 保存前通过真实 HTTP 请求验证密钥有效性
+- **6 种频道类型** -- Discord、Slack、Telegram、飞书、微信（扫码登录）、WhatsApp（扫码登录）
+- **频道配置指南** -- 分步导航，飞书权限模板（26 个 scope 一键复制）
+- **可观测仪表盘** -- 通过 ClawProbe 集成展示费用、Token 用量和上下文健康度
+- **记忆管理** -- PowerMem 集成，管理记忆生命周期
+- **国际化** -- 中文、英文、日文（386 个翻译键）；顶栏和安装向导均可切换语言
+- **深色模式** 和颜色主题（龙虾橙、海洋蓝）
+- **响应式布局**，移动端汉堡菜单
+- **桌面端构建** -- Linux（deb、rpm、AppImage）、macOS（dmg）、Windows（msi）
+- **CI/CD** -- 测试门禁（tsc + vitest）后执行多平台 Tauri 构建和发布
 
-> 详细产品定位请参阅 [VISION.md](./VISION.md)
+## 快速开始
 
----
+### 下载安装包
 
-## 🤝 四大生态支柱
-
-| 生态伙伴 | 角色 | 提供能力 |
-|----------|------|---------|
-| **OceanBase** | 数据层 | seekdb AI 原生数据库、PowerMem 记忆引擎 |
-| **百度** | 模型层 | PaddleOCR 等强力模型，支撑推理能力 |
-| **LangChain 社区** | 编排层 | DeepAgents 深度智能体、LangGraph 工作流、LangSmith 可观测 |
-| **算力魔方** | 硬件层 | 开源硬件标准，内置龙虾管家，边缘算力 |
-
----
-
-## 🛠️ 技术栈
-
-- **桌面框架**: [Tauri 2.x](https://tauri.app/) + [React 18](https://react.dev/)
-- **语言**: TypeScript + Rust
-- **UI**: [Shadcn/ui](https://ui.shadcn.com/) + [Tailwind CSS](https://tailwindcss.com/)
-- **状态管理**: [Zustand](https://zustand-demo.pmnd.rs/)
-- **双模式**: 桌面端 (Tauri) + Web 端 (Vite + Node.js 后端)
-- **数据层**: [seekdb](https://github.com/oceanbase/seekdb) + [PowerMem](https://github.com/oceanbase/powermem)
-- **智能体**: [LangChain DeepAgents](https://docs.langchain.com/oss/python/deepagents/overview) + [LangGraph](https://github.com/langchain-ai/langgraph)
-- **OCR**: [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)
-
----
-
-## 📦 安装
-
-### 下载安装包（推荐）
-
-从 [Releases](https://github.com/stliuexp/openclawmaneger/releases) 页面下载适合你系统的最新版本。
+从 [Releases](https://github.com/clawmaster-ai/clawmaster/releases) 页面下载适合你系统的最新版本。
 
 ### 从源码构建
 
 ```bash
-# 克隆仓库
-git clone https://github.com/stliuexp/openclawmaneger.git
-cd openclawmaneger
+git clone https://github.com/clawmaster-ai/clawmaster.git
+cd clawmaster
+npm install
 
-# 安装依赖
-pnpm install
+# Web 模式（前端 + 后端）
+npm run dev:web
 
-# Web 开发模式
-pnpm dev:web
+# 桌面模式（Tauri）
+npm run tauri:dev
 
-# 桌面端开发模式
-pnpm tauri dev
-
-# 构建生产版本
-pnpm tauri build
+# 生产构建
+npm run build         # web
+npm run tauri:build   # 桌面端
 ```
 
----
+需要 Node.js 20+。桌面端构建还需要 Rust 1.77+ 和平台相关的系统依赖（参见 [Tauri 前置条件](https://tauri.app/start/prerequisites/)）。
 
-## 🚀 快速开始
+## 截图
 
-1. **启动应用** —— 龙虾管理大师会自动检测你的 OpenClaw 环境
-2. **接管或安装** —— 已有安装则一键接管，没有则引导安装
-3. **开始使用** —— Dashboard 查看状态，内置技能开箱即用
-4. **深入探索** —— 费用追踪、记忆管理、智能体构建，六大能力随你用
+> 即将上线。
 
----
+## 架构
 
-## 📸 截图
+```
+clawmaster/
+├── packages/web/          React 18 + Vite + Tailwind CSS 前端
+│   └── src/
+│       ├── modules/       功能模块（setup、observe、memory）
+│       ├── shared/        适配器、Hooks、公共组件
+│       ├── pages/         旧版页面组件
+│       └── i18n/          翻译文件（zh、en、ja）
+├── packages/backend/      Express API 服务（端口 3001）+ WebSocket 日志
+├── src-tauri/             Tauri 2 Rust 后端（9 个命令）
+├── tests/ui/              YAML 格式的 UI 测试计划
+└── bin/clawmaster.mjs     CLI 入口
+```
 
-> 截图即将上线！
+两种运行模式：
+- **桌面端**：React 通过 `@tauri-apps/api` 的 invoke 调用 Rust 命令
+- **Web 端**：React 将 `/api` 请求代理到 Express 后端（Vite 开发代理 3000 -> 3001）
 
----
+新功能以功能模块形式构建在 `packages/web/src/modules/` 下，通过 `import.meta.glob` 自动发现。
 
-## 🤝 参与贡献
+## 开发
 
-龙虾管理大师是一个开源社区协作项目，欢迎所有开发者参与共建：
+```bash
+npm install               # 安装所有工作区依赖
+npm run dev               # 仅前端（端口 3000）
+npm run dev:web           # 前端 + 后端
+npm run dev:backend       # 仅 Express 后端（端口 3001）
+npm run tauri:dev         # 桌面应用
 
-- 提交 Issue 和 Pull Request
-- 开发内置技能和应用场景
-- 适配更多硬件平台
-- 完善文档和国际化
+npm test                  # 运行所有测试（vitest）
+npm run build             # Web 生产构建
+npm run tauri:build       # 桌面端生产构建
+```
 
----
+## 参与贡献
 
-## 📄 许可证
+欢迎贡献代码。请：
 
-本项目基于 MIT 许可证开源 - 详见 [LICENSE](LICENSE) 文件。
+1. Fork 本仓库
+2. 从 `main` 创建功能分支
+3. 修改代码并补充测试
+4. 运行 `npm test`，确保 TypeScript 编译通过
+5. 提交 Pull Request
 
----
+版本历史请查看 [CHANGELOG.md](./CHANGELOG.md)。
 
-## 🙏 致谢
+## 许可证
 
-- [OpenClaw](https://github.com/nicepkg/openclaw) — 本项目所服务的开源智能体框架
-- [OceanBase](https://github.com/oceanbase) — seekdb + PowerMem 数据层支持
-- [百度 PaddlePaddle](https://github.com/PaddlePaddle) — PaddleOCR 模型支持
-- [LangChain](https://github.com/langchain-ai) — DeepAgents + LangGraph 编排支持
-- [Tauri](https://tauri.app/) — 轻量级桌面框架
-- [Shadcn/ui](https://ui.shadcn.com/) — 精美的 UI 组件库
-
----
-
-由 OpenClaw 开源社区共建 🦞
+MIT -- 详见 [LICENSE](./LICENSE)。
