@@ -40,7 +40,7 @@ export interface CapabilityDef {
 export const CAPABILITIES: CapabilityDef[] = [
   {
     id: 'engine',
-    name: '核心引擎',
+    name: 'capability.engine',
     detectCmd: 'openclaw',
     detectArgs: ['--version'],
     required: true,
@@ -50,7 +50,7 @@ export const CAPABILITIES: CapabilityDef[] = [
   },
   {
     id: 'memory',
-    name: '记忆管理',
+    name: 'capability.memory',
     detectCmd: 'openclaw',
     detectArgs: ['ltm', 'health'],
     required: false,
@@ -70,7 +70,7 @@ export const CAPABILITIES: CapabilityDef[] = [
   },
   {
     id: 'observe',
-    name: '可观测性',
+    name: 'capability.observe',
     detectCmd: 'clawprobe',
     detectArgs: ['--version'],
     required: false,
@@ -80,7 +80,7 @@ export const CAPABILITIES: CapabilityDef[] = [
   },
   {
     id: 'ocr',
-    name: '文档与图像识别',
+    name: 'capability.ocr',
     detectCmd: 'clawhub',
     detectArgs: ['list', '--json'],
     required: false,
@@ -91,7 +91,7 @@ export const CAPABILITIES: CapabilityDef[] = [
   },
   {
     id: 'agent',
-    name: '智能体编排',
+    name: 'capability.agent',
     detectCmd: 'python3',
     detectArgs: ['-c', 'import deepagents; print(deepagents.__version__)'],
     required: false,
@@ -230,12 +230,12 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     keyUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
     models: [
       { id: 'MiniMax-M2.7', name: 'MiniMax M2.7' },
-      { id: 'MiniMax-M2.7-highspeed', name: 'MiniMax M2.7 高速' },
+      { id: 'MiniMax-M2.7-highspeed', name: 'MiniMax M2.7 Highspeed' },
     ],
     defaultModel: 'MiniMax-M2.7',
   },
   'kimi-coding': {
-    label: 'Kimi (月之暗面)',
+    label: 'Kimi (Moonshot)',
     keyUrl: 'https://platform.moonshot.cn/console/api-keys',
     models: [
       { id: 'kimi-k2', name: 'Kimi K2' },
@@ -243,7 +243,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     defaultModel: 'kimi-k2',
   },
   siliconflow: {
-    label: 'SiliconFlow (硅基流动)',
+    label: 'SiliconFlow',
     // 使用 openrouter 作为 config key，因为 openclaw 的 openrouter 提供商
     // 正确处理 baseUrl + 带斜杠的模型 ID（如 deepseek-ai/DeepSeek-V3）
     configKeyOverride: 'openrouter',
@@ -312,7 +312,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
   },
   // ── 自定义兼容端点 ──
   'custom-openai-compatible': {
-    label: '自定义 (OpenAI 兼容)',
+    label: 'Custom (OpenAI Compatible)',
     configKeyOverride: 'openrouter', // 使用 openrouter 以支持带斜杠的模型 ID
     needsBaseUrl: true,
     models: [], // 用户手动输入模型 ID
@@ -358,14 +358,14 @@ export const CHANNEL_TYPES: ChannelTypeConfig[] = [
     guideUrl: 'https://discord.com/developers/applications',
     guideLabel: 'Discord Developer Portal',
     tokenFields: [
-      { key: 'token', label: 'Bot Token', placeholder: '粘贴 Bot Token（如 MTIz...）', hint: '在 Bot 页面点击 Reset Token 获取，约 70 字符' },
+      { key: 'token', label: 'Bot Token', placeholder: 'MTIz...', hint: 'channel.discord.tokenHint' },
     ],
     steps: [
-      { text: '创建应用', highlight: 'Applications → New Application → 输入名称 → Create' },
-      { text: '创建 Bot Token', highlight: '左侧 Bot → Reset Token → Yes, do it! → 复制 Token', yieldsToken: 'token' },
-      { text: '开启消息权限', highlight: 'Bot 页面下方 Privileged Gateway Intents → 开启 Message Content Intent → Save Changes' },
-      { text: '生成邀请链接', highlight: '左侧 OAuth2 → URL Generator → 勾选 bot scope → 勾选所需权限（Send Messages、Read Message History）' },
-      { text: '邀请 Bot 到服务器', highlight: '复制生成的 URL → 浏览器打开 → 选择服务器 → 授权' },
+      { text: 'channel.discord.step1', highlight: 'Applications → New Application → Create' },
+      { text: 'channel.discord.step2', highlight: 'Bot → Reset Token → Yes, do it! → Copy Token', yieldsToken: 'token' },
+      { text: 'channel.discord.step3', highlight: 'Privileged Gateway Intents → Message Content Intent → Save' },
+      { text: 'channel.discord.step4', highlight: 'OAuth2 → URL Generator → bot scope → Send Messages, Read Message History' },
+      { text: 'channel.discord.step5', highlight: 'Copy URL → Open in browser → Select server → Authorize' },
     ],
   },
   {
@@ -374,16 +374,16 @@ export const CHANNEL_TYPES: ChannelTypeConfig[] = [
     guideUrl: 'https://api.slack.com/apps',
     guideLabel: 'Slack API Dashboard',
     tokenFields: [
-      { key: 'bot-token', label: 'Bot Token (xoxb-)', placeholder: 'xoxb-1234-5678-AbCdEf...', hint: '以 xoxb- 开头，在 OAuth & Permissions 页面获取' },
-      { key: 'app-token', label: 'App Token (xapp-)', placeholder: 'xapp-1-A0123-9876...', hint: '以 xapp- 开头，在 Basic Information → App-Level Tokens 获取' },
+      { key: 'bot-token', label: 'Bot Token (xoxb-)', placeholder: 'xoxb-1234-5678-AbCdEf...', hint: 'channel.slack.botTokenHint' },
+      { key: 'app-token', label: 'App Token (xapp-)', placeholder: 'xapp-1-A0123-9876...', hint: 'channel.slack.appTokenHint' },
     ],
     steps: [
-      { text: '创建应用', highlight: 'Create New App → From scratch → 输入名称 → 选择 Workspace → Create App' },
-      { text: '添加 Bot 权限', highlight: '左侧 OAuth & Permissions → 下滑到 Scopes → Add an OAuth Scope → 添加 chat:write、app_mentions:read、im:history' },
-      { text: '安装到工作区', highlight: '页面顶部 Install to Workspace → Allow → 复制 Bot User OAuth Token', yieldsToken: 'bot-token' },
-      { text: '创建 App Token', highlight: '左侧 Basic Information → 下滑到 App-Level Tokens → Generate Token → 名称任意 → 添加 connections:write scope → Generate', yieldsToken: 'app-token' },
-      { text: '开启 Socket Mode', highlight: '左侧 Socket Mode → 开启 Enable Socket Mode 开关' },
-      { text: '订阅事件', highlight: '左侧 Event Subscriptions → 开启开关 → Subscribe to bot events → 添加 message.im、app_mention → Save Changes' },
+      { text: 'channel.slack.step1', highlight: 'Create New App → From scratch → Name → Workspace → Create' },
+      { text: 'channel.slack.step2', highlight: 'OAuth & Permissions → Scopes → chat:write, app_mentions:read, im:history' },
+      { text: 'channel.slack.step3', highlight: 'Install to Workspace → Allow → Copy Bot User OAuth Token', yieldsToken: 'bot-token' },
+      { text: 'channel.slack.step4', highlight: 'Basic Information → App-Level Tokens → Generate → connections:write', yieldsToken: 'app-token' },
+      { text: 'channel.slack.step5', highlight: 'Socket Mode → Enable Socket Mode' },
+      { text: 'channel.slack.step6', highlight: 'Event Subscriptions → Subscribe to bot events → message.im, app_mention → Save' },
     ],
   },
   {
@@ -392,29 +392,29 @@ export const CHANNEL_TYPES: ChannelTypeConfig[] = [
     guideUrl: 'https://t.me/BotFather',
     guideLabel: '@BotFather',
     tokenFields: [
-      { key: 'token', label: 'Bot Token', placeholder: '123456789:AAHk-AbCdEfGhIjKlMnOpQrStUvWxYz...', hint: '格式: 数字:字母混合，约 46 字符，由 @BotFather 生成' },
+      { key: 'token', label: 'Bot Token', placeholder: '123456789:AAHk-AbCdEf...', hint: 'channel.telegram.tokenHint' },
     ],
     steps: [
-      { text: '打开 BotFather', highlight: 'Telegram 搜索 @BotFather → 点击 Start' },
-      { text: '创建新 Bot', highlight: '发送 /newbot → 输入 Bot 显示名称 → 输入 Bot 用户名（须以 bot 结尾）' },
-      { text: '复制 Token', highlight: 'BotFather 回复中 "Use this token to access the HTTP API:" 下方的字符串', yieldsToken: 'token' },
+      { text: 'channel.telegram.step1', highlight: 'Telegram → @BotFather → Start' },
+      { text: 'channel.telegram.step2', highlight: '/newbot → Bot name → Bot username (ending in "bot")' },
+      { text: 'channel.telegram.step3', highlight: '"Use this token to access the HTTP API:" → Copy token', yieldsToken: 'token' },
     ],
   },
   {
     id: 'feishu',
-    name: '飞书 (Feishu)',
+    name: 'channel.feishu.name',
     guideUrl: 'https://open.feishu.cn/app',
-    guideLabel: '飞书开放平台',
+    guideLabel: 'channel.feishu.guideLabel',
     tokenFields: [
-      { key: 'token', label: 'App ID + App Secret', placeholder: 'cli_a1b2c3d4e5f6...', hint: '在 凭证与基础信息 页面获取 App ID' },
+      { key: 'token', label: 'App ID + App Secret', placeholder: 'cli_a1b2c3d4e5f6...', hint: 'channel.feishu.tokenHint' },
     ],
     steps: [
-      { text: '创建应用', highlight: '飞书开放平台 → 创建企业自建应用 → 输入名称和描述 → 确定创建' },
-      { text: '获取凭证', highlight: '左侧 凭证与基础信息 → 复制 App ID 和 App Secret', yieldsToken: 'token' },
-      { text: '添加机器人能力', highlight: '左侧 添加应用能力 → 添加 机器人' },
-      { text: '配置权限', highlight: '左侧 权限管理 → 搜索并开启 im:message、im:message:send 等权限' },
-      { text: '配置事件订阅', highlight: '左侧 事件订阅 → 添加 接收消息 im.message.receive_v1 事件 → 保存' },
-      { text: '发布应用', highlight: '左侧 版本管理与发布 → 创建版本 → 申请发布 → 管理员审核通过后生效' },
+      { text: 'channel.feishu.step1', highlight: 'channel.feishu.step1.highlight' },
+      { text: 'channel.feishu.step2', highlight: 'channel.feishu.step2.highlight', yieldsToken: 'token' },
+      { text: 'channel.feishu.step3', highlight: 'channel.feishu.step3.highlight' },
+      { text: 'channel.feishu.step4', highlight: 'channel.feishu.step4.highlight' },
+      { text: 'channel.feishu.step5', highlight: 'channel.feishu.step5.highlight' },
+      { text: 'channel.feishu.step6', highlight: 'channel.feishu.step6.highlight' },
     ],
   },
 ]

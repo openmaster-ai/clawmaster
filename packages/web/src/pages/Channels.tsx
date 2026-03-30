@@ -89,7 +89,7 @@ export default function Channels() {
               />
             ) : (
               <div className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
-                <span className="font-medium">{type.name}</span>
+                <span className="font-medium">{t(type.name)}</span>
                 <button
                   onClick={() => setAddingChannel(type.id)}
                   className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:opacity-90"
@@ -143,7 +143,7 @@ function AddChannelPanel({
   return (
     <div className="bg-card border border-primary/30 rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <span className="font-medium">{channelType.name}</span>
+        <span className="font-medium">{t(channelType.name)}</span>
         <div className="flex items-center gap-3">
           <a
             href={channelType.guideUrl}
@@ -151,7 +151,7 @@ function AddChannelPanel({
             rel="noopener noreferrer"
             className="text-xs text-primary hover:underline"
           >
-            {t('channels.openGuide', { label: channelType.guideLabel })} &rarr;
+            {t('channels.openGuide', { label: t(channelType.guideLabel) })} &rarr;
           </a>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm">{t('common.cancel')}</button>
         </div>
@@ -163,8 +163,8 @@ function AddChannelPanel({
           <li key={i} className="flex gap-2">
             <span className="text-muted-foreground shrink-0 w-4 text-right">{i + 1}.</span>
             <span className="text-muted-foreground">
-              {step.text}
-              {step.highlight && <>{'：'}<span className="text-foreground font-medium">{step.highlight}</span></>}
+              {t(step.text)}
+              {step.highlight && <>{'：'}<span className="text-foreground font-medium">{t(step.highlight)}</span></>}
               {step.yieldsToken && ' \u{1F511}'}
             </span>
           </li>
@@ -176,7 +176,7 @@ function AddChannelPanel({
         <div key={field.key}>
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs font-medium">{field.label}</label>
-            <span className="text-[10px] text-muted-foreground">{field.hint}</span>
+            <span className="text-[10px] text-muted-foreground">{t(field.hint)}</span>
           </div>
           <input
             type="password"

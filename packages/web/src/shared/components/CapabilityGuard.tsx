@@ -38,7 +38,7 @@ export function CapabilityGuard({
   const [installError, setInstallError] = useState<string | null>(null)
 
   const cap = CAPABILITIES.find((c) => c.id === capabilityId)
-  const capName = cap?.name ?? capabilityId
+  const capName = cap?.name ? t(cap.name) : capabilityId
 
   // demo 模式下直接放行
   const isDemo = typeof window !== 'undefined' && !!new URLSearchParams(window.location.search).get('demo')
@@ -88,7 +88,7 @@ export function CapabilityGuard({
       </div>
       <h3 className="text-lg font-medium mb-2">{t('capability.notEnabled', { name: capName })}</h3>
       <p className="text-sm text-muted-foreground mb-4 text-center max-w-md">
-        {unavailableMessage ?? `此功能需要「${capName}」支持。点击下方按钮一键安装。`}
+        {unavailableMessage ?? t('capability.defaultUnavailable', { name: capName })}
       </p>
       {installError && (
         <p className="text-sm text-red-500 mb-3">{installError}</p>

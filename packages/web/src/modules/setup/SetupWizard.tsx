@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Shell, Check, ExternalLink } from 'lucide-react'
+import { Shell, Check, ExternalLink, Globe } from 'lucide-react'
+import { changeLanguage } from '@/i18n'
 import { getSetupAdapter } from './adapters'
 import {
   CAPABILITIES,
@@ -28,7 +29,7 @@ interface SetupWizardProps {
  * 支持 ?demo=install 模拟全流程
  */
 export default function SetupWizard({ onComplete }: SetupWizardProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [phase, setPhase] = useState<SetupPhase>('detecting')
   const [capabilities, setCapabilities] = useState<CapabilityStatus[]>([])
   const [installProgress, setInstallProgress] = useState<Record<CapabilityId, InstallProgress>>({} as any)
@@ -228,7 +229,21 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const isDemo = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('demo') === 'install'
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-background p-6">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-background p-6 relative">
+      {/* Language Switcher */}
+      <div className="absolute top-4 right-4 flex items-center gap-1 text-muted-foreground">
+        <Globe className="w-4 h-4" />
+        <select
+          value={i18n.language}
+          onChange={(e) => changeLanguage(e.target.value)}
+          className="text-xs bg-transparent border border-border rounded px-1.5 py-1 cursor-pointer hover:text-foreground"
+        >
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+        </select>
+      </div>
+
       {/* Logo */}
       <div className="w-16 h-16 bg-primary rounded-xl flex items-center justify-center mb-4 shadow-lg">
         <Shell className="w-9 h-9 text-primary-foreground" />
@@ -482,7 +497,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                     rel="noopener noreferrer"
                     className="text-xs text-primary hover:underline"
                   >
-                    {t('setup.openGuide', { label: selectedChannel.guideLabel })}
+                    {t('setup.openGuide', { label: t(selectedChannel.guideLabel) })}
                   </a>
                 </div>
                 <ol className="text-xs space-y-2">
@@ -490,11 +505,11 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                     <li key={i} className="flex gap-2">
                       <span className="text-muted-foreground shrink-0 w-4 text-right">{i + 1}.</span>
                       <span className="text-muted-foreground">
-                        {step.text}
+                        {t(step.text)}
                         {step.highlight && (
                           <>
                             {'：'}
-                            <span className="text-foreground font-medium">{step.highlight}</span>
+                            <span className="text-foreground font-medium">{t(step.highlight)}</span>
                           </>
                         )}
                         {step.yieldsToken && <span className="text-primary ml-1" title="此步骤产出 Token">*</span>}
@@ -508,7 +523,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               <div key={field.key} className="mb-2">
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-medium">{field.label}</label>
-                  <span className="text-[10px] text-muted-foreground">{field.hint}</span>
+                  <span className="text-[10px] text-muted-foreground">{t(field.hint)}</span>
                 </div>
                 <input
                   type="password"
@@ -616,11 +631,12 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 // ─── 子组件 ───
 
 function CapabilityList({ capabilities }: { capabilities: CapabilityStatus[] }) {
+  const { t } = useTranslation()
   return (
     <div className="bg-card border border-border rounded-lg divide-y divide-border">
       {capabilities.map((cap) => (
         <div key={cap.id} className="flex items-center justify-between px-4 py-3">
-          <span className="text-sm">{cap.name}</span>
+          <span className="text-sm">{t(cap.name)}</span>
           <CapabilityBadge status={cap.status} version={cap.version} />
         </div>
       ))}
@@ -790,7 +806,7 @@ function InstallList({
         return (
           <div key={cap.id} className="px-4 py-3">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm">{cap.name}</span>
+              <span className="text-sm">{t(cap.name)}</span>
               {isDone && <span className="text-xs text-green-600">{t('setup.ready')}</span>}
               {isError && <span className="text-xs text-red-500">{t('setup.failed')}</span>}
               {isInstalling && p?.status === 'installing' && (
