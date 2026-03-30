@@ -1,68 +1,170 @@
+import { useState } from 'react'
+import { execCommand } from '@/shared/adapters/platform'
+
+interface DocResult {
+  title: string
+  url: string
+  snippet: string
+}
+
+const QUICK_LINKS = [
+  { label: '快速开始', url: 'https://docs.openclaw.ai/quickstart', desc: '安装、配置、发送第一条消息' },
+  { label: 'CLI 参考', url: 'https://docs.openclaw.ai/cli', desc: 'openclaw 命令行完整文档' },
+  { label: '通道配置', url: 'https://docs.openclaw.ai/channels', desc: 'Telegram、Discord、Slack、飞书' },
+  { label: '模型配置', url: 'https://docs.openclaw.ai/models', desc: '提供商 API Key、模型选择、备选链' },
+  { label: '技能开发', url: 'https://docs.openclaw.ai/skills', desc: '创建和发布自定义技能' },
+  { label: '安全指南', url: 'https://docs.openclaw.ai/security', desc: 'Token 管理、沙箱、权限' },
+]
+
 export default function Docs() {
-  const toc = [
-    { title: '入门指南', children: ['安装', '快速开始', '配置向导'] },
-    { title: '基础功能', children: ['网关', '通道', '模型'] },
-    { title: '进阶功能', children: ['Skills', 'Agents', '配置文件'] },
-    { title: '常见问题', children: [] },
-  ]
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<DocResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [searched, setSearched] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSearch() {
+    if (!query.trim()) return
+    setSearching(true)
+    setError(null)
+    setSearched(true)
+    try {
+      const raw = await execCommand('openclaw', ['docs', query.trim()])
+      // Parse the text output into results
+      const parsed = parseDocsOutput(raw)
+      setResults(parsed)
+    } catch (err) {
+      setError('搜索失败，请检查网络连接')
+      setResults([])
+    } finally {
+      setSearching(false)
+    }
+  }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)]">
-      {/* 目录 */}
-      <aside className="w-56 border-r border-border pr-4 overflow-auto">
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">文档</h1>
+
+      {/* 搜索 */}
+      <div className="flex gap-3">
         <input
           type="text"
-          placeholder="🔍 搜索文档..."
-          className="w-full px-3 py-2 bg-muted rounded border border-border mb-4 text-sm"
+          placeholder="搜索 OpenClaw 文档..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          className="flex-1 px-4 py-2 bg-card rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary"
         />
-        
-        {toc.map((section) => (
-          <div key={section.title} className="mb-3">
-            <div className="font-medium text-sm mb-1">{section.title}</div>
-            {section.children.map((child) => (
+        <button
+          onClick={handleSearch}
+          disabled={searching || !query.trim()}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 text-sm"
+        >
+          {searching ? '搜索中...' : '搜索'}
+        </button>
+      </div>
+
+      {/* 搜索结果 */}
+      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {results.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="font-medium text-sm text-muted-foreground">{results.length} 条结果</h3>
+          {results.map((r, i) => (
+            <a
+              key={i}
+              href={r.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition"
+            >
+              <p className="font-medium text-primary">{r.title}</p>
+              {r.url && <p className="text-xs text-muted-foreground font-mono mt-0.5">{r.url}</p>}
+              {r.snippet && <p className="text-sm text-muted-foreground mt-1">{r.snippet}</p>}
+            </a>
+          ))}
+        </div>
+      )}
+      {searched && !searching && results.length === 0 && !error && (
+        <p className="text-muted-foreground text-center py-4">未找到相关文档</p>
+      )}
+
+      {/* 快速链接 */}
+      {!searched && (
+        <div>
+          <h3 className="font-medium mb-3">常用文档</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {QUICK_LINKS.map((link) => (
               <a
-                key={child}
-                href="#"
-                className="block py-1 px-3 text-sm text-muted-foreground hover:text-foreground"
+                key={link.url}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition"
               >
-                {child}
+                <p className="font-medium">{link.label}</p>
+                <p className="text-sm text-muted-foreground mt-1">{link.desc}</p>
               </a>
             ))}
           </div>
-        ))}
-
-        <div className="border-t border-border pt-3 mt-3">
-          <p className="text-xs text-muted-foreground">📥 离线缓存</p>
-          <p className="text-xs text-muted-foreground">更新于 3天前</p>
+          <a
+            href="https://docs.openclaw.ai"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 block text-sm text-primary hover:underline"
+          >
+            打开完整文档站 &rarr;
+          </a>
         </div>
-      </aside>
-
-      {/* 内容 */}
-      <main className="flex-1 pl-6 overflow-auto">
-        <h1 className="text-2xl font-bold mb-6">安装 OpenClaw</h1>
-        
-        <h2 className="text-xl font-medium mb-3">系统要求</h2>
-        <ul className="list-disc list-inside text-muted-foreground mb-6">
-          <li>Node.js 18 或更高版本</li>
-          <li>npm 或 yarn</li>
-          <li>Git（可选）</li>
-        </ul>
-
-        <h2 className="text-xl font-medium mb-3">安装步骤</h2>
-        <pre className="bg-muted p-4 rounded-lg text-sm mb-6">
-          npm install -g openclaw
-        </pre>
-
-        <p className="text-muted-foreground mb-4">安装完成后，运行：</p>
-        <pre className="bg-muted p-4 rounded-lg text-sm">
-          openclaw setup
-        </pre>
-      </main>
-
-      {/* 状态 */}
-      <div className="absolute bottom-4 right-4 text-xs text-muted-foreground">
-        文档状态: ✓ 已缓存 (可离线访问) | 最后更新: 2026-03-17
-      </div>
+      )}
     </div>
   )
+}
+
+/** Parse openclaw docs text output into structured results */
+function parseDocsOutput(raw: string): DocResult[] {
+  const results: DocResult[] = []
+  const lines = raw.trim().split('\n').filter(l => l.trim())
+
+  let current: Partial<DocResult> = {}
+  for (const line of lines) {
+    const urlMatch = line.match(/https?:\/\/[^\s]+/)
+    if (urlMatch && !current.url) {
+      current.url = urlMatch[0]
+      // Title is the part before the URL or the whole line
+      const title = line.replace(urlMatch[0], '').replace(/[-–—|]\s*$/, '').trim()
+      if (title) current.title = title
+    } else if (current.url && !current.snippet) {
+      current.snippet = line.trim()
+    }
+
+    // If we have enough for a result, push it
+    if (current.url && (current.snippet || current.title)) {
+      results.push({
+        title: current.title || current.url,
+        url: current.url,
+        snippet: current.snippet || '',
+      })
+      current = {}
+    }
+  }
+
+  // Push last partial result
+  if (current.url) {
+    results.push({
+      title: current.title || current.url,
+      url: current.url,
+      snippet: current.snippet || '',
+    })
+  }
+
+  // If no structured results, treat each non-empty line as a result
+  if (results.length === 0 && lines.length > 0) {
+    results.push({
+      title: '搜索结果',
+      url: 'https://docs.openclaw.ai',
+      snippet: lines.join('\n'),
+    })
+  }
+
+  return results
 }
