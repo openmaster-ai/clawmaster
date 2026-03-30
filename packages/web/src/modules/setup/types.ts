@@ -327,6 +327,16 @@ export interface ChannelTokenField {
   key: string        // CLI flag name (e.g. 'token', 'bot-token')
   label: string      // display label
   placeholder: string
+  hint: string       // 格式提示（如 "以 xoxb- 开头，约 70 字符"）
+}
+
+export interface ChannelStep {
+  /** 操作描述 */
+  text: string
+  /** 关键路径高亮（如 "Bot → Reset Token"），渲染为加粗 */
+  highlight?: string
+  /** 此步骤产出的 token field key（渲染为 🔑 标记） */
+  yieldsToken?: string
 }
 
 export interface ChannelTypeConfig {
@@ -334,9 +344,11 @@ export interface ChannelTypeConfig {
   name: string
   tokenFields: ChannelTokenField[]
   /** 创建 Bot 的指引链接 */
-  guideUrl?: string
-  /** 简短设置步骤提示 */
-  steps: string[]
+  guideUrl: string
+  /** 指引链接显示文字 */
+  guideLabel: string
+  /** 分步设置指引 */
+  steps: ChannelStep[]
 }
 
 export const CHANNEL_TYPES: ChannelTypeConfig[] = [
@@ -344,59 +356,65 @@ export const CHANNEL_TYPES: ChannelTypeConfig[] = [
     id: 'discord',
     name: 'Discord',
     guideUrl: 'https://discord.com/developers/applications',
+    guideLabel: 'Discord Developer Portal',
     tokenFields: [
-      { key: 'token', label: 'Bot Token', placeholder: '粘贴 Discord Bot Token' },
+      { key: 'token', label: 'Bot Token', placeholder: '粘贴 Bot Token（如 MTIz...）', hint: '在 Bot 页面点击 Reset Token 获取，约 70 字符' },
     ],
     steps: [
-      '打开 Discord Developer Portal → New Application',
-      '进入 Bot 页面 → Reset Token → 复制 Token',
-      '开启 Privileged Gateway Intents（Message Content）',
-      '进入 OAuth2 → URL Generator → 勾选 bot → 生成邀请链接',
-      '用邀请链接把 Bot 添加到你的 Discord 服务器',
+      { text: '创建应用', highlight: 'Applications → New Application → 输入名称 → Create' },
+      { text: '创建 Bot Token', highlight: '左侧 Bot → Reset Token → Yes, do it! → 复制 Token', yieldsToken: 'token' },
+      { text: '开启消息权限', highlight: 'Bot 页面下方 Privileged Gateway Intents → 开启 Message Content Intent → Save Changes' },
+      { text: '生成邀请链接', highlight: '左侧 OAuth2 → URL Generator → 勾选 bot scope → 勾选所需权限（Send Messages、Read Message History）' },
+      { text: '邀请 Bot 到服务器', highlight: '复制生成的 URL → 浏览器打开 → 选择服务器 → 授权' },
     ],
   },
   {
     id: 'slack',
     name: 'Slack',
     guideUrl: 'https://api.slack.com/apps',
+    guideLabel: 'Slack API Dashboard',
     tokenFields: [
-      { key: 'bot-token', label: 'Bot Token', placeholder: 'xoxb-...' },
-      { key: 'app-token', label: 'App Token', placeholder: 'xapp-...' },
+      { key: 'bot-token', label: 'Bot Token (xoxb-)', placeholder: 'xoxb-1234-5678-AbCdEf...', hint: '以 xoxb- 开头，在 OAuth & Permissions 页面获取' },
+      { key: 'app-token', label: 'App Token (xapp-)', placeholder: 'xapp-1-A0123-9876...', hint: '以 xapp- 开头，在 Basic Information → App-Level Tokens 获取' },
     ],
     steps: [
-      '打开 Slack API → Create New App → From Scratch',
-      '进入 OAuth & Permissions → 添加 Bot Token Scopes（chat:write, app_mentions:read 等）',
-      '点击 Install to Workspace → 复制 Bot User OAuth Token (xoxb-...)',
-      '进入 Basic Information → App-Level Tokens → 生成 Token（connections:write scope）',
-      '复制 App-Level Token (xapp-...)',
-      '进入 Socket Mode → 开启 Enable Socket Mode',
-      '进入 Event Subscriptions → 开启并添加 message.im 等事件',
+      { text: '创建应用', highlight: 'Create New App → From scratch → 输入名称 → 选择 Workspace → Create App' },
+      { text: '添加 Bot 权限', highlight: '左侧 OAuth & Permissions → 下滑到 Scopes → Add an OAuth Scope → 添加 chat:write、app_mentions:read、im:history' },
+      { text: '安装到工作区', highlight: '页面顶部 Install to Workspace → Allow → 复制 Bot User OAuth Token', yieldsToken: 'bot-token' },
+      { text: '创建 App Token', highlight: '左侧 Basic Information → 下滑到 App-Level Tokens → Generate Token → 名称任意 → 添加 connections:write scope → Generate', yieldsToken: 'app-token' },
+      { text: '开启 Socket Mode', highlight: '左侧 Socket Mode → 开启 Enable Socket Mode 开关' },
+      { text: '订阅事件', highlight: '左侧 Event Subscriptions → 开启开关 → Subscribe to bot events → 添加 message.im、app_mention → Save Changes' },
     ],
   },
   {
     id: 'telegram',
     name: 'Telegram',
     guideUrl: 'https://t.me/BotFather',
+    guideLabel: '@BotFather',
     tokenFields: [
-      { key: 'token', label: 'Bot Token', placeholder: '123456:ABC-DEF...' },
+      { key: 'token', label: 'Bot Token', placeholder: '123456789:AAHk-AbCdEfGhIjKlMnOpQrStUvWxYz...', hint: '格式: 数字:字母混合，约 46 字符，由 @BotFather 生成' },
     ],
     steps: [
-      '在 Telegram 中搜索 @BotFather 并发送 /newbot',
-      '按提示设置 Bot 名称和用户名',
-      '复制 BotFather 返回的 Token',
+      { text: '打开 BotFather', highlight: 'Telegram 搜索 @BotFather → 点击 Start' },
+      { text: '创建新 Bot', highlight: '发送 /newbot → 输入 Bot 显示名称 → 输入 Bot 用户名（须以 bot 结尾）' },
+      { text: '复制 Token', highlight: 'BotFather 回复中 "Use this token to access the HTTP API:" 下方的字符串', yieldsToken: 'token' },
     ],
   },
   {
     id: 'feishu',
     name: '飞书 (Feishu)',
     guideUrl: 'https://open.feishu.cn/app',
+    guideLabel: '飞书开放平台',
     tokenFields: [
-      { key: 'token', label: 'App Token', placeholder: '粘贴飞书应用 Token' },
+      { key: 'token', label: 'App ID + App Secret', placeholder: 'cli_a1b2c3d4e5f6...', hint: '在 凭证与基础信息 页面获取 App ID' },
     ],
     steps: [
-      '打开飞书开放平台 → 创建企业自建应用',
-      '进入凭证与基础信息 → 复制 App ID 和 App Secret',
-      '添加机器人能力 → 配置事件订阅',
+      { text: '创建应用', highlight: '飞书开放平台 → 创建企业自建应用 → 输入名称和描述 → 确定创建' },
+      { text: '获取凭证', highlight: '左侧 凭证与基础信息 → 复制 App ID 和 App Secret', yieldsToken: 'token' },
+      { text: '添加机器人能力', highlight: '左侧 添加应用能力 → 添加 机器人' },
+      { text: '配置权限', highlight: '左侧 权限管理 → 搜索并开启 im:message、im:message:send 等权限' },
+      { text: '配置事件订阅', highlight: '左侧 事件订阅 → 添加 接收消息 im.message.receive_v1 事件 → 保存' },
+      { text: '发布应用', highlight: '左侧 版本管理与发布 → 创建版本 → 申请发布 → 管理员审核通过后生效' },
     ],
   },
 ]

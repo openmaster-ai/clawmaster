@@ -471,39 +471,54 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             </div>
             {selectedChannel && (
               <div className="bg-card border border-border rounded-lg p-4 mb-3">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-3">
                   <p className="text-sm font-medium">设置步骤</p>
-                  {selectedChannel.guideUrl && (
-                    <a
-                      href={selectedChannel.guideUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary hover:underline"
-                    >
-                      打开 {selectedChannel.name} 开发者平台 &rarr;
-                    </a>
-                  )}
+                  <a
+                    href={selectedChannel.guideUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline"
+                  >
+                    打开 {selectedChannel.guideLabel} &rarr;
+                  </a>
                 </div>
-                <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                <ol className="text-xs space-y-2">
                   {selectedChannel.steps.map((step, i) => (
-                    <li key={i}>{step}</li>
+                    <li key={i} className="flex gap-2">
+                      <span className="text-muted-foreground shrink-0 w-4 text-right">{i + 1}.</span>
+                      <span className="text-muted-foreground">
+                        {step.text}
+                        {step.highlight && (
+                          <>
+                            {'：'}
+                            <span className="text-foreground font-medium">{step.highlight}</span>
+                          </>
+                        )}
+                        {step.yieldsToken && ' \u{1F511}'}
+                      </span>
+                    </li>
                   ))}
                 </ol>
               </div>
             )}
             {selectedChannel?.tokenFields.map((field) => (
-              <input
-                key={field.key}
-                type="password"
-                placeholder={field.placeholder}
-                value={onboard.channelTokens[field.key] ?? ''}
-                onChange={(e) =>
-                  updateOnboard({
-                    channelTokens: { ...onboard.channelTokens, [field.key]: e.target.value },
-                  })
-                }
-                className="w-full px-4 py-3 mb-2 rounded-lg border border-border bg-card text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+              <div key={field.key} className="mb-2">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium">{field.label}</label>
+                  <span className="text-[10px] text-muted-foreground">{field.hint}</span>
+                </div>
+                <input
+                  type="password"
+                  placeholder={field.placeholder}
+                  value={onboard.channelTokens[field.key] ?? ''}
+                  onChange={(e) =>
+                    updateOnboard({
+                      channelTokens: { ...onboard.channelTokens, [field.key]: e.target.value },
+                    })
+                  }
+                  className="w-full px-4 py-3 rounded-lg border border-border bg-card text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
             ))}
             {onboard.error && <p className="text-red-500 text-xs mt-2">{onboard.error}</p>}
             {selectedChannel && (
