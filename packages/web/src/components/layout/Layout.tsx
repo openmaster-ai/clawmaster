@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { changeLanguage } from '@/i18n'
 import { registeredModules } from '@/modules/registry'
 import {
   LayoutDashboard,
@@ -98,7 +99,7 @@ function isDark(): boolean {
 // ─── Component ───
 
 export default function Layout({ children }: LayoutProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const location = useLocation()
   const currentPath = location.pathname
   const [dark, setDark] = useState(isDark)
@@ -170,13 +171,24 @@ export default function Layout({ children }: LayoutProps) {
             </button>
             <h2 className="font-medium text-sm">{pageTitle}</h2>
           </div>
-          <button
-            onClick={toggleDarkMode}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title={dark ? t('layout.darkMode.toLight') : t('layout.darkMode.toDark')}
-          >
-            {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
+          <div className="flex items-center gap-1">
+            <select
+              value={i18n.language}
+              onChange={(e) => changeLanguage(e.target.value)}
+              className="px-1.5 py-1 text-xs bg-transparent border border-border rounded-md text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              <option value="zh">中文</option>
+              <option value="en">EN</option>
+              <option value="ja">日本語</option>
+            </select>
+            <button
+              onClick={toggleDarkMode}
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title={dark ? t('layout.darkMode.toLight') : t('layout.darkMode.toDark')}
+            >
+              {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 overflow-auto p-4">{children}</main>

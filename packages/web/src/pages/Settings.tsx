@@ -46,7 +46,7 @@ export default function Settings() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">加载中...</div>
+    return <div className="flex items-center justify-center h-64">{t('common.loading')}</div>
   }
 
   return (
@@ -119,43 +119,41 @@ export default function Settings() {
 
       {/* 系统 */}
       <section className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">系统</h3>
+        <h3 className="font-medium mb-3">{t('settings.system')}</h3>
         <div className="space-y-2">
           <label className="flex items-center gap-2">
             <input type="checkbox" defaultChecked />
-            <span className="text-sm">开机时启动</span>
+            <span className="text-sm">{t('settings.launchOnStartup')}</span>
           </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" defaultChecked />
-            <span className="text-sm">显示系统托盘图标</span>
+            <span className="text-sm">{t('settings.showTrayIcon')}</span>
           </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" defaultChecked />
-            <span className="text-sm">关闭时最小化到托盘</span>
+            <span className="text-sm">{t('settings.minimizeToTray')}</span>
           </label>
         </div>
       </section>
 
       {/* 花费预算 */}
       <section className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">花费预算</h3>
-        <p className="text-sm text-muted-foreground mb-3">
-          设置预算上限，超支时在可观测 Dashboard 显示告警
-        </p>
+        <h3 className="font-medium mb-3">{t('settings.budget')}</h3>
+        <p className="text-sm text-muted-foreground mb-3">{t('settings.budgetDesc')}</p>
         <div className="space-y-3">
           {(['day', 'week', 'month'] as const).map((period) => {
-            const labels = { day: '日预算', week: '周预算', month: '月预算' }
+            const labelKeys = { day: 'settings.budgetDay', week: 'settings.budgetWeek', month: 'settings.budgetMonth' }
             const key = `clawmaster-budget-${period}`
             return (
               <div key={period} className="flex items-center gap-4">
-                <label className="w-20 text-sm text-muted-foreground">{labels[period]}:</label>
+                <label className="w-20 text-sm text-muted-foreground">{t(labelKeys[period])}:</label>
                 <div className="flex items-center gap-1">
                   <span className="text-sm">$</span>
                   <input
                     type="number"
                     step="0.1"
                     min="0"
-                    placeholder="不限"
+                    placeholder={t('settings.budgetUnlimited')}
                     defaultValue={localStorage.getItem(key) ?? ''}
                     onChange={(e) => {
                       if (e.target.value) localStorage.setItem(key, e.target.value)
@@ -172,29 +170,29 @@ export default function Settings() {
 
       {/* 系统信息 */}
       <section className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">系统信息</h3>
+        <h3 className="font-medium mb-3">{t('settings.systemInfo')}</h3>
         {systemInfo && (
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">OpenClaw</span>
               <span className={systemInfo.openclaw.installed ? 'text-green-600' : 'text-red-500'}>
-                {systemInfo.openclaw.installed ? `v${systemInfo.openclaw.version}` : '未安装'}
+                {systemInfo.openclaw.installed ? `v${systemInfo.openclaw.version}` : t('common.notInstalled')}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Node.js</span>
               <span className={systemInfo.nodejs.installed ? 'text-green-600' : 'text-red-500'}>
-                {systemInfo.nodejs.installed ? systemInfo.nodejs.version : '未安装'}
+                {systemInfo.nodejs.installed ? systemInfo.nodejs.version : t('common.notInstalled')}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">npm</span>
               <span className={systemInfo.npm.installed ? 'text-green-600' : 'text-red-500'}>
-                {systemInfo.npm.installed ? systemInfo.npm.version : '未安装'}
+                {systemInfo.npm.installed ? systemInfo.npm.version : t('common.notInstalled')}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">配置路径</span>
+              <span className="text-muted-foreground">{t('settings.configPath')}</span>
               <span className="font-mono text-xs">{systemInfo.openclaw.configPath}</span>
             </div>
           </div>
@@ -203,24 +201,23 @@ export default function Settings() {
 
       {/* 更新 */}
       <section className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">更新</h3>
+        <h3 className="font-medium mb-3">{t('settings.update')}</h3>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between">
-            <span>龙虾管家</span>
-            <span className="text-muted-foreground">v0.1.0 (开发中)</span>
+            <span>{t('settings.aboutName')}</span>
           </div>
           <div className="flex items-center justify-between">
             <span>OpenClaw CLI</span>
             <span className="text-muted-foreground">
-              {systemInfo?.openclaw.installed ? `v${systemInfo.openclaw.version}` : '未安装'}
+              {systemInfo?.openclaw.installed ? `v${systemInfo.openclaw.version}` : t('common.notInstalled')}
             </span>
           </div>
-          <button className="px-4 py-2 border border-border rounded hover:bg-accent">
-            检查更新
+          <button className="px-4 py-2 border border-border rounded-lg hover:bg-accent">
+            {t('settings.checkUpdate')}
           </button>
           <div className="flex items-center gap-4 mt-2">
-            <label className="text-muted-foreground">更新通道:</label>
-            <select className="px-3 py-1.5 bg-muted rounded border border-border">
+            <label className="text-muted-foreground">{t('settings.updateChannel')}</label>
+            <select className="px-3 py-1.5 bg-card rounded-lg border border-border text-sm">
               <option>Stable</option>
               <option>Beta</option>
               <option>Dev</option>
@@ -231,49 +228,32 @@ export default function Settings() {
 
       {/* 危险操作 */}
       <section className="bg-card border border-red-500/50 rounded-lg p-4">
-        <h3 className="font-medium text-red-500 mb-3">危险操作</h3>
+        <h3 className="font-medium text-red-500 mb-3">{t('settings.danger')}</h3>
         <div className="flex gap-3">
-          <button className="px-4 py-2 border border-border rounded hover:bg-accent">
-            重置配置
+          <button className="px-4 py-2 border border-border rounded-lg hover:bg-accent">
+            {t('settings.resetConfig')}
           </button>
-          <button className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
-            卸载 OpenClaw
+          <button className="px-4 py-2 bg-red-500 text-primary-foreground rounded-lg hover:bg-red-600">
+            {t('settings.uninstallOpenClaw')}
           </button>
         </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          这些操作不可逆，请谨慎操作
-        </p>
+        <p className="text-xs text-muted-foreground mt-2">{t('settings.dangerWarning')}</p>
       </section>
 
       {/* 关于 */}
       <section className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-2">关于</h3>
-        <p className="text-sm text-muted-foreground">龙虾管理大师 v0.3.0</p>
-        <p className="text-sm text-muted-foreground">OpenClaw 生态的六边形战士</p>
-        <p className="text-sm text-muted-foreground">由开源社区共建</p>
+        <h3 className="font-medium mb-2">{t('settings.about')}</h3>
+        <p className="text-sm text-muted-foreground">{t('settings.aboutName')}</p>
+        <p className="text-sm text-muted-foreground">{t('settings.aboutDesc')}</p>
+        <p className="text-sm text-muted-foreground">{t('settings.aboutCommunity')}</p>
         <div className="mt-3 flex gap-4">
-          <a 
-            href="https://docs.openclaw.ai" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:underline"
-          >
-            文档
+          <a href="https://docs.openclaw.ai" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+            {t('settings.aboutDocs')}
           </a>
-          <a 
-            href="https://github.com/openclaw/openclaw" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:underline"
-          >
+          <a href="https://github.com/openclaw/openclaw" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
             GitHub
           </a>
-          <a 
-            href="https://clawhub.com" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:underline"
-          >
+          <a href="https://clawhub.com" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
             ClawHub
           </a>
         </div>
