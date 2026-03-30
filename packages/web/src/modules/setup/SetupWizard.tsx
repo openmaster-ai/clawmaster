@@ -1,7 +1,19 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { getSetupAdapter } from './adapters'
-import { CAPABILITIES } from './types'
-import type { CapabilityStatus, InstallProgress, SetupPhase, CapabilityId } from './types'
+import {
+  CAPABILITIES,
+  PROVIDERS,
+  PRIMARY_PROVIDERS,
+  CHANNEL_TYPES,
+  DEFAULT_ONBOARDING_STATE,
+} from './types'
+import type {
+  CapabilityStatus,
+  InstallProgress,
+  SetupPhase,
+  CapabilityId,
+  OnboardingState,
+} from './types'
 
 interface SetupWizardProps {
   onComplete: () => void
@@ -18,6 +30,12 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const [capabilities, setCapabilities] = useState<CapabilityStatus[]>([])
   const [installProgress, setInstallProgress] = useState<Record<CapabilityId, InstallProgress>>({} as any)
   const [error, setError] = useState<string | null>(null)
+
+  const [onboard, setOnboard] = useState<OnboardingState>(DEFAULT_ONBOARDING_STATE)
+  const updateOnboard = useCallback(
+    (patch: Partial<OnboardingState>) => setOnboard((prev) => ({ ...prev, ...patch })),
+    [],
+  )
 
   const adapter = getSetupAdapter()
 
@@ -94,6 +112,110 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       setPhase('error')
     }
   }, [adapter, capabilities])
+
+  // ─── 配置引导 ───
+
+  const runInitConfig = useCallback(async () => {
+    updateOnboard({ busy: true, error: null })
+    try {
+      await adapter.onboarding.initConfig()
+      updateOnboard({ busy: false })
+      setPhase('onboard_apikey')
+    } catch (err) {
+      updateOnboard({ busy: false, error: err instanceof Error ? err.message : String(err) })
+    }
+  }, [adapter, updateOnboard])
+
+  const runSetApiKey = useCallback(async () => {
+    if (!onboard.apiKey.trim()) return
+    const providerCfg = PROVIDERS[onboard.provider]
+    // 需要 baseUrl 但未填
+    if (providerCfg?.needsBaseUrl && !onboard.customBaseUrl.trim()) {
+      updateOnboard({ error: '请输入 API Base URL' })
+      return
+    }
+    updateOnboard({ busy: true, error: null })
+    try {
+      // 先验证 key 是否可用
+      const valid = await adapter.onboarding.testApiKey(
+        onboard.provider,
+        onboard.apiKey,
+        onboard.customBaseUrl.trim() || undefined,
+      )
+      if (!valid) {
+        updateOnboard({ busy: false, error: 'API Key 无效或网络不可达，请检查后重试' })
+        return
+      }
+      // 验证通过，保存配置
+      await adapter.onboarding.setApiKey(
+        onboard.provider,
+        onboard.apiKey,
+        onboard.customBaseUrl.trim() || undefined,
+      )
+      // 预选默认模型
+      updateOnboard({ busy: false, model: providerCfg?.defaultModel ?? '', customModelId: '' })
+      setPhase('onboard_model')
+    } catch (err) {
+      updateOnboard({ busy: false, error: err instanceof Error ? err.message : String(err) })
+    }
+  }, [adapter, onboard.provider, onboard.apiKey, onboard.customBaseUrl, updateOnboard])
+
+  const runSetModel = useCallback(async () => {
+    const modelId = onboard.model || onboard.customModelId.trim()
+    if (!modelId) return
+    // openclaw models set 需要 provider/model 格式
+    const providerCfg = PROVIDERS[onboard.provider]
+    const configKey = providerCfg?.configKeyOverride ?? onboard.provider
+    const fullModelId = `${configKey}/${modelId}`
+    updateOnboard({ busy: true, error: null })
+    try {
+      await adapter.onboarding.setDefaultModel(fullModelId)
+      updateOnboard({ busy: false, model: modelId })
+      setPhase('onboard_gateway')
+    } catch (err) {
+      updateOnboard({ busy: false, error: err instanceof Error ? err.message : String(err) })
+    }
+  }, [adapter, onboard.provider, onboard.model, onboard.customModelId, updateOnboard])
+
+  const runStartGateway = useCallback(async () => {
+    updateOnboard({ busy: true, error: null })
+    try {
+      await adapter.onboarding.startGateway(onboard.gatewayPort)
+      // 轮询等待网关启动
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 1000))
+        const ok = await adapter.onboarding.checkGateway(onboard.gatewayPort)
+        if (ok) {
+          updateOnboard({ busy: false, gatewayRunning: true })
+          return
+        }
+      }
+      updateOnboard({ busy: false, error: '网关启动超时，请检查端口是否被占用' })
+    } catch (err) {
+      updateOnboard({ busy: false, error: err instanceof Error ? err.message : String(err) })
+    }
+  }, [adapter, onboard.gatewayPort, updateOnboard])
+
+  const runAddChannel = useCallback(async () => {
+    if (!onboard.channelType || !onboard.channelToken.trim()) return
+    updateOnboard({ busy: true, error: null })
+    try {
+      await adapter.onboarding.addChannel(onboard.channelType, onboard.channelToken)
+      updateOnboard({ busy: false })
+      setPhase('onboard_done')
+    } catch (err) {
+      updateOnboard({ busy: false, error: err instanceof Error ? err.message : String(err) })
+    }
+  }, [adapter, onboard.channelType, onboard.channelToken, updateOnboard])
+
+  // 自动触发：初始化配置 & 启动网关
+  useEffect(() => {
+    if (phase === 'onboard_init') runInitConfig()
+  }, [phase, runInitConfig])
+
+  useEffect(() => {
+    if (phase === 'onboard_gateway') runStartGateway()
+  }, [phase, runStartGateway])
 
   // ─── 渲染 ───
 
@@ -173,7 +295,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         </div>
       )}
 
-      {/* 全部就绪（或 required 就绪） */}
+      {/* 全部就绪（或 required 就绪）→ 引导配置 */}
       {phase === 'done' && (
         <div className="w-full max-w-md">
           <p className="text-center text-green-600 font-medium mb-4">
@@ -183,16 +305,244 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           </p>
           <CapabilityList capabilities={capabilities} />
           <button
-            onClick={onComplete}
+            onClick={() => setPhase('onboard_init')}
             className="mt-6 w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition"
+          >
+            开始配置
+          </button>
+          <button
+            onClick={onComplete}
+            className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-foreground transition"
+          >
+            跳过，稍后配置
+          </button>
+        </div>
+      )}
+
+      {/* ─── 配置引导步骤 ─── */}
+
+      {/* 步骤 1: 初始化配置文件 */}
+      {phase === 'onboard_init' && (
+        <div className="w-full max-w-md">
+          <OnboardingProgress current={0} />
+          {onboard.busy && (
+            <p className="text-center text-muted-foreground animate-pulse">正在初始化配置文件...</p>
+          )}
+          {onboard.error && (
+            <div className="text-center">
+              <p className="text-red-500 mb-4">{onboard.error}</p>
+              <button onClick={runInitConfig} className="px-6 py-2 border border-border rounded-lg hover:bg-accent">
+                重试
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 步骤 2: API Key */}
+      {phase === 'onboard_apikey' && (
+        <ProviderStep
+          onboard={onboard}
+          updateOnboard={updateOnboard}
+          onSubmit={runSetApiKey}
+          onSkip={onComplete}
+        />
+      )}
+
+      {/* 步骤 3: 选择模型 */}
+      {phase === 'onboard_model' && (() => {
+        const models = PROVIDERS[onboard.provider]?.models ?? []
+        const hasModels = models.length > 0
+        return (
+          <div className="w-full max-w-md">
+            <OnboardingProgress current={2} />
+            <p className="text-center font-medium mb-4">选择默认模型</p>
+            {hasModels && (
+              <div className="bg-card border border-border rounded-lg divide-y divide-border">
+                {models.map((m) => (
+                  <label
+                    key={m.id}
+                    className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-accent transition"
+                  >
+                    <input
+                      type="radio"
+                      name="model"
+                      value={m.id}
+                      checked={onboard.model === m.id}
+                      onChange={() => updateOnboard({ model: m.id, customModelId: '' })}
+                      className="accent-primary"
+                    />
+                    <span className="text-sm">{m.name}</span>
+                    <span className="text-xs text-muted-foreground ml-auto font-mono">{m.id}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            {!hasModels && (
+              <p className="text-center text-sm text-muted-foreground mb-2">请输入模型 ID</p>
+            )}
+            <input
+              type="text"
+              placeholder="手动输入模型 ID（如 deepseek-ai/DeepSeek-V3）"
+              value={onboard.customModelId}
+              onChange={(e) => updateOnboard({ customModelId: e.target.value, model: '' })}
+              className="mt-3 w-full px-4 py-3 rounded-lg border border-border bg-card text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {onboard.error && <p className="text-red-500 text-xs mt-2">{onboard.error}</p>}
+            <button
+              onClick={runSetModel}
+              disabled={(!onboard.model && !onboard.customModelId.trim()) || onboard.busy}
+              className="mt-4 w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition disabled:opacity-50"
+            >
+              {onboard.busy ? '设置中...' : '下一步'}
+            </button>
+          </div>
+        )
+      })()}
+
+      {/* 步骤 4: 启动网关 */}
+      {phase === 'onboard_gateway' && (
+        <div className="w-full max-w-md">
+          <OnboardingProgress current={3} />
+          <p className="text-center font-medium mb-4">启动网关</p>
+          <div className="bg-card border border-border rounded-lg p-6 text-center">
+            {onboard.busy && !onboard.gatewayRunning && (
+              <p className="text-muted-foreground animate-pulse">正在启动网关...</p>
+            )}
+            {onboard.gatewayRunning && (
+              <>
+                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <span className="text-green-600 text-xl">✓</span>
+                </div>
+                <p className="text-green-600 font-medium">网关已启动</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  端口 {onboard.gatewayPort}
+                </p>
+              </>
+            )}
+            {onboard.error && (
+              <>
+                <p className="text-red-500 mb-3">{onboard.error}</p>
+                <button
+                  onClick={runStartGateway}
+                  className="px-6 py-2 border border-border rounded-lg hover:bg-accent"
+                >
+                  重试
+                </button>
+              </>
+            )}
+          </div>
+          {onboard.gatewayRunning && (
+            <button
+              onClick={() => setPhase('onboard_channel')}
+              className="mt-4 w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition"
+            >
+              下一步
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 步骤 5: 添加通道（可选） */}
+      {phase === 'onboard_channel' && (
+        <div className="w-full max-w-md">
+          <OnboardingProgress current={4} />
+          <p className="text-center font-medium mb-1">添加消息通道</p>
+          <p className="text-center text-xs text-muted-foreground mb-4">可选，稍后可在通道页面添加</p>
+          <div className="flex gap-2 mb-4 justify-center flex-wrap">
+            {CHANNEL_TYPES.map((ch) => (
+              <button
+                key={ch.id}
+                onClick={() => updateOnboard({ channelType: ch.id, channelToken: '' })}
+                className={`px-4 py-2 rounded-lg text-sm border transition ${
+                  onboard.channelType === ch.id
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'border-border hover:bg-accent'
+                }`}
+              >
+                {ch.name}
+              </button>
+            ))}
+          </div>
+          {onboard.channelType && (
+            <input
+              type="password"
+              placeholder={`输入 ${CHANNEL_TYPES.find((c) => c.id === onboard.channelType)?.tokenLabel ?? 'Token'}`}
+              value={onboard.channelToken}
+              onChange={(e) => updateOnboard({ channelToken: e.target.value })}
+              className="w-full px-4 py-3 rounded-lg border border-border bg-card text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          )}
+          {onboard.error && <p className="text-red-500 text-xs mt-2">{onboard.error}</p>}
+          {onboard.channelType && (
+            <button
+              onClick={runAddChannel}
+              disabled={!onboard.channelToken.trim() || onboard.busy}
+              className="mt-4 w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition disabled:opacity-50"
+            >
+              {onboard.busy ? '添加中...' : '添加并完成'}
+            </button>
+          )}
+          <button
+            onClick={() => {
+              updateOnboard({ channelType: '', channelToken: '' })
+              setPhase('onboard_done')
+            }}
+            className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-foreground transition"
+          >
+            {onboard.channelType ? '跳过通道配置' : '跳过，稍后添加'}
+          </button>
+        </div>
+      )}
+
+      {/* 配置完成 */}
+      {phase === 'onboard_done' && (
+        <div className="w-full max-w-md">
+          <OnboardingProgress current={5} />
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-green-600 text-3xl">✓</span>
+          </div>
+          <p className="text-center text-green-600 font-medium text-lg mb-4">配置完成！</p>
+          <div className="bg-card border border-border rounded-lg divide-y divide-border text-sm">
+            <div className="flex justify-between px-4 py-3">
+              <span className="text-muted-foreground">提供商</span>
+              <span>{PROVIDERS[onboard.provider]?.label ?? onboard.provider}</span>
+            </div>
+            <div className="flex justify-between px-4 py-3">
+              <span className="text-muted-foreground">默认模型</span>
+              <span className="font-mono">{onboard.model || '未设置'}</span>
+            </div>
+            <div className="flex justify-between px-4 py-3">
+              <span className="text-muted-foreground">网关</span>
+              <span className={onboard.gatewayRunning ? 'text-green-600' : 'text-orange-500'}>
+                {onboard.gatewayRunning ? `运行中 (端口 ${onboard.gatewayPort})` : '未启动'}
+              </span>
+            </div>
+            <div className="flex justify-between px-4 py-3">
+              <span className="text-muted-foreground">通道</span>
+              <span>
+                {onboard.channelType
+                  ? CHANNEL_TYPES.find((c) => c.id === onboard.channelType)?.name
+                  : '未配置'}
+              </span>
+            </div>
+          </div>
+          {onboard.gatewayRunning && (
+            <a
+              href={`http://127.0.0.1:${onboard.gatewayPort}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 w-full py-3 border border-primary text-primary rounded-lg font-medium hover:bg-primary/5 transition block text-center"
+            >
+              打开 OpenClaw 控制台验证配置
+            </a>
+          )}
+          <button
+            onClick={onComplete}
+            className="mt-2 w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition"
           >
             进入管理大师
           </button>
-          {optionalMissing.length > 0 && (
-            <p className="mt-2 text-center text-xs text-muted-foreground">
-              未安装的能力可在对应功能页面按需安装
-            </p>
-          )}
         </div>
       )}
 
@@ -242,6 +592,130 @@ function CapabilityBadge({ status, version }: { status: CapabilityStatus['status
     case 'error':
       return <span className="text-xs text-red-500">检测失败</span>
   }
+}
+
+// ─── 提供商选择步骤 ───
+
+const allProviderIds = Object.keys(PROVIDERS)
+const primaryIds = PRIMARY_PROVIDERS as readonly string[]
+const secondaryIds = allProviderIds.filter((id) => !primaryIds.includes(id))
+
+function ProviderStep({
+  onboard,
+  updateOnboard,
+  onSubmit,
+  onSkip,
+}: {
+  onboard: OnboardingState
+  updateOnboard: (patch: Partial<OnboardingState>) => void
+  onSubmit: () => void
+  onSkip: () => void
+}) {
+  const [showMore, setShowMore] = useState(false)
+  const visibleIds = showMore ? allProviderIds : [...primaryIds]
+  const providerCfg = PROVIDERS[onboard.provider]
+
+  return (
+    <div className="w-full max-w-md">
+      <OnboardingProgress current={1} />
+      <p className="text-center font-medium mb-4">配置 LLM 提供商</p>
+      <div className="flex gap-2 mb-2 justify-center flex-wrap">
+        {visibleIds.map((p) => (
+          <button
+            key={p}
+            onClick={() => updateOnboard({ provider: p, apiKey: '', model: '' })}
+            className={`px-3 py-1.5 rounded-lg text-sm border transition ${
+              onboard.provider === p
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'border-border hover:bg-accent'
+            }`}
+          >
+            {PROVIDERS[p].label}
+          </button>
+        ))}
+      </div>
+      {secondaryIds.length > 0 && (
+        <button
+          onClick={() => setShowMore(!showMore)}
+          className="mb-4 w-full text-xs text-muted-foreground hover:text-foreground transition"
+        >
+          {showMore ? '收起' : `更多提供商 (${secondaryIds.length})...`}
+        </button>
+      )}
+      {providerCfg?.keyUrl && (
+        <a
+          href={providerCfg.keyUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block mb-3 text-center text-xs text-primary hover:underline"
+        >
+          获取 {providerCfg.label} API Key &rarr;
+        </a>
+      )}
+      {providerCfg?.needsBaseUrl && (
+        <input
+          type="url"
+          placeholder="API Base URL（如 https://api.example.com/v1）"
+          value={onboard.customBaseUrl}
+          onChange={(e) => updateOnboard({ customBaseUrl: e.target.value })}
+          className="w-full px-4 py-3 mb-2 rounded-lg border border-border bg-card text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+        />
+      )}
+      <input
+        type="password"
+        placeholder={`输入 ${providerCfg?.label ?? onboard.provider} API Key`}
+        value={onboard.apiKey}
+        onChange={(e) => updateOnboard({ apiKey: e.target.value })}
+        className="w-full px-4 py-3 rounded-lg border border-border bg-card text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+      />
+      {onboard.error && <p className="text-red-500 text-xs mt-2">{onboard.error}</p>}
+      <button
+        onClick={onSubmit}
+        disabled={!onboard.apiKey.trim() || onboard.busy}
+        className="mt-4 w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition disabled:opacity-50"
+      >
+        {onboard.busy ? '验证中...' : '下一步'}
+      </button>
+      <button
+        onClick={onSkip}
+        className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-foreground transition"
+      >
+        跳过剩余步骤
+      </button>
+    </div>
+  )
+}
+
+// ─── 步骤指示器 ───
+
+const ONBOARDING_STEPS = ['初始化', 'API Key', '模型', '网关', '通道']
+
+function OnboardingProgress({ current }: { current: number }) {
+  return (
+    <div className="flex items-center justify-center gap-2 mb-6">
+      {ONBOARDING_STEPS.map((label, i) => (
+        <div key={label} className="flex items-center gap-2">
+          <div className="flex flex-col items-center">
+            <div
+              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition ${
+                i < current
+                  ? 'bg-green-100 text-green-600'
+                  : i === current
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {i < current ? '✓' : i + 1}
+            </div>
+            <span className="text-[10px] text-muted-foreground mt-1">{label}</span>
+          </div>
+          {i < ONBOARDING_STEPS.length - 1 && (
+            <div className={`w-6 h-px mb-4 ${i < current ? 'bg-green-300' : 'bg-border'}`} />
+          )}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function InstallList({

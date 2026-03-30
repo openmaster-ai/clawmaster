@@ -1,0 +1,302 @@
+suite: setup-install-real
+name: 安装向导真实安装全流程（Web 模式）
+description: |
+  验证安装向导在 Web 模式下通过 Express /api/exec 执行真实 CLI 命令的完整能力检测与安装流程。
+  测试覆盖：
+    - 核心引擎（openclaw）的检测 → 卸载 → 重新检测 → 安装 → 验证
+    - 可选能力的检测状态渲染
+    - 安装进度 UI 反馈
+    - 安装完成后进入主界面
+    - CapabilityGuard 按需安装引导
+
+  注意：此测试会真实卸载和重新安装 openclaw，执行完毕后 openclaw 将恢复为已安装状态。
+
+preconditions:
+  - npm install 已完成
+  - npm run dev:web 已启动（前端 {BASE_URL} + 后端 localhost:3001）
+  - 不使用 ?demo 参数（走 realSetupAdapter）
+  - 测试开始前 openclaw 已通过 npm install -g openclaw 安装
+
+viewport: { width: 1280, height: 800 }
+
+# ──────────────────────────────────────────────
+# Part A: 基线检测 — openclaw 已安装时的行为
+# ──────────────────────────────────────────────
+
+cases:
+  - id: real-setup-01
+    name: 基线：openclaw 已安装 → 检测通过 → 直达 done
+    preconditions:
+      - openclaw 已安装（openclaw --version 返回版本号）
+    steps:
+      - action: navigate
+        url: "{BASE_URL}"
+      - action: wait
+        duration: 5000ms
+        reason: 真实 CLI 检测需要逐个执行 5 项能力探测
+      - action: screenshot
+        name: real-setup-baseline-done
+    assertions:
+      - 页面显示"龙虾管理大师"标题
+      - 不显示"Demo 模式"标签
+      - 核心引擎显示已安装 + 版本号（绿色文字，格式 vX.Y.Z 或 v2026.x.x）
+      - 安装向导跳过安装阶段，直接进入 done 或 ready（因 required 已满足）
+      - 显示"进入管理大师"按钮
+
+  - id: real-setup-02
+    name: 基线：可选能力检测状态正确渲染
+    preconditions:
+      - 承接 real-setup-01（检测完成页面仍在）
+    steps:
+      - action: observe
+        target: 能力列表
+      - action: screenshot
+        name: real-setup-optional-status
+    assertions:
+      - 记忆管理显示"未安装"或版本号（取决于本地是否有 openclaw ltm）
+      - 可观测性显示"未安装"（clawprobe 未全局安装时）
+      - 文档与图像识别显示"未安装"或版本号
+      - 智能体编排显示"未安装"（deepagents 未安装时）
+      - 每项能力都有明确的已安装/未安装状态，无"检测中..."残留
+
+  - id: real-setup-03
+    name: 基线：点击"进入管理大师" → 进入主界面
+    steps:
+      - action: click
+        target: text("进入管理大师")
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: real-setup-enter-dashboard
+    assertions:
+      - 安装向导消失
+      - 主界面 Layout 渲染（侧边栏 + 内容区）
+      - 侧边栏显示导航项（概览、网关、可观测、记忆 等）
+
+# ──────────────────────────────────────────────
+# Part B: 卸载 openclaw → 触发安装流程
+# ──────────────────────────────────────────────
+
+  - id: real-setup-04
+    name: 准备：卸载 openclaw
+    preconditions:
+      - 在终端执行 npm uninstall -g openclaw
+      - 确认 openclaw --version 返回 command not found
+    steps:
+      - action: navigate
+        url: "{BASE_URL}"
+        reason: 重新加载页面触发 realSetupAdapter 检测
+      - action: wait
+        duration: 5000ms
+        reason: 等待 5 项能力检测完成
+      - action: screenshot
+        name: real-setup-engine-missing
+    assertions:
+      - 核心引擎显示"未安装"（橙色文字）
+      - 页面显示"核心引擎未安装"提示文字
+      - 显示"安装核心引擎"按钮（因为 required 能力缺失）
+      - 不显示"进入管理大师"按钮（required 未满足，不可跳过）
+
+  - id: real-setup-05
+    name: 安装中：点击安装 → 进度 UI 显示
+    steps:
+      - action: click
+        target: text("安装核心引擎")
+      - action: wait
+        duration: 3000ms
+        reason: 安装开始后观察进度 UI
+      - action: screenshot
+        name: real-setup-installing-progress
+    assertions:
+      - 页面显示"正在安装..."文字
+      - 核心引擎显示安装进度百分比或"等待中"状态
+      - 进度条可见（蓝色进度条元素）
+      - 安装日志行显示命令内容（如 npm install -g openclaw）
+
+  - id: real-setup-06
+    name: 安装完成：openclaw 安装成功 → done 状态
+    steps:
+      - action: wait
+        duration: 180000ms
+        reason: npm install -g openclaw 在不同网络下可能需要 1-3 分钟
+      - action: screenshot
+        name: real-setup-install-done
+    assertions:
+      - 核心引擎显示"已就绪"（绿色）
+      - 页面进入 done 阶段
+      - 显示"进入管理大师"按钮
+      - 不显示错误信息
+
+  - id: real-setup-07
+    name: 安装后验证：openclaw 实际可用
+    preconditions:
+      - 承接 real-setup-06（安装完成页面）
+    steps:
+      - action: navigate
+        url: "{BASE_URL}"
+        reason: 重新加载触发新一轮检测，验证安装持久化
+      - action: wait
+        duration: 5000ms
+      - action: screenshot
+        name: real-setup-post-install-detect
+    assertions:
+      - 核心引擎显示已安装 + 版本号（与 real-setup-01 相同的行为）
+      - 安装向导跳过安装，直达 done 或 ready
+      - 显示"进入管理大师"按钮
+
+# ──────────────────────────────────────────────
+# Part C: 安装后主界面 + CapabilityGuard 验证
+# ──────────────────────────────────────────────
+
+  - id: real-setup-08
+    name: 安装后进入主界面 → 导航可用
+    steps:
+      - action: click
+        target: text("进入管理大师")
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: real-setup-main-ui
+    assertions:
+      - 侧边栏渲染完整导航（概览、网关、可观测、记忆 等）
+      - 内容区显示 Dashboard 或默认页面
+      - 无白屏或 JS 错误
+
+  - id: real-setup-09
+    name: 可观测页面 → CapabilityGuard 拦截（clawprobe 未安装）
+    preconditions:
+      - clawprobe 未全局安装
+    steps:
+      - action: click
+        target: role(link, "可观测")
+      - action: wait
+        duration: 3000ms
+      - action: screenshot
+        name: real-setup-observe-guard
+    assertions:
+      - 页面不显示费用卡片或图表
+      - 显示"可观测性尚未启用"或类似提示
+      - 显示"安装可观测性"按钮
+      - 显示"重新检测"按钮
+
+  - id: real-setup-10
+    name: 记忆页面 → CapabilityGuard 拦截（powermem 未安装）
+    preconditions:
+      - powermem 未安装
+    steps:
+      - action: click
+        target: role(link, "记忆")
+      - action: wait
+        duration: 3000ms
+      - action: screenshot
+        name: real-setup-memory-guard
+    assertions:
+      - 页面不显示记忆列表
+      - 显示"记忆管理尚未启用"或类似提示
+      - 显示"安装记忆管理"按钮
+      - 显示"重新检测"按钮
+
+# ──────────────────────────────────────────────
+# Part D: 错误处理
+# ──────────────────────────────────────────────
+
+  - id: real-setup-11
+    name: 后端不可用时 → 检测报错 + 重试
+    preconditions:
+      - Express 后端已停止（localhost:3001 不可达）
+    steps:
+      - action: navigate
+        url: "{BASE_URL}"
+      - action: wait
+        duration: 5000ms
+      - action: screenshot
+        name: real-setup-backend-down
+    assertions:
+      - 页面显示错误信息（网络错误或命令执行失败）
+      - 显示"重试"按钮
+      - 点击"重试"后重新开始检测流程
+
+  - id: real-setup-12
+    name: 网络缓慢时安装不会静默失败
+    preconditions:
+      - openclaw 已卸载
+      - 后端已启动
+      - 网络较慢（npm install 耗时较长）
+    steps:
+      - action: navigate
+        url: "{BASE_URL}"
+      - action: wait
+        duration: 5000ms
+      - action: click
+        target: text("安装核心引擎")
+      - action: wait
+        duration: 10000ms
+      - action: screenshot
+        name: real-setup-slow-install
+    assertions:
+      - 安装进度持续更新（不卡在 0%）
+      - 日志行持续显示安装输出
+      - 页面保持在"installing"阶段，不跳到 error
+      - 安装按钮不可重复点击（避免重复安装）
+
+# ──────────────────────────────────────────────
+# Part E: /api/exec 后端集成验证
+# ──────────────────────────────────────────────
+
+  - id: real-setup-13
+    name: /api/exec 检测已安装工具返回 stdout
+    preconditions:
+      - 后端已启动
+      - openclaw 已安装
+    steps:
+      - action: api_call
+        method: POST
+        url: "http://localhost:3001/api/exec"
+        body: '{"cmd":"openclaw","args":["--version"]}'
+    assertions:
+      - HTTP 200
+      - 响应 JSON 包含 stdout 字段
+      - stdout 包含版本号（匹配 /\d+\.\d+/ 格式）
+      - stderr 为空字符串
+
+  - id: real-setup-14
+    name: /api/exec 检测未安装工具返回 500 + 错误信息
+    preconditions:
+      - 后端已启动
+      - clawprobe 未全局安装
+    steps:
+      - action: api_call
+        method: POST
+        url: "http://localhost:3001/api/exec"
+        body: '{"cmd":"clawprobe","args":["--version"]}'
+    assertions:
+      - HTTP 500
+      - 响应 JSON 包含 error 字段
+      - error 信息包含"not found"或"command not found"
+
+  - id: real-setup-15
+    name: /api/exec 缺少 cmd 参数 → 400 错误
+    steps:
+      - action: api_call
+        method: POST
+        url: "http://localhost:3001/api/exec"
+        body: '{"args":["--version"]}'
+    assertions:
+      - HTTP 400
+      - 响应 JSON 包含 error 字段
+
+  - id: real-setup-16
+    name: /api/exec 安装命令执行成功
+    preconditions:
+      - openclaw 已卸载
+    steps:
+      - action: api_call
+        method: POST
+        url: "http://localhost:3001/api/exec"
+        body: '{"cmd":"npm","args":["install","-g","openclaw"]}'
+      - action: wait
+        duration: 180000ms
+    assertions:
+      - HTTP 200
+      - stdout 包含"added"和"packages"
+      - 安装后 openclaw --version 返回版本号

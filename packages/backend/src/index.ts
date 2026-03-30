@@ -1,13 +1,14 @@
 import express from 'express'
 import cors from 'cors'
 import { WebSocketServer, WebSocket } from 'ws'
-import { exec } from 'child_process'
+import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import { readFileSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import path from 'path'
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 const app = express()
 app.use(cors())
@@ -202,8 +203,8 @@ app.post('/api/exec', async (req, res) => {
     return
   }
   try {
-    const command = args?.length ? `${cmd} ${(args as string[]).join(' ')}` : cmd
-    const { stdout, stderr } = await execAsync(command)
+    // 使用 execFile 直接传参，避免 shell 解释导致参数拆分
+    const { stdout, stderr } = await execFileAsync(cmd, args ?? [], { shell: false })
     res.json({ stdout: stdout.trim(), stderr: stderr.trim() })
   } catch (err: any) {
     res.status(500).json({ error: err.message, stdout: '', stderr: err.stderr || '' })

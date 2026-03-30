@@ -12,7 +12,9 @@
 | `04-observe-module.yaml` | 9 | 可观测 Dashboard（降级/费用卡片/图表/健康度/建议/会话） |
 | `05-config-and-security.yaml` | 10 | 配置编辑 + API Key 脱敏 + 预算 + 主题切换 |
 | `06-skills-marketplace.yaml` | 6 | 技能市场（场景推荐/列表/搜索/安装/卸载） |
-| **合计** | **52** | |
+| `07-setup-install-real.yaml` | 16 | 安装向导真实安装全流程（检测/卸载/安装/CapabilityGuard/错误处理/API） |
+| `08-onboarding-config.yaml` | 17 | 安装后配置引导（初始化/API Key/模型/网关/通道/跳过/汇总） |
+| **合计** | **85** | |
 
 ## 用例格式
 

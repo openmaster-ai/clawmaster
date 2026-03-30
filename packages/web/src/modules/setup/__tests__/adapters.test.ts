@@ -84,4 +84,36 @@ describe('demoSetupAdapter', () => {
       expect(progress).toHaveLength(0)
     })
   })
+
+  describe('onboarding', () => {
+    it('initConfig resolves without error', async () => {
+      await expect(demoSetupAdapter.onboarding.initConfig()).resolves.toBeUndefined()
+    })
+
+    it('testApiKey returns true', async () => {
+      const result = await demoSetupAdapter.onboarding.testApiKey('openai', 'sk-test')
+      expect(result).toBe(true)
+    })
+
+    it('setApiKey resolves without error', async () => {
+      await expect(demoSetupAdapter.onboarding.setApiKey('openai', 'sk-test')).resolves.toBeUndefined()
+    })
+
+    it('setDefaultModel resolves without error', async () => {
+      await expect(demoSetupAdapter.onboarding.setDefaultModel('gpt-4o')).resolves.toBeUndefined()
+    })
+
+    it('startGateway resolves without error', async () => {
+      await expect(demoSetupAdapter.onboarding.startGateway(18789)).resolves.toBeUndefined()
+    })
+
+    it('checkGateway returns true', async () => {
+      const result = await demoSetupAdapter.onboarding.checkGateway(18789)
+      expect(result).toBe(true)
+    })
+
+    it('addChannel resolves without error', async () => {
+      await expect(demoSetupAdapter.onboarding.addChannel('telegram', 'test-token')).resolves.toBeUndefined()
+    })
+  })
 })

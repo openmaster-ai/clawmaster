@@ -8,20 +8,114 @@
 
 import { execCommand } from '@/shared/adapters/platform'
 import { detectMirrors, getMirrorSetupCommands } from '@/shared/adapters/mirror'
-import { CAPABILITIES, type CapabilityStatus, type InstallProgress, type CapabilityId } from './types'
+import {
+  CAPABILITIES,
+  PROVIDERS,
+  type CapabilityStatus,
+  type InstallProgress,
+  type CapabilityId,
+} from './types'
 
 // ─── 接口 ───
+
+export interface OnboardingAdapter {
+  /** 初始化配置文件 */
+  initConfig(): Promise<void>
+  /** 快速验证 API Key 是否可用 */
+  testApiKey(provider: string, apiKey: string, baseUrl?: string): Promise<boolean>
+  /** 设置 LLM 提供商 API Key（及 baseUrl） */
+  setApiKey(provider: string, apiKey: string, baseUrl?: string): Promise<void>
+  /** 设置默认模型 */
+  setDefaultModel(model: string): Promise<void>
+  /** 后台启动网关 */
+  startGateway(port: number): Promise<void>
+  /** 检测网关是否可达 */
+  checkGateway(port: number): Promise<boolean>
+  /** 添加消息通道 */
+  addChannel(channelType: string, token: string): Promise<void>
+}
 
 export interface SetupAdapter {
   /** 逐项检测五项能力，通过回调报告每项状态 */
   detectCapabilities(onUpdate: (status: CapabilityStatus) => void): Promise<CapabilityStatus[]>
   /** 安装指定能力列表，通过回调报告进度 */
   installCapabilities(ids: CapabilityId[], onProgress: (progress: InstallProgress) => void): Promise<void>
+  /** 配置引导 */
+  onboarding: OnboardingAdapter
 }
 
 // ─── 真实实现 ───
 
+const realOnboardingAdapter: OnboardingAdapter = {
+  async initConfig() {
+    await execCommand('openclaw', ['onboard', '--mode', 'local', '--non-interactive', '--accept-risk', '--skip-health'])
+  },
+
+  async testApiKey(provider, apiKey, baseUrl?) {
+    const cfg = PROVIDERS[provider]
+    const endpoint = baseUrl || cfg?.baseUrl || 'https://api.openai.com/v1'
+    const model = cfg?.models?.[0]?.id ?? 'gpt-4o-mini'
+    try {
+      const output = await execCommand('curl', [
+        '-sf', '-o', '/dev/null', '-w', '%{http_code}',
+        '-H', `Authorization: Bearer ${apiKey}`,
+        '-H', 'Content-Type: application/json',
+        '-d', JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }),
+        '--max-time', '10',
+        `${endpoint}/chat/completions`,
+      ])
+      return output.trim() === '200'
+    } catch {
+      return false
+    }
+  },
+
+  async setApiKey(provider, apiKey, baseUrl?) {
+    const cfg = PROVIDERS[provider]
+    const configKey = cfg?.configKeyOverride ?? provider
+    const effectiveBaseUrl = baseUrl || cfg?.baseUrl
+    // 构建 batch-file JSON 避免 shell 转义问题
+    const providerObj: Record<string, unknown> = { apiKey, models: [] }
+    if (effectiveBaseUrl) providerObj.baseUrl = effectiveBaseUrl
+    const batchJson = JSON.stringify([{ path: `models.providers.${configKey}`, value: providerObj }])
+    // 通过 heredoc 写临时文件，再用 --batch-file 读取
+    await execCommand('bash', [
+      '-c',
+      `cat > /tmp/.openclaw-batch.json << 'CLAWEOF'\n${batchJson}\nCLAWEOF\nopenclaw config set --batch-file /tmp/.openclaw-batch.json --strict-json && rm -f /tmp/.openclaw-batch.json`,
+    ])
+  },
+
+  async setDefaultModel(model) {
+    await execCommand('openclaw', ['models', 'set', model])
+  },
+
+  async startGateway(port) {
+    // 使用 nohup 直接启动，不通过 bash -c（避免后台进程被 shell 退出时杀死）
+    // 注意：此调用会阻塞直到 gateway 退出，所以调用方不应 await 此结果
+    // 但 checkGateway 会在网关启动后探测到它
+    execCommand('nohup', ['openclaw', 'gateway', 'run', '--port', String(port), '--auth', 'none']).catch(() => {})
+    // 给网关一点启动时间
+    await new Promise((r) => setTimeout(r, 2000))
+  },
+
+  async checkGateway(port) {
+    try {
+      // 通过 curl 检查网关健康，避免浏览器 CORS 限制
+      const output = await execCommand('curl', ['-sf', `http://127.0.0.1:${port}/health`])
+      return output.includes('"ok":true')
+    } catch {
+      return false
+    }
+  },
+
+  async addChannel(channelType, token) {
+    await execCommand('openclaw', ['channels', 'add', '--channel', channelType, '--token', token])
+  },
+}
+
 export const realSetupAdapter: SetupAdapter = {
+  onboarding: realOnboardingAdapter,
+
   async detectCapabilities(onUpdate) {
     const results: CapabilityStatus[] = []
 
@@ -113,7 +207,35 @@ function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+const demoOnboardingAdapter: OnboardingAdapter = {
+  async initConfig() {
+    await delay(800)
+  },
+  async testApiKey() {
+    await delay(800)
+    return true
+  },
+  async setApiKey() {
+    await delay(600)
+  },
+  async setDefaultModel() {
+    await delay(400)
+  },
+  async startGateway() {
+    await delay(1200)
+  },
+  async checkGateway() {
+    await delay(500)
+    return true
+  },
+  async addChannel() {
+    await delay(700)
+  },
+}
+
 export const demoSetupAdapter: SetupAdapter = {
+  onboarding: demoOnboardingAdapter,
+
   async detectCapabilities(onUpdate) {
     const results: CapabilityStatus[] = []
 

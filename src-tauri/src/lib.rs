@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::process::Command;
 use std::path::PathBuf;
 use std::fs;
@@ -247,6 +246,24 @@ fn run_openclaw_command(args: Vec<String>) -> Result<String, String> {
     }
 }
 
+// 执行任意命令（安装向导等场景需要运行 npm / pip / clawprobe 等非 openclaw 工具）
+#[tauri::command]
+fn exec_command(cmd: String, args: Vec<String>) -> Result<String, String> {
+    let output = Command::new(&cmd)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("执行命令失败: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(format!("命令执行失败: {}", stderr))
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -260,6 +277,7 @@ pub fn run() {
             save_config,
             get_logs,
             run_openclaw_command,
+            exec_command,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
