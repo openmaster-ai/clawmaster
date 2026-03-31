@@ -60,3 +60,12 @@ export interface ClawprobeConfigJson {
   probeDir: string
   openclaw: Record<string, unknown>
 }
+
+export interface ClawprobeBootstrapResult {
+  ok: boolean
+  alreadyRunning: boolean
+  daemonRunning: boolean
+  message: string
+  stdout?: string
+  stderr?: string
+}

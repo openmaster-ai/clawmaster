@@ -65,6 +65,19 @@ export interface OpenClawBinding {
   agentId: string
 }
 
+export interface ChannelVerifyResult {
+  ok: boolean
+  message: string
+  detail?: string
+}
+
+export interface WhatsAppLoginStatus {
+  status: 'idle' | 'pending' | 'authorized' | 'failed'
+  qr?: string
+  message?: string
+  updatedAt: string
+}
+
 export interface OpenClawAgentListItem {
   id: string
   name?: string
@@ -79,6 +92,8 @@ export interface OpenClawConfig {
     mode?: string
     bind?: string
     auth?: { mode?: string; token?: string }
+    /** Control UI path prefix, e.g. `/openclaw` (see OpenClaw `gateway.controlUi.basePath`) */
+    controlUi?: { basePath?: string }
   }
   agents?: {
     defaults?: {

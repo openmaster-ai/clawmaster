@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { platformResults } from '@/adapters'
 import type { GatewayStatus, OpenClawConfig } from '@/lib/types'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
@@ -25,6 +25,14 @@ export default function Gateway() {
 
   const { data, loading, error, refetch } = useAdapterCall(fetcher)
   const [startBusy, setStartBusy] = useState(false)
+  const [waBusy, setWaBusy] = useState(false)
+  const [waStatus, setWaStatus] = useState<{
+    status: 'idle' | 'pending' | 'authorized' | 'failed'
+    qr?: string
+    message?: string
+    updatedAt: string
+  } | null>(null)
+  const [waError, setWaError] = useState<string | null>(null)
 
   async function handleStart() {
     setStartBusy(true)
@@ -77,6 +85,53 @@ export default function Gateway() {
     }
   }
 
+  useEffect(() => {
+    let timer: number | undefined
+    let active = true
+    const tick = async () => {
+      const r = await platformResults.getWhatsAppLoginStatus()
+      if (!active) return
+      if (!r.success || !r.data) {
+        setWaError(r.error ?? '获取 WhatsApp 登录状态失败')
+        return
+      }
+      setWaError(null)
+      setWaStatus(r.data)
+      if (r.data.status === 'pending') {
+        timer = window.setTimeout(() => void tick(), 2000)
+      }
+    }
+    void tick()
+    return () => {
+      active = false
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [])
+
+  async function handleWhatsAppStart() {
+    setWaBusy(true)
+    setWaError(null)
+    const r = await platformResults.startWhatsAppLogin()
+    setWaBusy(false)
+    if (!r.success || !r.data) {
+      setWaError(r.error ?? '启动扫码失败')
+      return
+    }
+    setWaStatus(r.data)
+  }
+
+  async function handleWhatsAppCancel() {
+    setWaBusy(true)
+    const r = await platformResults.cancelWhatsAppLogin()
+    setWaBusy(false)
+    if (!r.success || !r.data) {
+      setWaError(r.error ?? '取消扫码失败')
+      return
+    }
+    setWaError(null)
+    setWaStatus(r.data)
+  }
+
   if (loading) {
     return <LoadingState message="加载网关…" />
   }
@@ -88,7 +143,33 @@ export default function Gateway() {
   }
 
   const { status, config } = data
-  const gatewayUrl = `ws://127.0.0.1:${config?.gateway?.port || 18789}`
+  /** Prefer runtime probe port when gateway is up (matches CLI status). */
+  const gatewayPort = status?.port ?? config?.gateway?.port ?? 18789
+  const gatewayUrl = `ws://127.0.0.1:${gatewayPort}`
+
+  const controlBasePath = (() => {
+    const raw = config?.gateway?.controlUi?.basePath?.trim()
+    if (!raw || raw === '/') return '/'
+    const p = raw.startsWith('/') ? raw : `/${raw}`
+    return p.endsWith('/') ? p.slice(0, -1) : p
+  })()
+  const dashboardHttpBase =
+    controlBasePath === '/'
+      ? `http://127.0.0.1:${gatewayPort}/`
+      : `http://127.0.0.1:${gatewayPort}${controlBasePath}/`
+
+  const gatewayAuthToken =
+    config?.gateway?.auth?.mode === 'token' && config.gateway.auth.token
+      ? config.gateway.auth.token
+      : undefined
+  /** Fragment is not sent to HTTP server (OpenClaw Control UI one-time auth bootstrap). */
+  const localDashboardUrl = (() => {
+    const u = new URL(dashboardHttpBase)
+    if (gatewayAuthToken) {
+      u.hash = `token=${encodeURIComponent(gatewayAuthToken)}`
+    }
+    return u.toString()
+  })()
 
   return (
     <div className="space-y-6">
@@ -107,9 +188,11 @@ export default function Gateway() {
         </div>
         <p className="text-muted-foreground font-mono">{gatewayUrl}</p>
         <p className="text-xs text-muted-foreground max-w-lg mx-auto mt-3 text-left leading-relaxed">
-          这是 <span className="font-mono">WebSocket</span> 网关地址，供 OpenClaw 客户端与代理连接；用浏览器访问{' '}
-          <span className="font-mono">http://</span> 同端口通常<strong>不会</strong>出现网页，属正常现象。
-          图形化管理即本应用；无需单独再启动「dashboard」。
+          这是 <span className="font-mono">WebSocket</span> 网关地址，供 OpenClaw 客户端与代理连接。本地 Control UI（网关仪表盘）默认在{' '}
+          <span className="font-mono">{dashboardHttpBase}</span>
+          {gatewayAuthToken
+            ? '；已配置令牌时，下方按钮会在链接中附带一次性认证片段（#token，不会出现在服务器访问日志里）。'
+            : '；若连接提示需要令牌，请在本页配置区查看 Token 或运行 `openclaw dashboard --no-open` 获取链接。'}
         </p>
         <div className="mt-4 flex flex-wrap justify-center gap-3">
           {status?.running ? (
@@ -140,12 +223,12 @@ export default function Gateway() {
             </button>
           )}
           <a
-            href="https://docs.openclaw.ai"
+            href={localDashboardUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="px-4 py-2 border border-border rounded hover:bg-accent"
           >
-            OpenClaw 文档
+            打开本地 Dashboard
           </a>
         </div>
       </div>
@@ -219,6 +302,40 @@ export default function Gateway() {
         <p className="mt-4 text-xs text-muted-foreground">
           💡 配置修改需要编辑配置文件，请前往「配置」页面
         </p>
+      </div>
+
+      <div className="bg-card border border-border rounded-lg p-4">
+        <h3 className="font-medium mb-3">WhatsApp 扫码登录</h3>
+        <div className="space-y-2 text-sm">
+          <p className="text-muted-foreground">
+            当前状态：<span className="font-medium text-foreground">{waStatus?.status ?? 'idle'}</span>
+            {waStatus?.message ? ` · ${waStatus.message}` : ''}
+          </p>
+          {waStatus?.qr ? (
+            <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted rounded p-2 max-h-40 overflow-auto">
+              {waStatus.qr}
+            </pre>
+          ) : null}
+          {waError ? <p className="text-red-500">{waError}</p> : null}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void handleWhatsAppStart()}
+              disabled={waBusy}
+              className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent disabled:opacity-50"
+            >
+              {waBusy ? '处理中…' : '开始扫码'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleWhatsAppCancel()}
+              disabled={waBusy}
+              className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent disabled:opacity-50"
+            >
+              取消
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-lg p-4">

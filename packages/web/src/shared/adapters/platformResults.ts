@@ -9,10 +9,14 @@ import {
   getChannelsResult,
   getConfigResult,
   getModelsResult,
+  getBindingsResult,
   removeChannelResult,
   saveFullConfigResult,
   setConfigResult,
   setDefaultModelResult,
+  verifyChannelAccountResult,
+  upsertBindingResult,
+  deleteBindingResult,
 } from '@/shared/adapters/openclaw'
 import {
   getSkillsResult,
@@ -25,6 +29,9 @@ import {
   restartGatewayResult,
   startGatewayResult,
   stopGatewayResult,
+  startWhatsAppLoginResult,
+  getWhatsAppLoginStatusResult,
+  cancelWhatsAppLoginResult,
 } from '@/shared/adapters/gateway'
 import { getLogsResult } from '@/shared/adapters/logs'
 import { probeMirrorResult } from '@/shared/adapters/mirror'
@@ -48,8 +55,9 @@ import {
   reinstallUninstallStepResult,
 } from '@/shared/adapters/npmOpenclaw'
 import { bootstrapAfterInstallResult } from '@/shared/adapters/openclawBootstrap'
-import { listPluginsResult, setPluginEnabledResult } from '@/shared/adapters/plugins'
+import { installPluginResult, listPluginsResult, setPluginEnabledResult } from '@/shared/adapters/plugins'
 import {
+  clawprobeBootstrapResult,
   clawprobeConfigResult,
   clawprobeCostResult,
   clawprobeStatusResult,
@@ -68,8 +76,12 @@ export const platformResults = {
   startGateway: startGatewayResult,
   stopGateway: stopGatewayResult,
   restartGateway: restartGatewayResult,
+  startWhatsAppLogin: startWhatsAppLoginResult,
+  getWhatsAppLoginStatus: getWhatsAppLoginStatusResult,
+  cancelWhatsAppLogin: cancelWhatsAppLoginResult,
   getConfig: getConfigResult,
   setConfig: setConfigResult,
+  verifyChannelAccount: verifyChannelAccountResult,
   saveFullConfig: saveFullConfigResult,
   getChannels: getChannelsResult,
   addChannel: addChannelResult,
@@ -82,6 +94,10 @@ export const platformResults = {
   uninstallSkill: uninstallSkillResult,
   listPlugins: listPluginsResult,
   setPluginEnabled: setPluginEnabledResult,
+  installPlugin: installPluginResult,
+  getBindings: getBindingsResult,
+  upsertBinding: upsertBindingResult,
+  deleteBinding: deleteBindingResult,
   getAgents: getAgentsResult,
   createAgent: createAgentResult,
   deleteAgent: deleteAgentResult,
@@ -99,6 +115,7 @@ export const platformResults = {
   clawprobeStatus: clawprobeStatusResult,
   clawprobeCost: clawprobeCostResult,
   clawprobeConfig: clawprobeConfigResult,
+  clawprobeBootstrap: clawprobeBootstrapResult,
 } as const
 
 export type PlatformResults = typeof platformResults

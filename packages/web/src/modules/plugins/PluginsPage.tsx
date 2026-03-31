@@ -62,6 +62,7 @@ export default function PluginsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilterMode>('loaded')
   const [busy, setBusy] = useState<{ id: string; enabling: boolean } | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [installId, setInstallId] = useState('')
   const fetcher = useCallback(async () => platformResults.listPlugins(), [])
   const { data, loading, error, refetch } = useAdapterCall(fetcher)
 
@@ -79,6 +80,24 @@ export default function PluginsPage() {
     },
     [refetch]
   )
+
+  const runInstall = useCallback(async () => {
+    const id = installId.trim()
+    if (!id) {
+      setActionError('请填写插件 ID')
+      return
+    }
+    setActionError(null)
+    setBusy({ id, enabling: true })
+    const r = await platformResults.installPlugin(id)
+    setBusy(null)
+    if (!r.success) {
+      setActionError(r.error ?? '安装失败')
+      return
+    }
+    setInstallId('')
+    void refetch()
+  }, [installId, refetch])
 
   const plugins = data?.plugins ?? []
   const rawCliOutput = data?.rawCliOutput
@@ -173,6 +192,23 @@ export default function PluginsPage() {
             ))}
           </select>
         </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={installId}
+            onChange={(e) => setInstallId(e.target.value)}
+            placeholder="输入插件 ID（例如 @openclaw/xxx）"
+            className="px-3 py-2 rounded border border-border bg-background text-sm min-w-[16rem]"
+          />
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void runInstall()}
+            className="px-3 py-2 text-sm border border-border rounded hover:bg-accent disabled:opacity-50"
+          >
+            {busy?.id === installId.trim() ? '安装中…' : '安装插件'}
+          </button>
+        </div>
       </div>
 
       {actionError && (

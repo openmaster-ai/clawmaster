@@ -54,3 +54,19 @@ export async function setPluginEnabledResult(
     body: JSON.stringify({ id: id.trim(), enabled }),
   })
 }
+
+export async function installPluginResult(id: string): Promise<AdapterResult<void>> {
+  const pluginId = id.trim()
+  if (getIsTauri()) {
+    return fromPromise(async () => {
+      await tauriInvoke<string>('run_openclaw_command', {
+        args: ['plugins', 'install', pluginId],
+      })
+    })
+  }
+  return webFetchVoid('/api/plugins/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: pluginId }),
+  })
+}

@@ -3,7 +3,12 @@ import { getIsTauri } from '@/shared/adapters/platform'
 import type { AdapterResult } from '@/shared/adapters/types'
 import { fail, ok } from '@/shared/adapters/types'
 import { webFetchJson } from '@/shared/adapters/webHttp'
-import type { ClawprobeConfigJson, ClawprobeCostJson, ClawprobeStatusJson } from '@/types/clawprobe'
+import type {
+  ClawprobeBootstrapResult,
+  ClawprobeConfigJson,
+  ClawprobeCostJson,
+  ClawprobeStatusJson,
+} from '@/types/clawprobe'
 
 function parseClawprobeStdout(raw: string): AdapterResult<unknown> {
   const trimmed = raw.trim()
@@ -67,4 +72,46 @@ export async function clawprobeConfigResult(): Promise<AdapterResult<ClawprobeCo
     return ok(r.data as ClawprobeConfigJson)
   }
   return webFetchJson<ClawprobeConfigJson>('/api/clawprobe/config')
+}
+
+export async function clawprobeBootstrapResult(): Promise<AdapterResult<ClawprobeBootstrapResult>> {
+  if (getIsTauri()) {
+    try {
+      const beforeRaw = await tauriInvoke<string>('run_clawprobe_command', {
+        args: ['status', '--json'],
+      })
+      const before = parseClawprobeStdout(beforeRaw)
+      if (!before.success) return fail(before.error ?? '读取 ClawProbe 状态失败')
+      const beforeObj = before.data as { daemonRunning?: boolean }
+      if (beforeObj?.daemonRunning === true) {
+        return ok({
+          ok: true,
+          alreadyRunning: true,
+          daemonRunning: true,
+          message: 'ClawProbe 守护进程已在运行',
+        })
+      }
+
+      const startRaw = await tauriInvoke<string>('run_clawprobe_command', { args: ['start'] })
+      const afterRaw = await tauriInvoke<string>('run_clawprobe_command', {
+        args: ['status', '--json'],
+      })
+      const after = parseClawprobeStdout(afterRaw)
+      if (!after.success) return fail(after.error ?? '读取 ClawProbe 状态失败')
+      const afterObj = after.data as { daemonRunning?: boolean }
+      if (afterObj?.daemonRunning !== true) {
+        return fail('启动命令执行后仍未检测到守护进程')
+      }
+      return ok({
+        ok: true,
+        alreadyRunning: false,
+        daemonRunning: true,
+        message: 'ClawProbe 已成功拉起',
+        stdout: startRaw.trim(),
+      })
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : String(e))
+    }
+  }
+  return webFetchJson<ClawprobeBootstrapResult>('/api/clawprobe/bootstrap', { method: 'POST' })
 }

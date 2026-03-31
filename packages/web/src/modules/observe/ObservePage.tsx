@@ -29,6 +29,8 @@ function severityClass(sev: string): string {
 
 export default function ObservePage() {
   const [costPeriod, setCostPeriod] = useState<'day' | 'week' | 'month' | 'all'>('week')
+  const [bootstrapBusy, setBootstrapBusy] = useState(false)
+  const [bootstrapHint, setBootstrapHint] = useState<string | null>(null)
 
   const fetcher = useCallback(async (): Promise<AdapterResult<ObserveBundle>> => {
     const [st, co, cf] = await Promise.all([
@@ -48,6 +50,25 @@ export default function ObservePage() {
   }, [costPeriod])
 
   const { data, loading, error, refetch } = useAdapterCall(fetcher, { pollInterval: 45_000 })
+
+  const handleBootstrapClawprobe = useCallback(async () => {
+    setBootstrapBusy(true)
+    setBootstrapHint(null)
+    const r = await platformResults.clawprobeBootstrap()
+    if (!r.success || !r.data) {
+      setBootstrapHint(`拉起失败：${r.error ?? '未知错误'}`)
+      setBootstrapBusy(false)
+      return
+    }
+    const extra = [r.data.stdout, r.data.stderr].filter(Boolean).join('\n').trim()
+    setBootstrapHint(
+      extra
+        ? `${r.data.message}\n\n${extra.slice(0, 1200)}`
+        : r.data.message
+    )
+    setBootstrapBusy(false)
+    void refetch()
+  }, [refetch])
 
   if (loading && !data) {
     return <LoadingState message="正在拉取 ClawProbe 数据…" />
@@ -70,6 +91,19 @@ export default function ObservePage() {
               <code className="font-mono text-xs">probe.db</code>。
             </li>
           </ul>
+          <button
+            type="button"
+            onClick={() => void handleBootstrapClawprobe()}
+            disabled={bootstrapBusy}
+            className="mt-3 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground disabled:opacity-50"
+          >
+            {bootstrapBusy ? '正在自动拉起…' : '自动部署并拉起 ClawProbe'}
+          </button>
+          {bootstrapHint ? (
+            <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border bg-background p-2 text-[11px] font-mono text-muted-foreground">
+              {bootstrapHint}
+            </pre>
+          ) : null}
           <button
             type="button"
             onClick={() => void refetch()}
@@ -131,8 +165,23 @@ export default function ObservePage() {
               )}
             </div>
             {!status.daemonRunning && (
-              <p className="text-xs text-muted-foreground">终端执行 clawprobe start 以采集费用与上下文数据。</p>
+              <p className="text-xs text-muted-foreground">
+                可点击下方按钮自动部署并拉起，或在终端手动执行 clawprobe start。
+              </p>
             )}
+            <button
+              type="button"
+              onClick={() => void handleBootstrapClawprobe()}
+              disabled={bootstrapBusy}
+              className="mt-1 px-3 py-1.5 text-xs rounded-md border border-border hover:bg-accent disabled:opacity-50"
+            >
+              {bootstrapBusy ? '拉起中…' : status.daemonRunning ? '重新拉起 ClawProbe' : '自动部署并拉起'}
+            </button>
+            {bootstrapHint ? (
+              <pre className="text-[11px] whitespace-pre-wrap break-all rounded-md border border-border bg-muted/40 p-2 max-h-36 overflow-auto">
+                {bootstrapHint}
+              </pre>
+            ) : null}
           </div>
           <div className="rounded-lg border border-border p-4 space-y-2">
             <div className="text-xs text-muted-foreground uppercase tracking-wide">今日 API 费用（估算）</div>

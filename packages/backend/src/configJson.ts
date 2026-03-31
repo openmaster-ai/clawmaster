@@ -63,6 +63,27 @@ export function writeConfigJson(config: Record<string, unknown>): void {
   fs.writeFileSync(p, JSON.stringify(out, null, 2), 'utf-8')
 }
 
+let configUpdateQueue: Promise<void> = Promise.resolve()
+
+/**
+ * Serialize config read-modify-write operations to avoid lost updates.
+ */
+export function updateConfigJson<T>(
+  updater: (config: Record<string, unknown>) => T | Promise<T>
+): Promise<T> {
+  const run = configUpdateQueue.then(async () => {
+    const config = readConfigJsonOrEmpty()
+    const result = await updater(config)
+    writeConfigJson(config)
+    return result
+  })
+  configUpdateQueue = run.then(
+    () => undefined,
+    () => undefined
+  )
+  return run
+}
+
 /** Dot-path writes aligned with web setConfig and Tauri save_config. */
 export function setConfigAtPath(
   root: Record<string, unknown>,

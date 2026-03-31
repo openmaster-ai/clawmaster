@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { platformResults } from '@/adapters'
 import type { OpenClawAgentListItem, OpenClawBinding } from '@/lib/types'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
@@ -6,7 +6,20 @@ import LoadingState from '@/shared/components/LoadingState'
 
 export default function Agents() {
   const fetcher = useCallback(async () => platformResults.getConfig(), [])
-  const { data: config, loading, error } = useAdapterCall(fetcher)
+  const { data: config, loading, error, refetch } = useAdapterCall(fetcher)
+  const [busyChannel, setBusyChannel] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const agents = config?.agents?.list || []
+  const defaults = config?.agents?.defaults || {}
+  const channels = useMemo(() => Object.keys(config?.channels || {}), [config?.channels])
+  const bindingsMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const b of config?.bindings || []) {
+      if (b.match?.channel && b.agentId) map.set(b.match.channel, b.agentId)
+    }
+    return map
+  }, [config?.bindings])
 
   if (loading) {
     return <LoadingState message="加载代理…" />
@@ -20,8 +33,20 @@ export default function Agents() {
     )
   }
 
-  const agents = config?.agents?.list || []
-  const defaults = config?.agents?.defaults || {}
+  async function saveBinding(channel: string, agentId: string) {
+    setBusyChannel(channel)
+    setActionError(null)
+    const trimmed = agentId.trim()
+    const r = trimmed
+      ? await platformResults.upsertBinding(channel, trimmed)
+      : await platformResults.deleteBinding(channel)
+    setBusyChannel(null)
+    if (!r.success) {
+      setActionError(r.error ?? '绑定操作失败')
+      return
+    }
+    await refetch()
+  }
 
   // Icon map for known agent ids
   const agentIcons: Record<string, string> = {
@@ -109,17 +134,45 @@ export default function Agents() {
       {/* Route bindings */}
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="font-medium mb-3">路由绑定</h3>
-        <p className="text-sm text-muted-foreground mb-3">不同通道的消息可以路由到不同的代理</p>
-        {config?.bindings?.map((binding: OpenClawBinding, idx: number) => (
-          <div key={idx} className="flex items-center gap-2 text-sm py-1">
-            <span className="capitalize bg-muted px-2 py-0.5 rounded">
-              {binding.match?.channel}
-            </span>
-            <span className="text-muted-foreground">→</span>
-            <span className="font-medium">{binding.agentId}</span>
+        <p className="text-sm text-muted-foreground mb-3">不同通道的消息可以路由到不同的代理（留空表示不绑定）</p>
+        {actionError ? <p className="text-sm text-red-500 mb-3">{actionError}</p> : null}
+        <div className="space-y-2">
+          {channels.map((channel) => {
+            const current = bindingsMap.get(channel) ?? ''
+            const invalid = current && !agents.some((a) => a.id === current)
+            return (
+              <div key={channel} className="flex items-center gap-2 text-sm">
+                <span className="capitalize bg-muted px-2 py-0.5 rounded min-w-[7rem]">{channel}</span>
+                <span className="text-muted-foreground">→</span>
+                <select
+                  className="px-2 py-1 rounded border border-border bg-background"
+                  defaultValue={current}
+                  onChange={(e) => void saveBinding(channel, e.target.value)}
+                  disabled={busyChannel === channel}
+                >
+                  <option value="">不绑定</option>
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name || a.id} ({a.id})
+                    </option>
+                  ))}
+                </select>
+                {busyChannel === channel ? <span className="text-xs text-muted-foreground">保存中…</span> : null}
+                {invalid ? <span className="text-xs text-red-500">绑定的 agent 不存在</span> : null}
+              </div>
+            )
+          })}
+        </div>
+        {!channels.length && <p className="text-sm text-muted-foreground">无可绑定通道</p>}
+        {!!config?.bindings?.length && (
+          <div className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground space-y-1">
+            {(config.bindings as OpenClawBinding[]).map((binding, idx) => (
+              <p key={idx}>
+                {binding.match?.channel ?? '-'} → {binding.agentId}
+              </p>
+            ))}
           </div>
-        ))}
-        {!config?.bindings?.length && <p className="text-sm text-muted-foreground">无路由绑定</p>}
+        )}
       </div>
 
       <div className="text-xs text-muted-foreground">

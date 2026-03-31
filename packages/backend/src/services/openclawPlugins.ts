@@ -1,4 +1,4 @@
-import { execOpenclaw } from './execOpenclaw.js'
+import { execOpenclaw } from '../execOpenclaw.js'
 
 export interface OpenClawPluginRow {
   id: string
@@ -360,6 +360,20 @@ export async function setOpenclawPluginEnabled(id: string, enabled: boolean): Pr
   if (r.code !== 0) {
     throw new Error(
       [r.stderr, r.stdout].filter(Boolean).join('\n').trim() || `openclaw plugins ${sub} failed (${r.code})`
+    )
+  }
+}
+
+/** Run `openclaw plugins install <id>`; id is allowlisted to avoid shell injection */
+export async function installOpenclawPlugin(id: string): Promise<void> {
+  const x = id.trim()
+  if (!looksLikePluginId(x)) {
+    throw new Error('Invalid plugin id')
+  }
+  const r = await execOpenclaw(['plugins', 'install', x])
+  if (r.code !== 0) {
+    throw new Error(
+      [r.stderr, r.stdout].filter(Boolean).join('\n').trim() || `openclaw plugins install failed (${r.code})`
     )
   }
 }

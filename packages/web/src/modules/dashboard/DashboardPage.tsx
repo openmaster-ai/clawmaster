@@ -3,46 +3,104 @@ import { Link } from 'react-router-dom'
 import { platformResults } from '@/adapters'
 import { formatBootstrapSummary } from '@/shared/adapters/openclawBootstrap'
 import type { SystemInfo, GatewayStatus, OpenClawConfig, OpenClawChannelEntry } from '@/lib/types'
-import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
-import { allSuccess2 } from '@/shared/adapters/resultHelpers'
-import type { AdapterResult } from '@/shared/adapters/types'
-import { fail, ok } from '@/shared/adapters/types'
-import LoadingState from '@/shared/components/LoadingState'
+
+const DASHBOARD_CACHE_KEY = 'dashboard:overview:v1'
+const MAX_VISIBLE_CHANNELS = 20
+
+type DashboardCachePayload = {
+  ts: number
+  gateway: GatewayStatus
+  config: OpenClawConfig
+}
+
+function readDashboardCache(): DashboardCachePayload | null {
+  try {
+    const raw = window.localStorage.getItem(DASHBOARD_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<DashboardCachePayload>
+    if (!parsed || !parsed.gateway || !parsed.config || typeof parsed.ts !== 'number') return null
+    return parsed as DashboardCachePayload
+  } catch {
+    return null
+  }
+}
+
+function writeDashboardCache(payload: DashboardCachePayload) {
+  try {
+    window.localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore quota/storage errors
+  }
+}
 
 export default function Dashboard() {
-  /** First paint: gateway + config only; detectSystem is slow (many subprocesses), load async */
-  const fetcher = useCallback(async (): Promise<
-    AdapterResult<{
-      gateway: GatewayStatus
-      config: OpenClawConfig
-    }>
-  > => {
+  const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null)
+  const [config, setConfig] = useState<OpenClawConfig | null>(null)
+  const [loadingGateway, setLoadingGateway] = useState(true)
+  const [loadingConfig, setLoadingConfig] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
+  const [systemInfoLoading, setSystemInfoLoading] = useState(true)
+
+  const refreshOverview = useCallback(async () => {
+    setError(null)
+    setLoadingGateway(true)
+    setLoadingConfig(true)
+
     const [gw, cfg] = await Promise.all([
       platformResults.getGatewayStatus(),
       platformResults.getConfig(),
     ])
-    const combined = allSuccess2(gw, cfg)
-    if (!combined.success) {
-      return fail(combined.error ?? '加载失败')
+
+    if (gw.success && gw.data) {
+      setGatewayStatus(gw.data)
+      setLoadingGateway(false)
+    } else {
+      setLoadingGateway(false)
+      setError((prev) => prev ?? gw.error ?? '获取网关状态失败')
     }
-    const bundle = combined.data!
-    return ok({
-      gateway: bundle.a,
-      config: bundle.b,
-    })
+
+    if (cfg.success && cfg.data) {
+      setConfig(cfg.data)
+      setLoadingConfig(false)
+    } else {
+      setLoadingConfig(false)
+      setError((prev) => prev ?? cfg.error ?? '获取配置失败')
+    }
+
+    if (gw.success && gw.data && cfg.success && cfg.data) {
+      writeDashboardCache({
+        ts: Date.now(),
+        gateway: gw.data,
+        config: cfg.data,
+      })
+    }
   }, [])
 
-  const { data, loading, error, refetch } = useAdapterCall(fetcher)
-  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
+  useEffect(() => {
+    const cached = readDashboardCache()
+    if (cached) {
+      setGatewayStatus(cached.gateway)
+      setConfig(cached.config)
+      setLoadingGateway(false)
+      setLoadingConfig(false)
+    }
+    void refreshOverview()
+  }, [refreshOverview])
 
   useEffect(() => {
     let cancelled = false
-    void platformResults.detectSystem().then((r) => {
-      if (cancelled || !r.success || !r.data) return
-      setSystemInfo(r.data)
-    })
+    const id = window.setTimeout(() => {
+      void platformResults.detectSystem().then((r) => {
+        if (cancelled) return
+        setSystemInfoLoading(false)
+        if (!r.success || !r.data) return
+        setSystemInfo(r.data)
+      })
+    }, 250)
     return () => {
       cancelled = true
+      window.clearTimeout(id)
     }
   }, [])
   const [bootstrapBusy, setBootstrapBusy] = useState(false)
@@ -54,14 +112,21 @@ export default function Dashboard() {
     const r = await platformResults.bootstrapAfterInstall()
     setBootstrapHint(formatBootstrapSummary(r))
     setBootstrapBusy(false)
-    void refetch()
-  }, [refetch])
+    void refreshOverview()
+  }, [refreshOverview])
 
-  if (loading) {
-    return <LoadingState message="加载概览…" />
+  if (!gatewayStatus && !config && (loadingGateway || loadingConfig)) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">概览</h1>
+        <div className="bg-card border border-border rounded-lg p-4 text-sm text-muted-foreground">
+          正在加载概览…
+        </div>
+      </div>
+    )
   }
 
-  if (error || !data) {
+  if (error && !gatewayStatus && !config) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-16 text-red-500 text-sm">
         <p>加载失败：{error ?? '未知错误'}</p>
@@ -69,26 +134,32 @@ export default function Dashboard() {
     )
   }
 
-  const { gateway: gatewayStatus, config } = data
-
-  const channelCount = config?.channels ? Object.keys(config.channels).length : 0
+  const channelEntries = config?.channels ? Object.entries(config.channels) : []
+  const visibleChannelEntries = channelEntries.slice(0, MAX_VISIBLE_CHANNELS)
+  const hiddenChannelCount = channelEntries.length - visibleChannelEntries.length
+  const channelCount = channelEntries.length
   const agentCount = config?.agents?.list?.length || 0
   const configKeyCount = config ? Object.keys(config as object).length : 0
-  const needsBootstrapCta = configKeyCount === 0 && !gatewayStatus.running
+  const needsBootstrapCta = configKeyCount === 0 && !gatewayStatus?.running
 
   /** Show port from CLI/probe when gateway.port is not set in config */
   const gatewayPortDisplay =
-    config?.gateway?.port != null ? config.gateway.port : gatewayStatus.port
+    config?.gateway?.port != null ? config.gateway.port : gatewayStatus?.port
   const gatewayBindDisplay =
     config?.gateway?.bind != null && String(config.gateway.bind).trim() !== ''
       ? String(config.gateway.bind)
-      : gatewayStatus.running
+      : gatewayStatus?.running
         ? '未写入配置（使用默认）'
         : '—'
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">概览</h1>
+      {error ? (
+        <div className="rounded-md border border-amber-500/35 bg-amber-500/5 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+          部分数据刷新失败：{error}
+        </div>
+      ) : null}
 
       {needsBootstrapCta && (
         <div className="rounded-lg border border-amber-500/35 bg-amber-500/5 p-4 text-sm">
@@ -118,7 +189,9 @@ export default function Dashboard() {
 
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="font-medium mb-2">系统环境</h3>
-        {systemInfo ? (
+        {systemInfoLoading ? (
+          <p className="text-sm text-muted-foreground">正在检测 Node / npm / OpenClaw…</p>
+        ) : systemInfo ? (
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
               <span className="text-muted-foreground">Node.js: </span>
@@ -140,7 +213,7 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">正在检测 Node / npm / OpenClaw…</p>
+          <p className="text-sm text-muted-foreground">系统环境检测失败，可稍后重试</p>
         )}
       </div>
 
@@ -171,8 +244,7 @@ export default function Dashboard() {
         <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="font-medium mb-3">通道连接</h3>
           <div className="space-y-2 text-sm">
-            {config?.channels &&
-              Object.entries(config.channels).map(([name, ch]: [string, OpenClawChannelEntry]) => (
+            {visibleChannelEntries.map(([name, ch]: [string, OpenClawChannelEntry]) => (
                 <div key={name} className="flex items-center gap-2">
                   <span
                     className={`w-2 h-2 rounded-full ${ch.enabled ? 'bg-green-500' : 'bg-gray-400'}`}
@@ -186,6 +258,9 @@ export default function Dashboard() {
                 </div>
               ))}
             {channelCount === 0 && <p className="text-muted-foreground">暂无通道配置</p>}
+            {hiddenChannelCount > 0 && (
+              <p className="text-muted-foreground">还有 {hiddenChannelCount} 个通道，进入「管理通道」查看</p>
+            )}
           </div>
           <Link
             to="/channels"

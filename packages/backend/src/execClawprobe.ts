@@ -6,6 +6,13 @@ import { promisify } from 'node:util'
 const require = createRequire(import.meta.url)
 const execFileAsync = promisify(execFile)
 
+export interface ClawprobeCommandOutput {
+  ok: boolean
+  code: number
+  stdout: string
+  stderr: string
+}
+
 function resolveClawprobeEntry(): string {
   const pkgJson = require.resolve('clawprobe/package.json')
   const root = path.dirname(pkgJson)
@@ -64,4 +71,29 @@ export async function runClawprobeJson(args: string[]): Promise<unknown> {
   }
 
   return parsed
+}
+
+export async function runClawprobeCommand(args: string[]): Promise<ClawprobeCommandOutput> {
+  const entry = resolveClawprobeEntry()
+  const node = process.execPath
+  try {
+    const out = await execFileAsync(node, [entry, ...args], {
+      maxBuffer: 20 * 1024 * 1024,
+      env: process.env,
+    })
+    return {
+      ok: true,
+      code: 0,
+      stdout: String(out.stdout ?? '').trim(),
+      stderr: String(out.stderr ?? '').trim(),
+    }
+  } catch (e: unknown) {
+    const err = e as NodeJS.ErrnoException & { stdout?: Buffer; stderr?: Buffer; code?: string | number }
+    return {
+      ok: false,
+      code: typeof err.code === 'number' ? err.code : 1,
+      stdout: err.stdout ? String(err.stdout).trim() : '',
+      stderr: err.stderr ? String(err.stderr).trim() : '',
+    }
+  }
 }

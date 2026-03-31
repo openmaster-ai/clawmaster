@@ -1,9 +1,11 @@
 import type {
   AgentConfig,
   AgentInfo,
+  ChannelVerifyResult,
   ChannelConfig,
   ChannelInfo,
   ModelInfo,
+  OpenClawBinding,
   OpenClawChannelEntry,
   OpenClawConfig,
   OpenClawModelRef,
@@ -223,4 +225,55 @@ export async function deleteAgentResult(id: string): Promise<AdapterResult<void>
     })
   }
   return webFetchVoid(`/api/agents/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function verifyChannelAccountResult(
+  type: string,
+  account: Record<string, unknown>
+): Promise<AdapterResult<ChannelVerifyResult>> {
+  if (getIsTauri()) {
+    return fromPromise(async () => ({ ok: false, message: 'Tauri 模式暂不支持 verify API，请使用 Web 后端模式' }))
+  }
+  return webFetchJson<ChannelVerifyResult>(`/api/channels/${encodeURIComponent(type)}/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ account }),
+  })
+}
+
+export async function getBindingsResult(): Promise<AdapterResult<OpenClawBinding[]>> {
+  if (getIsTauri()) {
+    const cfg = await getConfigResult()
+    if (!cfg.success || !cfg.data) return fail(cfg.error ?? '获取配置失败')
+    return ok(cfg.data.bindings ?? [])
+  }
+  return webFetchJson<OpenClawBinding[]>('/api/bindings')
+}
+
+export async function upsertBindingResult(channel: string, agentId: string): Promise<AdapterResult<void>> {
+  if (getIsTauri()) {
+    return fromPromise(async () => {
+      const current = await tauriInvoke<OpenClawConfig>('get_config')
+      const list = Array.isArray(current.bindings) ? [...current.bindings] : []
+      const next = list.filter((b) => b?.match?.channel !== channel)
+      next.push({ match: { channel }, agentId })
+      await tauriInvoke('save_config', { config: { ...current, bindings: next } })
+    })
+  }
+  return webFetchVoid('/api/bindings/upsert', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel, agentId }),
+  })
+}
+
+export async function deleteBindingResult(channel: string): Promise<AdapterResult<void>> {
+  if (getIsTauri()) {
+    return fromPromise(async () => {
+      const current = await tauriInvoke<OpenClawConfig>('get_config')
+      const list = Array.isArray(current.bindings) ? current.bindings.filter((b) => b?.match?.channel !== channel) : []
+      await tauriInvoke('save_config', { config: { ...current, bindings: list } })
+    })
+  }
+  return webFetchVoid(`/api/bindings?channel=${encodeURIComponent(channel)}`, { method: 'DELETE' })
 }
