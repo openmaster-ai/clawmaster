@@ -1,33 +1,41 @@
 import { create } from 'zustand'
-import { SystemInfo, GatewayStatus, OpenClawConfig, ChannelInfo, ModelInfo, SkillInfo, AgentInfo } from '@/lib/types'
+import {
+  SystemInfo,
+  GatewayStatus,
+  OpenClawConfig,
+  ChannelInfo,
+  ModelInfo,
+  SkillInfo,
+  AgentInfo,
+} from '@/lib/types'
 
 interface AppState {
-  // 系统状态
+  // System
   systemInfo: SystemInfo | null
   isLoading: boolean
   error: string | null
-  
-  // 网关
+
+  // Gateway
   gatewayStatus: GatewayStatus | null
-  
-  // 配置
+
+  // Config
   config: OpenClawConfig | null
-  
-  // 通道
+
+  // Channels
   channels: ChannelInfo[]
-  
-  // 模型
+
+  // Models
   models: ModelInfo[]
-  
-  // 技能
+
+  // Skills
   skills: SkillInfo[]
-  
-  // 代理
+
+  // Agents
   agents: AgentInfo[]
-  
-  // 当前实例
+
+  // Current instance
   currentInstance: string
-  
+
   // Actions
   setSystemInfo: (info: SystemInfo) => void
   setGatewayStatus: (status: GatewayStatus) => void
@@ -52,7 +60,7 @@ export const useAppStore = create<AppState>((set) => ({
   skills: [],
   agents: [],
   currentInstance: 'default',
-  
+
   setSystemInfo: (info) => set({ systemInfo: info }),
   setGatewayStatus: (status) => set({ gatewayStatus: status }),
   setConfig: (config) => set({ config }),

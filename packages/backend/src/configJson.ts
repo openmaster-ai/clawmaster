@@ -1,0 +1,87 @@
+import fs from 'fs'
+import { getOpenclawConfigPath, ensureConfigDir } from './paths.js'
+
+/**
+ * Same behavior as web `unwrapDoubleNestedModelsInRoot`: fix when the whole `{"models":{...}}`
+ * block was pasted into the models editor by mistake.
+ */
+export function unwrapDoubleNestedModelsInRoot(
+  root: Record<string, unknown>
+): Record<string, unknown> {
+  const m = root.models
+  if (m === undefined || typeof m !== 'object' || m === null || Array.isArray(m)) {
+    return root
+  }
+  const o = m as Record<string, unknown>
+  const keys = Object.keys(o)
+  if (
+    keys.length === 1 &&
+    keys[0] === 'models' &&
+    typeof o.models === 'object' &&
+    o.models !== null &&
+    !Array.isArray(o.models)
+  ) {
+    const inner = o.models as Record<string, unknown>
+    if ('providers' in inner || 'mode' in inner) {
+      return { ...root, models: { ...inner } }
+    }
+  }
+  return root
+}
+
+export function readConfigJson(): Record<string, unknown> | null {
+  const p = getOpenclawConfigPath()
+  if (!fs.existsSync(p)) return null
+  try {
+    const raw = fs.readFileSync(p, 'utf-8')
+    const data = JSON.parse(raw) as unknown
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      return data as Record<string, unknown>
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/** Treat missing or invalid config file as `{}` so the manager UI can load on first visit. */
+export function readConfigJsonOrEmpty(): Record<string, unknown> {
+  const raw = readConfigJson() ?? {}
+  const fixed = unwrapDoubleNestedModelsInRoot({ ...raw })
+  const rawM = JSON.stringify(raw.models)
+  const fixedM = JSON.stringify(fixed.models)
+  if (rawM !== fixedM) {
+    writeConfigJson(fixed)
+  }
+  return fixed
+}
+
+export function writeConfigJson(config: Record<string, unknown>): void {
+  const out = unwrapDoubleNestedModelsInRoot({ ...config })
+  ensureConfigDir()
+  const p = getOpenclawConfigPath()
+  fs.writeFileSync(p, JSON.stringify(out, null, 2), 'utf-8')
+}
+
+/** Dot-path writes aligned with web setConfig and Tauri save_config. */
+export function setConfigAtPath(
+  root: Record<string, unknown>,
+  pathStr: string,
+  value: unknown
+): void {
+  const keys = pathStr.split('.').filter(Boolean)
+  if (keys.length === 0) return
+  let obj: Record<string, unknown> = root
+  for (let i = 0; i < keys.length - 1; i++) {
+    const k = keys[i]
+    const next = obj[k]
+    if (next && typeof next === 'object' && !Array.isArray(next)) {
+      obj = next as Record<string, unknown>
+    } else {
+      const nested: Record<string, unknown> = {}
+      obj[k] = nested
+      obj = nested
+    }
+  }
+  obj[keys[keys.length - 1]] = value as unknown
+}

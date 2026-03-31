@@ -3,6 +3,9 @@
   "version": "0.2.3",
   "private": true,
   "description": "龙虾管家 - OpenClaw 图形化管理工具",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "workspaces": [
     "packages/*"
   ],
@@ -13,7 +16,10 @@
     "build": "npm run build --workspace=@openclaw-manager/web",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "lint": "npm run lint --workspace=@openclaw-manager/web",
+    "format": "npm run format --workspace=@openclaw-manager/web",
+    "format:check": "npm run format:check --workspace=@openclaw-manager/web"
   },
   "keywords": [
     "openclaw",

@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+# Never `git add` paths under ~/.nvm (or other absolute paths outside this repo).
 
 # Build outputs
 dist/

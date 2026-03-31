@@ -1,47 +1,30 @@
-// 检测运行环境
-export const isTauri = typeof window !== 'undefined' && '__TAURI__' in window
+// For runtime detection use getIsTauri() from @/shared/adapters/platform
 
-// 平台适配器接口
+/** Platform adapter contract (legacy) */
 export interface PlatformAdapter {
-  // 系统
   detectSystem(): Promise<SystemInfo>
-  
-  // 网关
   getGatewayStatus(): Promise<GatewayStatus>
   startGateway(): Promise<void>
   stopGateway(): Promise<void>
   restartGateway(): Promise<void>
-  
-  // 配置
   getConfig(): Promise<OpenClawConfig>
-  setConfig(path: string, value: any): Promise<void>
-  
-  // 通道
+  setConfig(path: string, value: unknown): Promise<void>
   getChannels(): Promise<ChannelInfo[]>
   addChannel(channel: ChannelConfig): Promise<void>
   removeChannel(id: string): Promise<void>
-  
-  // 模型
   getModels(): Promise<ModelInfo[]>
   setDefaultModel(modelId: string): Promise<void>
-  
-  // 技能
   getSkills(): Promise<SkillInfo[]>
   searchSkills(query: string): Promise<SkillInfo[]>
   installSkill(slug: string): Promise<void>
   uninstallSkill(slug: string): Promise<void>
-  
-  // 代理
   getAgents(): Promise<AgentInfo[]>
   createAgent(agent: AgentConfig): Promise<void>
   deleteAgent(id: string): Promise<void>
-  
-  // 日志
   getLogs(lines: number): Promise<LogEntry[]>
   streamLogs(callback: (entry: LogEntry) => void): () => void
 }
 
-// 类型定义
 export interface SystemInfo {
   nodejs: { installed: boolean; version: string }
   npm: { installed: boolean; version: string }
@@ -53,6 +36,41 @@ export interface GatewayStatus {
   port: number
   uptime?: number
   connections?: number
+}
+
+/** Display fields for one account under a channel (common config shape) */
+export interface ChannelAccountInfo {
+  name?: string
+  enabled?: boolean
+  groupPolicy?: string
+}
+
+export interface OpenClawChannelEntry {
+  enabled?: boolean
+  accounts?: Record<string, ChannelAccountInfo>
+}
+
+export interface OpenClawModelRef {
+  id?: string
+  name?: string
+}
+
+export interface OpenClawModelProvider {
+  baseUrl?: string
+  models?: Array<string | OpenClawModelRef>
+}
+
+export interface OpenClawBinding {
+  match?: { channel?: string }
+  agentId: string
+}
+
+export interface OpenClawAgentListItem {
+  id: string
+  name?: string
+  workspace?: string
+  model?: string
+  agentDir?: string
 }
 
 export interface OpenClawConfig {
@@ -68,18 +86,11 @@ export interface OpenClawConfig {
       workspace?: string
       maxConcurrent?: number
     }
-    list?: Array<{
-      id: string
-      name?: string
-      workspace?: string
-      model?: string
-      agentDir?: string
-    }>
+    list?: OpenClawAgentListItem[]
   }
-  channels?: Record<string, any>
-  models?: { providers?: Record<string, any> }
-  bindings?: Array<{ match?: { channel: string }; agentId: string }>
-  [key: string]: any
+  channels?: Record<string, OpenClawChannelEntry>
+  models?: { providers?: Record<string, OpenClawModelProvider> }
+  bindings?: OpenClawBinding[]
 }
 
 export interface ChannelInfo {
@@ -93,7 +104,7 @@ export interface ChannelInfo {
 export interface ChannelConfig {
   type: string
   name: string
-  config: Record<string, any>
+  config: Record<string, unknown>
 }
 
 export interface ModelInfo {
@@ -109,6 +120,22 @@ export interface SkillInfo {
   description: string
   version: string
   installed?: boolean
+}
+
+/** One row from parsed `openclaw plugins list` */
+export interface OpenClawPluginInfo {
+  id: string
+  name: string
+  /** e.g. enabled / disabled (from CLI Status column or JSON) */
+  status?: string
+  version?: string
+  description?: string
+}
+
+/** Response body for GET /api/plugins and Tauri plugin list */
+export interface PluginsListPayload {
+  plugins: OpenClawPluginInfo[]
+  rawCliOutput?: string | null
 }
 
 export interface AgentInfo {

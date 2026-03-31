@@ -1,54 +1,31 @@
-# 🦞 ClawMaster
+# 🦐 OpenClaw Manager
 
-[中文](./README_CN.md) | [Product Vision](./VISION.md)
+[中文](./README_CN.md)
 
-> **ClawMaster — The Hexagonal Champion of the OpenClaw Ecosystem: Takeover, Observe, Save, Apply, Build, Guard.**
-
-ClawMaster is a one-stop intelligent management platform for the OpenClaw ecosystem, collaboratively built by the open-source community, delivering six core capabilities to every user: Takeover, Observe, Save, Apply, Build, and Guard.
+A cross-platform desktop GUI for managing [OpenClaw](https://github.com/openclaw/openclaw) with ease. Perfect for beginners!
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)
 
----
+## ✨ Features
 
-## 🦞 Six Core Capabilities
-
-| Capability | One-liner | Problem Solved |
-|------------|-----------|----------------|
-| **Takeover** | Install, manage, everything starts here | High installation barrier, complex configuration |
-| **Observe** | How much spent, how it runs, crystal clear | Token/cost/health are all black boxes |
-| **Save** | PowerMem + seekdb, 96% token reduction | Token burn rate out of control |
-| **Apply** | Photo Q&A, mistake notebook, invoice organizer — ready to use | "I installed it... now what?" |
-| **Build** | Chat with the butler, agents build themselves | Traditional dev too hard for normal users |
-| **Guard** | Encrypted keys, spending circuit breaker, access control | API keys exposed, spending unprotected |
-
-> See [VISION.md](./VISION.md) for the full product positioning.
-
----
-
-## 🤝 Four Ecosystem Pillars
-
-| Partner | Role | Capabilities |
-|---------|------|-------------|
-| **OceanBase** | Data Layer | seekdb AI-native database, PowerMem memory engine |
-| **Baidu** | Model Layer | PaddleOCR and foundational models for inference |
-| **LangChain Community** | Orchestration Layer | DeepAgents, LangGraph workflows, LangSmith observability |
-| **Computing Cube** | Hardware Layer | Open-source hardware standard with built-in ClawMaster |
-
----
+- **🖥️ Dashboard** - Real-time overview of Gateway status, connected channels, and active agents
+- **🔌 Gateway Management** - Start, stop, restart, and configure the OpenClaw Gateway
+- **📡 Channel Configuration** - Manage Telegram, Discord, Feishu, WhatsApp, and more
+- **🤖 Model Settings** - Configure API keys, default models, and fallback chains
+- **🧩 Skills Management** - Browse, install, update, and uninstall skills from ClawHub
+- **👥 Agents Management** - Create and manage multiple OpenClaw agents
+- **⚙️ Config Editor** - Visual and JSON configuration editors
+- **📖 Documentation Center** - Offline-accessible OpenClaw docs
+- **📋 Logs Viewer** - Real-time log monitoring with search and export
 
 ## 🛠️ Tech Stack
 
-- **Desktop Framework**: [Tauri 2.x](https://tauri.app/) + [React 18](https://react.dev/)
-- **Language**: TypeScript + Rust
+- **Framework**: [Tauri 2.x](https://tauri.app/) + [React 18](https://react.dev/)
+- **Language**: TypeScript
 - **UI**: [Shadcn/ui](https://ui.shadcn.com/) + [Tailwind CSS](https://tailwindcss.com/)
 - **State**: [Zustand](https://zustand-demo.pmnd.rs/)
 - **Dual Mode**: Desktop (Tauri) + Web (Vite + Node.js backend)
-- **Data Layer**: [seekdb](https://github.com/oceanbase/seekdb) + [PowerMem](https://github.com/oceanbase/powermem)
-- **Agent Framework**: [LangChain DeepAgents](https://docs.langchain.com/oss/python/deepagents/overview) + [LangGraph](https://github.com/langchain-ai/langgraph)
-- **OCR**: [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)
-
----
 
 ## 📦 Installation
 
@@ -76,49 +53,31 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
----
-
 ## 🚀 Quick Start
 
-1. **Launch the app** — ClawMaster automatically detects your OpenClaw environment
-2. **Takeover or install** — Existing installation? One-click takeover. Fresh start? Guided installation
-3. **Start using** — Dashboard for status overview, built-in skills ready out of the box
-4. **Go deeper** — Cost tracking, memory management, agent building — six capabilities at your fingertips
-
----
+1. **Launch the app** - OpenClaw Manager will automatically detect your existing OpenClaw installation
+2. **Review status** - Check the Dashboard for Gateway and channel status
+3. **Configure** - Set up your channels, models, and skills as needed
+4. **Manage** - Use the sidebar to navigate different management sections
 
 ## 📸 Screenshots
 
 > Screenshots coming soon!
 
----
-
 ## 🤝 Contributing
 
-ClawMaster is a community-driven open-source project. All contributors are welcome:
-
-- Submit Issues and Pull Requests
-- Develop built-in skills and application scenarios
-- Adapt to more hardware platforms
-- Improve documentation and internationalization
-
----
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
-
 ## 🙏 Acknowledgments
 
-- [OpenClaw](https://github.com/nicepkg/openclaw) — The open-source agent framework this project serves
-- [OceanBase](https://github.com/oceanbase) — seekdb + PowerMem data layer support
-- [Baidu PaddlePaddle](https://github.com/PaddlePaddle) — PaddleOCR model support
-- [LangChain](https://github.com/langchain-ai) — DeepAgents + LangGraph orchestration support
-- [Tauri](https://tauri.app/) — Lightweight desktop framework
-- [Shadcn/ui](https://ui.shadcn.com/) — Beautiful UI components
+- [OpenClaw](https://github.com/openclaw/openclaw) - The AI agent framework this app manages
+- [Tauri](https://tauri.app/) - For the lightweight desktop framework
+- [Shadcn/ui](https://ui.shadcn.com/) - For the beautiful UI components
 
 ---
 
-Built with 🦞 by the OpenClaw open-source community
+Made with ❤️ by the OpenClaw community

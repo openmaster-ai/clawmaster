@@ -5,7 +5,7 @@
   "identifier": "ai.openclaw.manager",
   "build": {
     "frontendDist": "../packages/web/dist",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:3000",
     "beforeDevCommand": "npm run dev --workspace=@openclaw-manager/web",
     "beforeBuildCommand": "npm run build"
   },
