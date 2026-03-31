@@ -23,7 +23,7 @@ concurrency:
 jobs:
   # ─── Lint & Test (runs on every push/PR) ───
   test:
-    name: Test
+    name: Lint & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,10 +32,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
+
       - name: TypeScript check
-        run: npm run build --workspace=@openclaw-manager/web -- --mode production 2>&1 | head -5 || npx tsc -b --noEmit packages/web
-      - name: Run tests
+        run: npx tsc -b --noEmit packages/web
+
+      - name: Unit tests
         run: npm test
+
       - name: Build web
         run: npm run build
 

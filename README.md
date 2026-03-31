@@ -2,7 +2,7 @@
 
 **The GUI for OpenClaw -- manage providers, channels, and agents from one place.**
 
-[中文文档](./README_CN.md)
+[中文文档](./README_CN.md) | [日本語ドキュメント](./README_JP.md)
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-lightgrey.svg)
@@ -14,11 +14,14 @@ ClawMaster wraps the OpenClaw CLI in a desktop app (Tauri 2) or web UI (Express 
 ## Features
 
 - **Setup wizard** -- detect, install, and onboard OpenClaw in guided steps (API key, model, gateway, channel)
-- **16 LLM providers** -- OpenAI, Anthropic, Google Gemini, xAI, Mistral, Groq, DeepSeek, MiniMax, Kimi, SiliconFlow, OpenRouter, Amazon Bedrock, Google Vertex, Azure OpenAI, Cerebras, and custom OpenAI-compatible endpoints
+- **17 LLM providers** -- OpenAI, Anthropic, Google Gemini, xAI, Mistral, Groq, DeepSeek, MiniMax, Kimi, SiliconFlow, OpenRouter, Amazon Bedrock, Google Vertex, Azure OpenAI, Cerebras, Ollama (local inference), and custom OpenAI-compatible endpoints
+- **Ollama support** -- auto-install, service management, and model pull from the GUI
 - **API key validation** -- real HTTP test before saving any key
 - **6 channel types** -- Discord, Slack, Telegram, Feishu, WeChat (QR scan), WhatsApp (QR scan)
 - **Channel setup guides** -- step-by-step navigation paths with Feishu permissions template (26 scopes, one-click copy)
 - **Observability dashboard** -- cost, token usage, and context health via ClawProbe integration
+- **Session management** -- conversation history viewer with turn-by-turn breakdown
+- **Skill market** -- search, install, and uninstall skills via ClawHub
 - **Memory management** -- PowerMem integration for memory lifecycle
 - **i18n** -- Chinese, English, Japanese (386 keys); language switcher in header and setup wizard
 - **Dark mode** and color themes (Lobster Orange, Ocean Blue)

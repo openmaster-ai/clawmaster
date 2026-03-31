@@ -2,7 +2,7 @@
 
 **OpenClaw 生态的图形化管理工具 -- 在一个界面中管理供应商、频道和智能体。**
 
-[English](./README.md)
+[English](./README.md) | [日本語](./README_JP.md)
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-lightgrey.svg)
@@ -14,11 +14,14 @@
 ## 核心功能
 
 - **安装向导** -- 检测、安装、引导配置 OpenClaw（API Key、模型、网关、频道一步到位）
-- **16 个 LLM 供应商** -- OpenAI、Anthropic、Google Gemini、xAI、Mistral、Groq、DeepSeek、MiniMax、Kimi、SiliconFlow、OpenRouter、Amazon Bedrock、Google Vertex、Azure OpenAI、Cerebras，以及自定义 OpenAI 兼容端点
+- **17 个 LLM 供应商** -- OpenAI、Anthropic、Google Gemini、xAI、Mistral、Groq、DeepSeek、MiniMax、Kimi、SiliconFlow、OpenRouter、Amazon Bedrock、Google Vertex、Azure OpenAI、Cerebras、Ollama（本地推理），以及自定义 OpenAI 兼容端点
+- **Ollama 支持** -- 从 GUI 自动安装、启动服务、拉取模型
 - **API Key 验证** -- 保存前通过真实 HTTP 请求验证密钥有效性
 - **6 种频道类型** -- Discord、Slack、Telegram、飞书、微信（扫码登录）、WhatsApp（扫码登录）
 - **频道配置指南** -- 分步导航，飞书权限模板（26 个 scope 一键复制）
 - **可观测仪表盘** -- 通过 ClawProbe 集成展示费用、Token 用量和上下文健康度
+- **会话管理** -- 对话历史查看器，支持逐轮回放
+- **技能市场** -- 通过 ClawHub 搜索、安装、卸载技能
 - **记忆管理** -- PowerMem 集成，管理记忆生命周期
 - **国际化** -- 中文、英文、日文（386 个翻译键）；顶栏和安装向导均可切换语言
 - **深色模式** 和颜色主题（龙虾橙、海洋蓝）
