@@ -17,6 +17,7 @@ import {
   FileText,
   ScrollText,
   Wrench,
+  Plug,
   Shell,
   Sun,
   Moon,
@@ -39,6 +40,7 @@ const moduleIconMap: Record<string, LucideIcon> = {
   observe: BarChart3,
   memory: Brain,
   sessions: MessageSquare,
+  mcp: Plug,
 }
 
 // Nav label keys map to layout.nav.* in translations
@@ -46,6 +48,7 @@ const moduleNavLabelKeys: Record<string, string> = {
   observe: 'layout.nav.observe',
   memory: 'layout.nav.memory',
   sessions: 'layout.nav.sessions',
+  mcp: 'layout.nav.mcp',
 }
 
 const mainNav: NavItem[] = [
