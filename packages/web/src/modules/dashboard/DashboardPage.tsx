@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { platformResults } from '@/adapters'
 import { formatBootstrapSummary } from '@/shared/adapters/openclawBootstrap'
@@ -34,6 +35,7 @@ function writeDashboardCache(payload: DashboardCachePayload) {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation()
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null)
   const [config, setConfig] = useState<OpenClawConfig | null>(null)
   const [loadingGateway, setLoadingGateway] = useState(true)
@@ -57,7 +59,7 @@ export default function Dashboard() {
       setLoadingGateway(false)
     } else {
       setLoadingGateway(false)
-      setError((prev) => prev ?? gw.error ?? '获取网关状态失败')
+      setError((prev) => prev ?? gw.error ?? t('dashboard.errGatewayStatus'))
     }
 
     if (cfg.success && cfg.data) {
@@ -65,7 +67,7 @@ export default function Dashboard() {
       setLoadingConfig(false)
     } else {
       setLoadingConfig(false)
-      setError((prev) => prev ?? cfg.error ?? '获取配置失败')
+      setError((prev) => prev ?? cfg.error ?? t('dashboard.errConfig'))
     }
 
     if (gw.success && gw.data && cfg.success && cfg.data) {
@@ -75,7 +77,7 @@ export default function Dashboard() {
         config: cfg.data,
       })
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     const cached = readDashboardCache()
@@ -118,9 +120,9 @@ export default function Dashboard() {
   if (!gatewayStatus && !config && (loadingGateway || loadingConfig)) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">概览</h1>
+        <h1 className="text-2xl font-bold">{t('dashboard.title')}</h1>
         <div className="bg-card border border-border rounded-lg p-4 text-sm text-muted-foreground">
-          正在加载概览…
+          {t('dashboard.loadingOverview')}
         </div>
       </div>
     )
@@ -129,7 +131,10 @@ export default function Dashboard() {
   if (error && !gatewayStatus && !config) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-16 text-red-500 text-sm">
-        <p>加载失败：{error ?? '未知错误'}</p>
+        <p>
+          {t('dashboard.loadFailedPrefix')}
+          {error ?? t('common.unknownError')}
+        </p>
       </div>
     )
   }
@@ -149,35 +154,29 @@ export default function Dashboard() {
     config?.gateway?.bind != null && String(config.gateway.bind).trim() !== ''
       ? String(config.gateway.bind)
       : gatewayStatus?.running
-        ? '未写入配置（使用默认）'
+        ? t('dashboard.bindDefault')
         : '—'
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">概览</h1>
+      <h1 className="text-2xl font-bold">{t('dashboard.title')}</h1>
       {error ? (
         <div className="rounded-md border border-amber-500/35 bg-amber-500/5 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
-          部分数据刷新失败：{error}
+          {t('dashboard.partialRefresh', { detail: error })}
         </div>
       ) : null}
 
       {needsBootstrapCta && (
         <div className="rounded-lg border border-amber-500/35 bg-amber-500/5 p-4 text-sm">
-          <p className="font-medium text-amber-950 dark:text-amber-100 mb-2">
-            配置为空且网关未运行
-          </p>
-          <p className="text-muted-foreground mb-3">
-            常见于全新安装或重装后。可尝试一键执行{' '}
-            <code className="font-mono text-xs">openclaw doctor --fix</code> 并启动网关；完整能力请在终端运行{' '}
-            <code className="font-mono text-xs">openclaw onboard</code>。
-          </p>
+          <p className="font-medium text-amber-950 dark:text-amber-100 mb-2">{t('dashboard.emptyConfigTitle')}</p>
+          <p className="text-muted-foreground mb-3">{t('dashboard.emptyConfigBody')}</p>
           <button
             type="button"
             disabled={bootstrapBusy}
             onClick={() => void handleBootstrap()}
             className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm disabled:opacity-50"
           >
-            {bootstrapBusy ? '执行中…' : '一键初始化并启动网关'}
+            {bootstrapBusy ? t('dashboard.bootstrapBusy') : t('dashboard.btnBootstrap')}
           </button>
           {bootstrapHint ? (
             <pre className="mt-3 font-mono text-xs whitespace-pre-wrap break-all text-muted-foreground max-h-48 overflow-y-auto">
@@ -188,61 +187,67 @@ export default function Dashboard() {
       )}
 
       <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-2">系统环境</h3>
+        <h3 className="font-medium mb-2">{t('dashboard.systemEnv')}</h3>
         {systemInfoLoading ? (
-          <p className="text-sm text-muted-foreground">正在检测 Node / npm / OpenClaw…</p>
+          <p className="text-sm text-muted-foreground">{t('dashboard.detectingEnv')}</p>
         ) : systemInfo ? (
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
               <span className="text-muted-foreground">Node.js: </span>
               <span className={systemInfo.nodejs.installed ? 'text-green-600' : 'text-red-500'}>
-                {systemInfo.nodejs.installed ? systemInfo.nodejs.version : '未安装'}
+                {systemInfo.nodejs.installed ? systemInfo.nodejs.version : t('common.notInstalled')}
               </span>
             </div>
             <div>
               <span className="text-muted-foreground">npm: </span>
               <span className={systemInfo.npm.installed ? 'text-green-600' : 'text-red-500'}>
-                {systemInfo.npm.installed ? systemInfo.npm.version : '未安装'}
+                {systemInfo.npm.installed ? systemInfo.npm.version : t('common.notInstalled')}
               </span>
             </div>
             <div>
               <span className="text-muted-foreground">OpenClaw: </span>
               <span className={systemInfo.openclaw.installed ? 'text-green-600' : 'text-red-500'}>
-                {systemInfo.openclaw.installed ? `v${systemInfo.openclaw.version}` : '未安装'}
+                {systemInfo.openclaw.installed ? `v${systemInfo.openclaw.version}` : t('common.notInstalled')}
               </span>
             </div>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">系统环境检测失败，可稍后重试</p>
+          <p className="text-sm text-muted-foreground">{t('dashboard.envDetectFailed')}</p>
         )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-card border border-border rounded-lg p-4">
-          <h3 className="font-medium mb-3">网关状态</h3>
+          <h3 className="font-medium mb-3">{t('dashboard.gatewayCard')}</h3>
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2">
               <span
                 className={`w-3 h-3 rounded-full ${gatewayStatus?.running ? 'bg-green-500' : 'bg-red-500'}`}
               />
-              <span>{gatewayStatus?.running ? '运行中' : '已停止'}</span>
+              <span>{gatewayStatus?.running ? t('dashboard.running') : t('dashboard.stopped')}</span>
             </div>
-            <p className="text-muted-foreground">端口: {gatewayPortDisplay}</p>
-            <p className="text-muted-foreground">绑定: {gatewayBindDisplay}</p>
-            <p className="text-muted-foreground">认证: {config?.gateway?.auth?.mode || '—'}</p>
+            <p className="text-muted-foreground">
+              {t('dashboard.port')}: {gatewayPortDisplay}
+            </p>
+            <p className="text-muted-foreground">
+              {t('dashboard.bind')}: {gatewayBindDisplay}
+            </p>
+            <p className="text-muted-foreground">
+              {t('dashboard.auth')}: {config?.gateway?.auth?.mode || '—'}
+            </p>
           </div>
           <div className="mt-3 flex gap-2">
             <Link
               to="/gateway"
               className="px-3 py-1.5 text-sm bg-primary text-white rounded hover:bg-primary/90"
             >
-              管理
+              {t('dashboard.manage')}
             </Link>
           </div>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-4">
-          <h3 className="font-medium mb-3">通道连接</h3>
+          <h3 className="font-medium mb-3">{t('dashboard.channelsCard')}</h3>
           <div className="space-y-2 text-sm">
             {visibleChannelEntries.map(([name, ch]: [string, OpenClawChannelEntry]) => (
                 <div key={name} className="flex items-center gap-2">
@@ -252,41 +257,43 @@ export default function Dashboard() {
                   <span className="capitalize">{name}</span>
                   {ch.accounts != null && typeof ch.accounts === 'object' ? (
                     <span className="text-muted-foreground">
-                      ({Object.keys(ch.accounts).length} 账号)
+                      ({Object.keys(ch.accounts).length} {t('dashboard.accountsSuffix')})
                     </span>
                   ) : null}
                 </div>
               ))}
-            {channelCount === 0 && <p className="text-muted-foreground">暂无通道配置</p>}
+            {channelCount === 0 && <p className="text-muted-foreground">{t('dashboard.noChannels')}</p>}
             {hiddenChannelCount > 0 && (
-              <p className="text-muted-foreground">还有 {hiddenChannelCount} 个通道，进入「管理通道」查看</p>
+              <p className="text-muted-foreground">
+                {t('dashboard.moreChannels', { count: hiddenChannelCount })}
+              </p>
             )}
           </div>
           <Link
             to="/channels"
             className="mt-3 inline-block px-3 py-1.5 text-sm border border-border rounded hover:bg-accent"
           >
-            管理通道
+            {t('dashboard.manageChannels')}
           </Link>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-4">
-          <h3 className="font-medium mb-3">当前模型</h3>
+          <h3 className="font-medium mb-3">{t('dashboard.modelCard')}</h3>
           <p className="text-lg font-medium">{config?.agents?.defaults?.model?.primary || '-'}</p>
           <p className="text-sm text-muted-foreground">
-            工作区: {config?.agents?.defaults?.workspace || '-'}
+            {t('dashboard.workspace')}: {config?.agents?.defaults?.workspace || '-'}
           </p>
           <Link
             to="/models"
             className="mt-3 inline-block px-3 py-1.5 text-sm border border-border rounded hover:bg-accent"
           >
-            配置模型
+            {t('dashboard.configureModel')}
           </Link>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-4">
-          <h3 className="font-medium mb-3">代理</h3>
-          <p className="text-lg font-medium">{agentCount} 个已配置</p>
+          <h3 className="font-medium mb-3">{t('dashboard.agentsCard')}</h3>
+          <p className="text-lg font-medium">{t('dashboard.agentsConfigured', { count: agentCount })}</p>
           {config?.agents?.list?.slice(0, 3).map((agent) => (
             <p key={agent.id} className="text-sm text-muted-foreground">
               • {agent.name || agent.id}
@@ -296,13 +303,13 @@ export default function Dashboard() {
             to="/agents"
             className="mt-3 inline-block px-3 py-1.5 text-sm border border-border rounded hover:bg-accent"
           >
-            管理代理
+            {t('dashboard.manageAgents')}
           </Link>
         </div>
       </div>
 
       <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">快捷操作</h3>
+        <h3 className="font-medium mb-3">{t('dashboard.quickActions')}</h3>
         <div className="flex gap-3">
           <a
             href="https://docs.openclaw.ai"
@@ -310,19 +317,19 @@ export default function Dashboard() {
             rel="noopener noreferrer"
             className="px-4 py-2 text-sm bg-primary text-white rounded hover:bg-primary/90"
           >
-            📚 OpenClaw 文档
+            {t('dashboard.openDocs')}
           </a>
           <Link
             to="/logs"
             className="px-4 py-2 text-sm border border-border rounded hover:bg-accent"
           >
-            📝 查看日志
+            {t('dashboard.viewLogs')}
           </Link>
           <Link
             to="/config"
             className="px-4 py-2 text-sm border border-border rounded hover:bg-accent"
           >
-            ⚙️ 编辑配置
+            {t('dashboard.editConfig')}
           </Link>
         </div>
       </div>

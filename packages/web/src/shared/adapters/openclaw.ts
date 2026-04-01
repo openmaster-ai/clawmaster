@@ -17,6 +17,7 @@ import { fail, ok } from '@/shared/adapters/types'
 import { getIsTauri } from '@/shared/adapters/platform'
 import { webFetchJson, webFetchVoid } from '@/shared/adapters/webHttp'
 import { unwrapDoubleNestedModelsInRoot } from '@/shared/unwrapDoubleNestedModels'
+import i18n from '@/i18n'
 
 export async function getConfigResult(): Promise<AdapterResult<OpenClawConfig>> {
   if (getIsTauri()) {
@@ -117,14 +118,14 @@ export function agentsFromConfig(config: OpenClawConfig): AgentInfo[] {
 
 export async function getChannelsResult(): Promise<AdapterResult<ChannelInfo[]>> {
   const c = await getConfigResult()
-  if (!c.success || c.data === undefined) return fail(c.error ?? '获取配置失败')
+  if (!c.success || c.data === undefined) return fail(c.error ?? i18n.t('adapters.configLoadFailed'))
   return ok(channelsFromConfig(c.data))
 }
 
 export async function getModelsResult(): Promise<AdapterResult<ModelInfo[]>> {
   if (getIsTauri()) {
     const c = await getConfigResult()
-    if (!c.success || c.data === undefined) return fail(c.error ?? '获取配置失败')
+    if (!c.success || c.data === undefined) return fail(c.error ?? i18n.t('adapters.configLoadFailed'))
     return ok(modelsFromConfig(c.data))
   }
   return webFetchJson<ModelInfo[]>('/api/models')
@@ -133,10 +134,50 @@ export async function getModelsResult(): Promise<AdapterResult<ModelInfo[]>> {
 export async function getAgentsResult(): Promise<AdapterResult<AgentInfo[]>> {
   if (getIsTauri()) {
     const c = await getConfigResult()
-    if (!c.success || c.data === undefined) return fail(c.error ?? '获取配置失败')
+    if (!c.success || c.data === undefined) return fail(c.error ?? i18n.t('adapters.configLoadFailed'))
     return ok(agentsFromConfig(c.data))
   }
   return webFetchJson<AgentInfo[]>('/api/agents')
+}
+
+export type ModelProbeResult = {
+  exitCode: number
+  stdout: string
+  stderr: string
+}
+
+/**
+ * Live probe for one model provider via local `openclaw models status --json --probe --probe-provider <id>`.
+ * May perform real API calls (tokens / rate limits). Desktop uses the same login-shell-resolved `openclaw` as other commands.
+ */
+export async function testModelProviderResult(
+  providerId: string
+): Promise<AdapterResult<ModelProbeResult>> {
+  const id = providerId.trim()
+  if (!id) return fail(i18n.t('adapters.missingProviderId'))
+  if (!/^[a-zA-Z0-9._-]+$/.test(id)) return fail(i18n.t('adapters.invalidProviderId'))
+
+  if (getIsTauri()) {
+    return fromPromise(async () => {
+      const out = await tauriInvoke<{ code: number; stdout: string; stderr: string }>(
+        'run_openclaw_command_captured',
+        {
+          args: ['models', 'status', '--json', '--probe', '--probe-provider', id],
+        }
+      )
+      return {
+        exitCode: out.code,
+        stdout: out.stdout.trimEnd(),
+        stderr: out.stderr.trimEnd(),
+      }
+    })
+  }
+
+  return webFetchJson<ModelProbeResult>('/api/models/probe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ providerId: id }),
+  })
 }
 
 export async function setDefaultModelResult(modelId: string): Promise<AdapterResult<void>> {
@@ -232,7 +273,7 @@ export async function verifyChannelAccountResult(
   account: Record<string, unknown>
 ): Promise<AdapterResult<ChannelVerifyResult>> {
   if (getIsTauri()) {
-    return fromPromise(async () => ({ ok: false, message: 'Tauri 模式暂不支持 verify API，请使用 Web 后端模式' }))
+    return fromPromise(async () => ({ ok: false, message: i18n.t('adapters.tauriVerifyUnsupported') }))
   }
   return webFetchJson<ChannelVerifyResult>(`/api/channels/${encodeURIComponent(type)}/verify`, {
     method: 'POST',
@@ -244,7 +285,7 @@ export async function verifyChannelAccountResult(
 export async function getBindingsResult(): Promise<AdapterResult<OpenClawBinding[]>> {
   if (getIsTauri()) {
     const cfg = await getConfigResult()
-    if (!cfg.success || !cfg.data) return fail(cfg.error ?? '获取配置失败')
+    if (!cfg.success || !cfg.data) return fail(cfg.error ?? i18n.t('adapters.bindingsConfigFailed'))
     return ok(cfg.data.bindings ?? [])
   }
   return webFetchJson<OpenClawBinding[]>('/api/bindings')

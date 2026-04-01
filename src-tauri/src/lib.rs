@@ -1273,6 +1273,27 @@ fn run_openclaw_command(args: Vec<String>) -> Result<String, String> {
     }
 }
 
+/// Same as `run_openclaw_command` but always returns stdout/stderr/exit code (for probes, diagnostics).
+#[derive(Debug, Clone, Serialize)]
+pub struct OpenclawCapturedOutput {
+    pub code: i32,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+#[tauri::command]
+fn run_openclaw_command_captured(args: Vec<String>) -> Result<OpenclawCapturedOutput, String> {
+    let output = openclaw_cmd()
+        .args(&args)
+        .output()
+        .map_err(|e| format!("执行命令失败: {}", e))?;
+    Ok(OpenclawCapturedOutput {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    })
+}
+
 // ClawProbe CLI (`clawprobe` on PATH, same resolution strategy as openclaw).
 // Non-zero exit with JSON on stdout (e.g. `outputJsonError` in --json mode) still returns Ok for UI parsing.
 #[tauri::command]
@@ -1319,6 +1340,7 @@ pub fn run() {
             remove_openclaw_data,
             get_logs,
             run_openclaw_command,
+            run_openclaw_command_captured,
             run_clawprobe_command,
         ])
         .setup(|app| {

@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { platformResults } from '@/adapters'
 import type { OpenClawAgentListItem, OpenClawBinding } from '@/lib/types'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
 import LoadingState from '@/shared/components/LoadingState'
 
 export default function Agents() {
+  const { t } = useTranslation()
   const fetcher = useCallback(async () => platformResults.getConfig(), [])
   const { data: config, loading, error, refetch } = useAdapterCall(fetcher)
   const [busyChannel, setBusyChannel] = useState<string | null>(null)
@@ -22,13 +24,13 @@ export default function Agents() {
   }, [config?.bindings])
 
   if (loading) {
-    return <LoadingState message="加载代理…" />
+    return <LoadingState message={t('agents.loading')} />
   }
 
   if (error || config === null) {
     return (
       <div className="py-16 text-center text-sm text-red-500">
-        {error ? `加载失败：${error}` : '暂无配置数据'}
+        {error ? `${t('agents.loadFailed')}${error}` : t('agents.noConfig')}
       </div>
     )
   }
@@ -42,7 +44,7 @@ export default function Agents() {
       : await platformResults.deleteBinding(channel)
     setBusyChannel(null)
     if (!r.success) {
-      setActionError(r.error ?? '绑定操作失败')
+      setActionError(r.error ?? t('agents.bindFailed'))
       return
     }
     await refetch()
@@ -60,26 +62,26 @@ export default function Agents() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">代理管理</h1>
+        <h1 className="text-2xl font-bold">{t('agents.title')}</h1>
         <button className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90">
-          + 创建代理
+          {t('agents.create')}
         </button>
       </div>
 
       {/* Default settings */}
       <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">默认设置</h3>
+        <h3 className="font-medium mb-3">{t('agents.defaultsTitle')}</h3>
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
-            <span className="text-muted-foreground">默认模型: </span>
+            <span className="text-muted-foreground">{t('agents.defaultModel')} </span>
             <span className="font-medium">{defaults.model?.primary || '-'}</span>
           </div>
           <div>
-            <span className="text-muted-foreground">工作区: </span>
+            <span className="text-muted-foreground">{t('agents.workspace')} </span>
             <span className="font-mono">{defaults.workspace || '-'}</span>
           </div>
           <div>
-            <span className="text-muted-foreground">最大并发: </span>
+            <span className="text-muted-foreground">{t('agents.maxConcurrent')} </span>
             <span className="font-medium">{defaults.maxConcurrent || '-'}</span>
           </div>
         </div>
@@ -103,21 +105,23 @@ export default function Agents() {
                 </span>
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                工作区: <span className="font-mono">{agent.workspace || defaults.workspace}</span>
+                {t('agents.workspaceLabel')}{' '}
+                <span className="font-mono">{agent.workspace || defaults.workspace}</span>
               </p>
               {agent.agentDir && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  配置: <span className="font-mono">{agent.agentDir}</span>
+                  {t('agents.configDir')}{' '}
+                  <span className="font-mono">{agent.agentDir}</span>
                 </p>
               )}
             </div>
             <div className="flex gap-2">
               <button className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent">
-                编辑
+                {t('agents.edit')}
               </button>
               {agent.id !== 'main' && (
                 <button className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent text-red-500">
-                  删除
+                  {t('agents.delete')}
                 </button>
               )}
             </div>
@@ -127,14 +131,14 @@ export default function Agents() {
 
       {agents.length === 0 && (
         <div className="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground">
-          暂无代理配置
+          {t('agents.noAgents')}
         </div>
       )}
 
       {/* Route bindings */}
       <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">路由绑定</h3>
-        <p className="text-sm text-muted-foreground mb-3">不同通道的消息可以路由到不同的代理（留空表示不绑定）</p>
+        <h3 className="font-medium mb-3">{t('agents.routeBindingsTitle')}</h3>
+        <p className="text-sm text-muted-foreground mb-3">{t('agents.routeBindingsHint')}</p>
         {actionError ? <p className="text-sm text-red-500 mb-3">{actionError}</p> : null}
         <div className="space-y-2">
           {channels.map((channel) => {
@@ -150,20 +154,24 @@ export default function Agents() {
                   onChange={(e) => void saveBinding(channel, e.target.value)}
                   disabled={busyChannel === channel}
                 >
-                  <option value="">不绑定</option>
+                  <option value="">{t('agents.unbindOption')}</option>
                   {agents.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name || a.id} ({a.id})
                     </option>
                   ))}
                 </select>
-                {busyChannel === channel ? <span className="text-xs text-muted-foreground">保存中…</span> : null}
-                {invalid ? <span className="text-xs text-red-500">绑定的 agent 不存在</span> : null}
+                {busyChannel === channel ? (
+                  <span className="text-xs text-muted-foreground">{t('agents.savingBinding')}</span>
+                ) : null}
+                {invalid ? (
+                  <span className="text-xs text-red-500">{t('agents.invalidBinding')}</span>
+                ) : null}
               </div>
             )
           })}
         </div>
-        {!channels.length && <p className="text-sm text-muted-foreground">无可绑定通道</p>}
+        {!channels.length && <p className="text-sm text-muted-foreground">{t('agents.noChannelsToBind')}</p>}
         {!!config?.bindings?.length && (
           <div className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground space-y-1">
             {(config.bindings as OpenClawBinding[]).map((binding, idx) => (
@@ -175,9 +183,7 @@ export default function Agents() {
         )}
       </div>
 
-      <div className="text-xs text-muted-foreground">
-        💡 代理配置需要编辑配置文件，请前往「配置」页面
-      </div>
+      <div className="text-xs text-muted-foreground">{t('agents.footerHint')}</div>
     </div>
   )
 }

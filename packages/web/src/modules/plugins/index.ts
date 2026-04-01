@@ -3,7 +3,7 @@ import type { ClawModule } from '@/types/module'
 
 export default {
   id: 'plugins',
-  name: '插件',
+  nameKey: 'nav.plugins',
   icon: '🔌',
   /** Nav order: after Skills (50), before Agents (60) */
   navOrder: 52,

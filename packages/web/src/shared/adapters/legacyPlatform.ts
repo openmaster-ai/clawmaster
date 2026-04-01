@@ -1,3 +1,4 @@
+import i18n from '@/i18n'
 import type {
   AgentConfig,
   AgentInfo,
@@ -18,7 +19,7 @@ import { getIsTauri } from '@/shared/adapters/platform'
 
 function unwrap<T>(r: AdapterResult<T>, emptyFallback?: T): T {
   if (!r.success) {
-    throw new Error(r.error || '请求失败')
+    throw new Error(r.error || i18n.t('common.requestFailed'))
   }
   if (r.data !== undefined) {
     return r.data
@@ -31,7 +32,7 @@ function unwrap<T>(r: AdapterResult<T>, emptyFallback?: T): T {
 
 function unwrapVoid(r: AdapterResult<void>): void {
   if (!r.success) {
-    throw new Error(r.error || '请求失败')
+    throw new Error(r.error || i18n.t('common.requestFailed'))
   }
 }
 

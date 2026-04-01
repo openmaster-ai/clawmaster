@@ -1,17 +1,25 @@
 import { Outlet, useLocation, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { getClawModules } from './moduleRegistry'
 
+function normalizeLang(lng: string): 'en' | 'zh' | 'ja' {
+  if (lng.startsWith('zh')) return 'zh'
+  if (lng.startsWith('ja')) return 'ja'
+  return 'en'
+}
+
 export default function Layout() {
+  const { t, i18n } = useTranslation()
   const location = useLocation()
   const currentPath = location.pathname
   const navItems = getClawModules().map((m) => ({
     path: m.route.path,
-    label: m.name,
+    label: t(m.nameKey),
     icon: m.icon,
   }))
 
-  const currentTitle = navItems.find((item) => item.path === currentPath)?.label ?? '龙虾管家'
+  const currentTitle = navItems.find((item) => item.path === currentPath)?.label ?? t('layout.appTitle')
 
   return (
     <div className="flex h-screen bg-background">
@@ -22,8 +30,8 @@ export default function Layout() {
               🦞
             </div>
             <div>
-              <h1 className="font-semibold text-sm">龙虾管家</h1>
-              <p className="text-xs text-muted-foreground">OpenClaw Manager</p>
+              <h1 className="font-semibold text-sm">{t('layout.appTitle')}</h1>
+              <p className="text-xs text-muted-foreground">{t('layout.appSubtitle')}</p>
             </div>
           </div>
         </div>
@@ -50,14 +58,27 @@ export default function Layout() {
         </nav>
 
         <div className="p-3 border-t border-border">
-          <label className="text-xs text-muted-foreground mb-1 block">实例</label>
+          <label className="text-xs text-muted-foreground mb-1 block">{t('layout.instance')}</label>
           <select className="w-full px-2 py-1.5 text-sm bg-muted rounded border border-border">
-            <option>默认实例</option>
+            <option>{t('layout.defaultInstance')}</option>
           </select>
         </div>
 
         <div className="p-3 border-t border-border">
-          <label className="text-xs text-muted-foreground mb-1 block">主题</label>
+          <label className="text-xs text-muted-foreground mb-1 block">{t('layout.language')}</label>
+          <select
+            className="w-full px-2 py-1.5 text-sm bg-muted rounded border border-border"
+            value={normalizeLang(i18n.language)}
+            onChange={(e) => void i18n.changeLanguage(e.target.value)}
+          >
+            <option value="en">{t('layout.langEn')}</option>
+            <option value="zh">{t('layout.langZh')}</option>
+            <option value="ja">{t('layout.langJa')}</option>
+          </select>
+        </div>
+
+        <div className="p-3 border-t border-border">
+          <label className="text-xs text-muted-foreground mb-1 block">{t('layout.theme')}</label>
           <select
             className="w-full px-2 py-1.5 text-sm bg-muted rounded border border-border"
             onChange={(e) => {
@@ -70,9 +91,9 @@ export default function Layout() {
               }
             }}
           >
-            <option value="default">龙虾橙</option>
-            <option value="ocean">海洋蓝</option>
-            <option value="dark">深色</option>
+            <option value="default">{t('layout.themeDefault')}</option>
+            <option value="ocean">{t('layout.themeOcean')}</option>
+            <option value="dark">{t('layout.themeDark')}</option>
           </select>
         </div>
       </aside>
@@ -89,12 +110,14 @@ export default function Layout() {
         <footer className="h-8 border-t border-border flex items-center px-4 text-xs text-muted-foreground gap-4">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-green-500" />
-            Gateway 运行中
+            {t('layout.footerGatewayRunning')}
           </span>
           <span>|</span>
-          <span>模型: GLM-5</span>
+          <span>
+            {t('layout.footerModel')}: GLM-5
+          </span>
           <span>|</span>
-          <span>v2026.3.8</span>
+          <span>{t('layout.footerVersion')}</span>
         </footer>
       </div>
     </div>

@@ -3,7 +3,7 @@ import type { ClawModule } from '@/types/module'
 
 export default {
   id: 'observe',
-  name: '监控',
+  nameKey: 'nav.observe',
   icon: '📡',
   navOrder: 15,
   route: {

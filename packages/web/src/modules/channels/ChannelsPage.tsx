@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { platformResults } from '@/adapters'
 import type { OpenClawChannelEntry } from '@/lib/types'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
 import LoadingState from '@/shared/components/LoadingState'
-import { getChannelRegistryEntry } from '@/modules/channels/channelRegistry'
+import { buildChannelRegistry } from '@/modules/channels/channelRegistry'
 import type { ChannelFieldDef } from '@/modules/channels/channelRegistry'
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -35,21 +36,55 @@ function parseAccount(id: string, raw: unknown): ConfiguredAccountRow {
   return { id, name, enabled, groupPolicy }
 }
 
-const CHANNEL_TYPES = [
-  { id: 'feishu', name: '飞书', icon: '📌', description: 'Lark/Feishu 机器人' },
-  { id: 'telegram', name: 'Telegram', icon: '✈️', description: 'Telegram Bot API' },
-  { id: 'discord', name: 'Discord', icon: '💬', description: 'Discord Bot' },
-  { id: 'qq', name: 'QQ', icon: '🐧', description: 'QQ 机器人 / OneBot 适配' },
-  { id: 'dingtalk', name: '钉钉', icon: '📎', description: '钉钉企业机器人' },
-  { id: 'wechat', name: '微信', icon: '🟢', description: '企业微信 / 微信桥接' },
-  { id: 'matrix', name: 'Matrix', icon: '🧩', description: 'Matrix 客户端/机器人' },
-  { id: 'teams', name: 'Teams', icon: '👥', description: 'Microsoft Teams Bot' },
-  { id: 'whatsapp', name: 'WhatsApp', icon: '📱', description: 'WhatsApp Web API' },
-  { id: 'signal', name: 'Signal', icon: '🔐', description: 'Signal CLI' },
-  { id: 'slack', name: 'Slack', icon: '💼', description: 'Slack App' },
+const CHANNEL_TYPE_ORDER = [
+  'feishu',
+  'telegram',
+  'discord',
+  'qq',
+  'dingtalk',
+  'wechat',
+  'matrix',
+  'teams',
+  'whatsapp',
+  'signal',
+  'slack',
 ] as const
 
+const CHANNEL_ICONS: Record<(typeof CHANNEL_TYPE_ORDER)[number], string> = {
+  feishu: '📌',
+  telegram: '✈️',
+  discord: '💬',
+  qq: '🐧',
+  dingtalk: '📎',
+  wechat: '🟢',
+  matrix: '🧩',
+  teams: '👥',
+  whatsapp: '📱',
+  signal: '🔐',
+  slack: '💼',
+}
+
+type ChannelTypeRow = {
+  id: (typeof CHANNEL_TYPE_ORDER)[number]
+  name: string
+  icon: string
+  description: string
+}
+
 export default function Channels() {
+  const { t, i18n } = useTranslation()
+  const registry = useMemo(() => buildChannelRegistry(t), [t, i18n.language])
+  const channelTypes: ChannelTypeRow[] = useMemo(
+    () =>
+      CHANNEL_TYPE_ORDER.map((id) => ({
+        id,
+        icon: CHANNEL_ICONS[id],
+        name: t(`channelsPage.types.${id}.name`),
+        description: t(`channelsPage.types.${id}.description`),
+      })),
+    [t, i18n.language]
+  )
+
   const fetcher = useCallback(async () => platformResults.getConfig(), [])
   const { data: config, loading, error, refetch } = useAdapterCall(fetcher)
 
@@ -71,8 +106,8 @@ export default function Channels() {
   const channels: Record<string, OpenClawChannelEntry> = config?.channels || {}
   const allAgents = config?.agents?.list ?? []
   const editorRegistry = useMemo(
-    () => (editorTypeId ? getChannelRegistryEntry(editorTypeId) : null),
-    [editorTypeId]
+    () => (editorTypeId ? registry[editorTypeId] ?? null : null),
+    [registry, editorTypeId]
   )
   const editorFields: ChannelFieldDef[] = editorRegistry?.fields ?? []
 
@@ -91,7 +126,9 @@ export default function Channels() {
     const result: ConfiguredChannelRow[] = []
 
     for (const [type, ch] of Object.entries(channels)) {
-      const typeInfo = CHANNEL_TYPES.find((t) => t.id === type) || { name: type, icon: '📡' }
+      const known = channelTypes.find((row) => row.id === type)
+      const typeName = known?.name ?? type
+      const icon = known?.icon ?? '📡'
       const accountsMap = ch.accounts
       if (!accountsMap) continue
 
@@ -101,8 +138,8 @@ export default function Channels() {
 
       result.push({
         type,
-        typeName: typeInfo.name,
-        icon: typeInfo.icon,
+        typeName,
+        icon,
         accounts,
         enabled: ch.enabled !== false,
       })
@@ -112,12 +149,12 @@ export default function Channels() {
   }
 
   const configuredChannels = getConfiguredChannels()
-  const missingTypes = CHANNEL_TYPES.filter((type) => !channels[type.id])
+  const missingTypes = channelTypes.filter((type) => !channels[type.id])
 
   function openAddModal(initialTypeId?: string) {
-    const list = CHANNEL_TYPES.filter((t) => !channels[t.id])
+    const list = channelTypes.filter((row) => !channels[row.id])
     if (list.length === 0) {
-      window.alert('所有通道类型已在配置中存在。如需调整，请使用下方「已配置」中的按钮或前往「配置」页。')
+      window.alert(t('channelsPage.allTypesPresent'))
       return
     }
     setPendingTypeId(initialTypeId ?? list[0].id)
@@ -134,7 +171,7 @@ export default function Channels() {
     const rawAccount = isRecord(accountsMap[resolvedAccountId])
       ? (accountsMap[resolvedAccountId] as Record<string, unknown>)
       : {}
-    const reg = getChannelRegistryEntry(typeId)
+    const reg = registry[typeId]
     const initialValues: Record<string, string> = {}
     for (const f of reg?.fields ?? []) {
       const v = rawAccount[f.key]
@@ -172,7 +209,7 @@ export default function Channels() {
     const r = await platformResults.verifyChannelAccount(editorTypeId, account)
     setVerifyBusy(false)
     if (!r.success || !r.data) {
-      setVerifyResult({ ok: false, message: r.error ?? '验证失败' })
+      setVerifyResult({ ok: false, message: r.error ?? t('channelsPage.verifyFailed') })
       return
     }
     setVerifyResult(r.data)
@@ -185,12 +222,12 @@ export default function Channels() {
         f.required ||
         (f.requiredWhen ? (editorValues[f.requiredWhen.key] ?? '') === f.requiredWhen.value : false)
       if (required && !(editorValues[f.key] ?? '').trim()) {
-        setEditorError(`请填写必填项：${f.label}`)
+        setEditorError(t('channelsPage.requiredField', { label: f.label }))
         return
       }
     }
     if (!editorAccountId.trim()) {
-      setEditorError('账号 ID 不能为空')
+      setEditorError(t('channelsPage.accountIdRequired'))
       return
     }
 
@@ -241,19 +278,19 @@ export default function Channels() {
       }
       const r = await platformResults.saveFullConfig(next)
       if (!r.success) {
-        setEditorError(r.error ?? '保存失败')
+        setEditorError(r.error ?? t('channelsPage.saveFailed'))
         return
       }
       if (editorAgentId.trim()) {
         const br = await platformResults.upsertBinding(editorTypeId, editorAgentId.trim())
         if (!br.success) {
-          setEditorError(br.error ?? '绑定 Agent 失败')
+          setEditorError(br.error ?? t('channelsPage.bindAgentFailed'))
           return
         }
       } else {
         const dr = await platformResults.deleteBinding(editorTypeId)
         if (!dr.success) {
-          setEditorError(dr.error ?? '解绑 Agent 失败')
+          setEditorError(dr.error ?? t('channelsPage.unbindFailed'))
           return
         }
       }
@@ -271,14 +308,14 @@ export default function Channels() {
   }
 
   async function removeChannelType(typeId: string, label: string) {
-    if (!window.confirm(`确定从配置中移除「${label}」通道？此操作不会删除聊天数据，仅删除 openclaw.json 中的通道条目。`)) {
+    if (!window.confirm(t('channelsPage.removeConfirm', { label }))) {
       return
     }
     setBusy(true)
     try {
       const r = await platformResults.removeChannel(typeId)
       if (!r.success) {
-        window.alert(r.error ?? '移除失败')
+        window.alert(r.error ?? t('channelsPage.removeFailed'))
         return
       }
       await refetch()
@@ -292,7 +329,7 @@ export default function Channels() {
     try {
       const r = await platformResults.setConfig(`channels.${typeId}.enabled`, enabled)
       if (!r.success) {
-        window.alert(r.error ?? '切换启用状态失败')
+        window.alert(r.error ?? t('channelsPage.toggleFailed'))
         return
       }
       await refetch()
@@ -302,36 +339,36 @@ export default function Channels() {
   }
 
   if (loading) {
-    return <LoadingState message="加载通道…" />
+    return <LoadingState message={t('channelsPage.loading')} />
   }
 
   if (error || config === null) {
     return (
       <div className="py-16 text-center text-sm text-red-500">
-        {error ? `加载失败：${error}` : '暂无配置数据'}
+        {error ? `${t('channelsPage.loadFailed')}${error}` : t('channelsPage.noConfig')}
       </div>
     )
   }
 
-  const pendingMeta = pendingTypeId ? CHANNEL_TYPES.find((t) => t.id === pendingTypeId) : null
+  const pendingMeta = pendingTypeId ? channelTypes.find((row) => row.id === pendingTypeId) : null
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold">通道管理</h1>
+        <h1 className="text-2xl font-bold">{t('channelsPage.title')}</h1>
         <button
           type="button"
           disabled={busy || missingTypes.length === 0}
           onClick={() => openAddModal()}
           className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50"
         >
-          + 添加通道
+          {t('channelsPage.add')}
         </button>
       </div>
 
       {configuredChannels.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-medium">已配置</h3>
+          <h3 className="font-medium">{t('channelsPage.configured')}</h3>
           {configuredChannels.map((ch) => (
             <div key={ch.type} className="bg-card border border-border rounded-lg p-4">
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
@@ -349,7 +386,7 @@ export default function Channels() {
                     onClick={() => void toggleChannelEnabled(ch.type, !ch.enabled)}
                     className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent disabled:opacity-50"
                   >
-                    {ch.enabled ? '禁用' : '启用'}
+                    {ch.enabled ? t('channelsPage.disable') : t('channelsPage.enable')}
                   </button>
                   <button
                     type="button"
@@ -357,7 +394,7 @@ export default function Channels() {
                     onClick={() => openChannelEditor(ch.type)}
                     className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent"
                   >
-                    设置
+                    {t('channelsPage.settings')}
                   </button>
                   <button
                     type="button"
@@ -365,7 +402,7 @@ export default function Channels() {
                     onClick={() => void removeChannelType(ch.type, ch.typeName)}
                     className="px-3 py-1.5 text-sm border border-destructive/50 text-destructive rounded hover:bg-destructive/5 disabled:opacity-50"
                   >
-                    删除通道
+                    {t('channelsPage.removeChannel')}
                   </button>
                 </div>
               </div>
@@ -382,7 +419,9 @@ export default function Channels() {
                       />
                       <span className="text-sm font-medium">{acc.name || acc.id}</span>
                       {acc.groupPolicy === 'disabled' && (
-                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded">群聊已禁用</span>
+                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                          {t('channelsPage.groupChatDisabled')}
+                        </span>
                       )}
                     </div>
                     <div className="flex gap-2">
@@ -391,14 +430,14 @@ export default function Channels() {
                         onClick={() => openChannelEditor(ch.type, acc.id)}
                         className="px-2 py-1 text-xs border border-border rounded hover:bg-accent"
                       >
-                        编辑
+                        {t('channelsPage.edit')}
                       </button>
                       <button
                         type="button"
                         disabled={busy}
                         onClick={async () => {
                           if (!config) return
-                          if (!window.confirm(`确定删除账号「${acc.id}」吗？`)) return
+                          if (!window.confirm(t('channelsPage.deleteAccountConfirm', { id: acc.id }))) return
                           const current = channels[ch.type]
                           if (!current || !isRecord(current) || !isRecord(current.accounts)) return
                           const nextAccounts = { ...(current.accounts as Record<string, unknown>) }
@@ -417,7 +456,7 @@ export default function Channels() {
                             }
                             const r = await platformResults.saveFullConfig(next)
                             if (!r.success) {
-                              window.alert(r.error ?? '删除账号失败')
+                              window.alert(r.error ?? t('channelsPage.deleteAccountFailed'))
                               return
                             }
                             await refetch()
@@ -427,7 +466,7 @@ export default function Channels() {
                         }}
                         className="px-2 py-1 text-xs border border-border rounded hover:bg-accent text-muted-foreground"
                       >
-                        移除账号
+                        {t('channelsPage.removeAccount')}
                       </button>
                     </div>
                   </div>
@@ -439,7 +478,7 @@ export default function Channels() {
       )}
 
       <div id="add-channel-list" className="space-y-3">
-        <h3 className="font-medium">添加新通道</h3>
+        <h3 className="font-medium">{t('channelsPage.addNewSection')}</h3>
         {missingTypes.map((type) => (
           <div
             key={type.id}
@@ -458,19 +497,17 @@ export default function Channels() {
               onClick={() => openChannelEditor(type.id)}
               className="px-3 py-1.5 text-sm bg-primary text-white rounded hover:bg-primary/90 shrink-0 disabled:opacity-50"
             >
-              设置
+              {t('channelsPage.settings')}
             </button>
           </div>
         ))}
 
         {missingTypes.length === 0 && (
-          <p className="text-sm text-muted-foreground">所有通道类型已配置</p>
+          <p className="text-sm text-muted-foreground">{t('channelsPage.allConfigured')}</p>
         )}
       </div>
 
-      <div className="text-xs text-muted-foreground leading-relaxed">
-        💡 各通道字段与接入说明与 clawpanel 向导对齐；「启用/禁用」仅改 <code className="font-mono text-[11px]">enabled</code>。插件安装、扫码登录等仍需在 Gateway / CLI 侧完成。
-      </div>
+      <div className="text-xs text-muted-foreground leading-relaxed">{t('channelsPage.footerNote')}</div>
 
       {modalOpen && pendingMeta && (
         <div
@@ -485,15 +522,14 @@ export default function Channels() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="channel-modal-title" className="text-lg font-semibold">
-              添加 {pendingMeta.name} 通道
+              {t('channelsPage.modalAddTitle', { name: pendingMeta.name })}
             </h2>
             <p className="text-sm text-muted-foreground">
-              将打开 <code className="font-mono text-xs">channels.{pendingMeta.id}</code> 的结构化配置向导（接入步骤 + 凭证字段），保存后写入{' '}
-              <code className="font-mono text-xs">openclaw.json</code>。
+              {t('channelsPage.modalAddBody', { id: pendingMeta.id })}
             </p>
             {missingTypes.length > 1 && (
               <div>
-                <label className="text-sm font-medium block mb-1">通道类型</label>
+                <label className="text-sm font-medium block mb-1">{t('channelsPage.typeLabel')}</label>
                 <select
                   className="w-full px-3 py-2 rounded border border-border bg-background text-sm"
                   value={pendingTypeId ?? ''}
@@ -514,7 +550,7 @@ export default function Channels() {
                 onClick={() => setModalOpen(false)}
                 disabled={busy}
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -522,7 +558,7 @@ export default function Channels() {
                 disabled={busy}
                 onClick={() => void submitAddChannel()}
               >
-                {busy ? '保存中…' : '保存'}
+                {busy ? t('channelsPage.saving') : t('common.save')}
               </button>
             </div>
           </div>
@@ -542,11 +578,15 @@ export default function Channels() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="channel-editor-title" className="text-lg font-semibold">
-              设置通道：{CHANNEL_TYPES.find((t) => t.id === editorTypeId)?.name || editorTypeId}
+              {t('channelsPage.editorTitle', {
+                name: channelTypes.find((row) => row.id === editorTypeId)?.name ?? editorTypeId,
+              })}
             </h2>
             {editorRegistry && editorRegistry.guideSteps.length > 0 && (
               <details className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm" open>
-                <summary className="cursor-pointer font-medium text-foreground">接入步骤（点击折叠）</summary>
+                <summary className="cursor-pointer font-medium text-foreground">
+                  {t('channelsPage.guideSummary')}
+                </summary>
                 <ol className="mt-3 list-decimal space-y-2 pl-5 text-muted-foreground leading-relaxed">
                   {editorRegistry.guideSteps.map((step, i) => (
                     <li key={i}>
@@ -579,18 +619,18 @@ export default function Channels() {
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <label className="text-sm space-y-1">
-                <span className="text-muted-foreground">通道状态</span>
+                <span className="text-muted-foreground">{t('channelsPage.channelState')}</span>
                 <select
                   className="w-full px-3 py-2 rounded border border-border bg-background text-sm"
                   value={editorEnabled ? 'true' : 'false'}
                   onChange={(e) => setEditorEnabled(e.target.value === 'true')}
                 >
-                  <option value="true">启用</option>
-                  <option value="false">禁用</option>
+                  <option value="true">{t('channelsPage.enable')}</option>
+                  <option value="false">{t('channelsPage.disable')}</option>
                 </select>
               </label>
               <label className="text-sm space-y-1">
-                <span className="text-muted-foreground">账号 ID</span>
+                <span className="text-muted-foreground">{t('channelsPage.accountId')}</span>
                 <input
                   className="w-full px-3 py-2 rounded border border-border bg-background text-sm"
                   value={editorAccountId}
@@ -599,33 +639,33 @@ export default function Channels() {
                 />
               </label>
               <label className="text-sm space-y-1">
-                <span className="text-muted-foreground">账号名称</span>
+                <span className="text-muted-foreground">{t('channelsPage.accountName')}</span>
                 <input
                   className="w-full px-3 py-2 rounded border border-border bg-background text-sm"
                   value={editorAccountName}
                   onChange={(e) => setEditorAccountName(e.target.value)}
-                  placeholder="可选显示名称"
+                  placeholder={t('channelsPage.accountNamePlaceholder')}
                 />
               </label>
               <label className="text-sm space-y-1">
-                <span className="text-muted-foreground">账号状态</span>
+                <span className="text-muted-foreground">{t('channelsPage.accountState')}</span>
                 <select
                   className="w-full px-3 py-2 rounded border border-border bg-background text-sm"
                   value={editorAccountEnabled ? 'true' : 'false'}
                   onChange={(e) => setEditorAccountEnabled(e.target.value === 'true')}
                 >
-                  <option value="true">启用</option>
-                  <option value="false">禁用</option>
+                  <option value="true">{t('channelsPage.enable')}</option>
+                  <option value="false">{t('channelsPage.disable')}</option>
                 </select>
               </label>
               <label className="text-sm space-y-1">
-                <span className="text-muted-foreground">绑定 Agent</span>
+                <span className="text-muted-foreground">{t('channelsPage.bindAgent')}</span>
                 <select
                   className="w-full px-3 py-2 rounded border border-border bg-background text-sm"
                   value={editorAgentId}
                   onChange={(e) => setEditorAgentId(e.target.value)}
                 >
-                  <option value="">不绑定（使用默认路由）</option>
+                  <option value="">{t('channelsPage.bindAgentNone')}</option>
                   {allAgents.map((agent) => (
                     <option key={agent.id} value={agent.id}>
                       {agent.name || agent.id} ({agent.id})
@@ -676,7 +716,12 @@ export default function Channels() {
                 )
               })}
             </div>
-            {editorError ? <p className="text-sm text-red-500">保存失败：{editorError}</p> : null}
+            {editorError ? (
+              <p className="text-sm text-red-500">
+                {t('channelsPage.saveErrorPrefix')}
+                {editorError}
+              </p>
+            ) : null}
             {verifyResult ? (
               <div
                 className={`text-sm rounded border px-3 py-2 ${
@@ -698,7 +743,7 @@ export default function Channels() {
                 disabled={busy || verifyBusy}
                 onClick={() => void runVerifyEditor()}
               >
-                {verifyBusy ? '验证中…' : '验证连接'}
+                {verifyBusy ? t('channelsPage.verifying') : t('channelsPage.verifyConnection')}
               </button>
               <button
                 type="button"
@@ -706,7 +751,7 @@ export default function Channels() {
                 onClick={() => setEditorOpen(false)}
                 disabled={busy}
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -714,7 +759,7 @@ export default function Channels() {
                 disabled={busy}
                 onClick={() => void saveChannelEditor()}
               >
-                {busy ? '保存中…' : '保存'}
+                {busy ? t('channelsPage.saving') : t('common.save')}
               </button>
             </div>
           </div>

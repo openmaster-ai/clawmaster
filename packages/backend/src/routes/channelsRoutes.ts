@@ -2,6 +2,7 @@ import type express from 'express'
 import { readConfigJsonOrEmpty, updateConfigJson } from '../configJson.js'
 import { agentsFromConfig, channelsFromConfig, modelsFromConfig } from '../derive.js'
 import { verifyChannelAccount } from '../services/channelVerify.js'
+import { probeOpenclawModelProvider, assertSafeProviderId } from '../services/modelProbe.js'
 import { isRecord } from '../serverUtils.js'
 
 export function registerChannelsRoutes(app: express.Express): void {
@@ -55,6 +56,21 @@ export function registerChannelsRoutes(app: express.Express): void {
 
   app.get('/api/models', (_req, res) => {
     res.json(modelsFromConfig(readConfigJsonOrEmpty()))
+  })
+
+  app.post('/api/models/probe', async (req, res) => {
+    const raw = (req.body as { providerId?: string })?.providerId
+    if (typeof raw !== 'string') {
+      return res.status(400).type('text').send('Missing providerId')
+    }
+    try {
+      assertSafeProviderId(raw)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(400).type('text').send(msg)
+    }
+    const out = await probeOpenclawModelProvider(raw)
+    res.json(out)
   })
 
   app.post('/api/models/default', async (req, res) => {

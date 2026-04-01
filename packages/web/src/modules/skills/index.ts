@@ -3,7 +3,7 @@ import type { ClawModule } from '@/types/module'
 
 export default {
   id: 'skills',
-  name: '技能',
+  nameKey: 'nav.skills',
   icon: '⚡',
   navOrder: 50,
   route: {

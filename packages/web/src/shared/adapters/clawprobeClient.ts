@@ -1,3 +1,4 @@
+import i18n from '@/i18n'
 import { tauriInvoke } from '@/shared/adapters/invoke'
 import { getIsTauri } from '@/shared/adapters/platform'
 import type { AdapterResult } from '@/shared/adapters/types'
@@ -12,12 +13,12 @@ import type {
 
 function parseClawprobeStdout(raw: string): AdapterResult<unknown> {
   const trimmed = raw.trim()
-  if (!trimmed) return fail('ClawProbe 无输出')
+  if (!trimmed) return fail(i18n.t('clawprobe.emptyOutput'))
   let parsed: unknown
   try {
     parsed = JSON.parse(trimmed)
   } catch {
-    return fail('ClawProbe 返回非 JSON')
+    return fail(i18n.t('clawprobe.notJson'))
   }
   if (
     typeof parsed === 'object' &&
@@ -26,7 +27,7 @@ function parseClawprobeStdout(raw: string): AdapterResult<unknown> {
     (parsed as { ok: unknown }).ok === false
   ) {
     const o = parsed as { message?: string; error?: string }
-    return fail(o.message ?? o.error ?? 'ClawProbe 失败')
+    return fail(o.message ?? o.error ?? i18n.t('clawprobe.genericFail'))
   }
   return ok(parsed)
 }
@@ -43,7 +44,7 @@ async function invokeClawprobeJson(args: string[]): Promise<AdapterResult<unknow
 export async function clawprobeStatusResult(): Promise<AdapterResult<ClawprobeStatusJson>> {
   if (getIsTauri()) {
     const r = await invokeClawprobeJson(['status', '--json'])
-    if (!r.success) return fail<ClawprobeStatusJson>(r.error ?? '请求失败')
+    if (!r.success) return fail<ClawprobeStatusJson>(r.error ?? i18n.t('common.requestFailed'))
     return ok(r.data as ClawprobeStatusJson)
   }
   return webFetchJson<ClawprobeStatusJson>('/api/clawprobe/status')
@@ -58,7 +59,7 @@ export async function clawprobeCostResult(
     else if (period === 'month') args.push('--month')
     else if (period === 'all') args.push('--all')
     const r = await invokeClawprobeJson(args)
-    if (!r.success) return fail<ClawprobeCostJson>(r.error ?? '请求失败')
+    if (!r.success) return fail<ClawprobeCostJson>(r.error ?? i18n.t('common.requestFailed'))
     return ok(r.data as ClawprobeCostJson)
   }
   const q = new URLSearchParams({ period })
@@ -68,7 +69,7 @@ export async function clawprobeCostResult(
 export async function clawprobeConfigResult(): Promise<AdapterResult<ClawprobeConfigJson>> {
   if (getIsTauri()) {
     const r = await invokeClawprobeJson(['config', '--json'])
-    if (!r.success) return fail<ClawprobeConfigJson>(r.error ?? '请求失败')
+    if (!r.success) return fail<ClawprobeConfigJson>(r.error ?? i18n.t('common.requestFailed'))
     return ok(r.data as ClawprobeConfigJson)
   }
   return webFetchJson<ClawprobeConfigJson>('/api/clawprobe/config')
@@ -81,14 +82,14 @@ export async function clawprobeBootstrapResult(): Promise<AdapterResult<Clawprob
         args: ['status', '--json'],
       })
       const before = parseClawprobeStdout(beforeRaw)
-      if (!before.success) return fail(before.error ?? '读取 ClawProbe 状态失败')
+      if (!before.success) return fail(before.error ?? i18n.t('clawprobe.readStatusFailed'))
       const beforeObj = before.data as { daemonRunning?: boolean }
       if (beforeObj?.daemonRunning === true) {
         return ok({
           ok: true,
           alreadyRunning: true,
           daemonRunning: true,
-          message: 'ClawProbe 守护进程已在运行',
+          message: i18n.t('clawprobe.daemonAlreadyRunning'),
         })
       }
 
@@ -97,16 +98,16 @@ export async function clawprobeBootstrapResult(): Promise<AdapterResult<Clawprob
         args: ['status', '--json'],
       })
       const after = parseClawprobeStdout(afterRaw)
-      if (!after.success) return fail(after.error ?? '读取 ClawProbe 状态失败')
+      if (!after.success) return fail(after.error ?? i18n.t('clawprobe.readStatusFailed'))
       const afterObj = after.data as { daemonRunning?: boolean }
       if (afterObj?.daemonRunning !== true) {
-        return fail('启动命令执行后仍未检测到守护进程')
+        return fail(i18n.t('clawprobe.daemonStillDown'))
       }
       return ok({
         ok: true,
         alreadyRunning: false,
         daemonRunning: true,
-        message: 'ClawProbe 已成功拉起',
+        message: i18n.t('clawprobe.bootstrapOk'),
         stdout: startRaw.trim(),
       })
     } catch (e) {

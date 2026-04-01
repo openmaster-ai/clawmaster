@@ -3,7 +3,7 @@ import type { ClawModule } from '@/types/module'
 
 export default {
   id: 'dashboard',
-  name: '概览',
+  nameKey: 'nav.dashboard',
   icon: '📊',
   navOrder: 10,
   route: {

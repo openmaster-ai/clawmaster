@@ -3,7 +3,7 @@ import type { ClawModule } from '@/types/module'
 
 export default {
   id: 'config',
-  name: '配置',
+  nameKey: 'nav.config',
   icon: '⚙️',
   navOrder: 70,
   route: {

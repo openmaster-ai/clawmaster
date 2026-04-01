@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import i18n from '@/i18n'
 import type { AdapterResult } from '@/shared/adapters/types'
 
 export interface UseAdapterCallOptions {
@@ -23,7 +24,7 @@ export function useAdapterCall<T>(
         setData(res.data ?? null)
         setError(null)
       } else {
-        setError(res.error ?? '未知错误')
+        setError(res.error ?? i18n.t('common.unknownError'))
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

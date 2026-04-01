@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { platformResults } from '@/adapters'
 import type { OpenClawPluginInfo } from '@/lib/types'
@@ -20,29 +21,24 @@ function isPluginDisabledStatus(status?: string): boolean {
   return /\bdisabled\b/.test(s) || /\boff\b/.test(s)
 }
 
-const STATUS_FILTER_OPTIONS = [
-  { value: 'loaded', label: '已加载' },
-  { value: 'all', label: '全部' },
-  { value: 'disabled', label: '已禁用' },
-] as const
-
-type StatusFilterMode = (typeof STATUS_FILTER_OPTIONS)[number]['value']
+type StatusFilterMode = 'loaded' | 'all' | 'disabled'
 
 const DESCRIPTION_COLLAPSE_CHARS = 96
 
 function PluginDescriptionCell({ text }: { text: string | undefined }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const t = text?.trim() ?? ''
-  if (!t) {
+  const rawText = text?.trim() ?? ''
+  if (!rawText) {
     return <span className="text-muted-foreground">—</span>
   }
-  const collapsible = t.length > DESCRIPTION_COLLAPSE_CHARS
+  const collapsible = rawText.length > DESCRIPTION_COLLAPSE_CHARS
   return (
     <div className="min-w-0 max-w-md">
       <p
         className={`text-muted-foreground break-words ${!open && collapsible ? 'line-clamp-2' : ''}`}
       >
-        {t}
+        {rawText}
       </p>
       {collapsible && (
         <button
@@ -50,7 +46,7 @@ function PluginDescriptionCell({ text }: { text: string | undefined }) {
           className="mt-1 text-xs text-primary hover:underline"
           onClick={() => setOpen((o) => !o)}
         >
-          {open ? '收起' : '展开'}
+          {open ? t('plugins.collapse') : t('plugins.expand')}
         </button>
       )}
     </div>
@@ -58,11 +54,23 @@ function PluginDescriptionCell({ text }: { text: string | undefined }) {
 }
 
 export default function PluginsPage() {
+  const { t, i18n } = useTranslation()
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilterMode>('loaded')
   const [busy, setBusy] = useState<{ id: string; enabling: boolean } | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [installId, setInstallId] = useState('')
+
+  const statusFilterOptions = useMemo(
+    () =>
+      [
+        { value: 'loaded' as const, label: t('plugins.filterLoaded') },
+        { value: 'all' as const, label: t('plugins.filterAll') },
+        { value: 'disabled' as const, label: t('plugins.filterDisabled') },
+      ] as const,
+    [t]
+  )
+
   const fetcher = useCallback(async () => platformResults.listPlugins(), [])
   const { data, loading, error, refetch } = useAdapterCall(fetcher)
 
@@ -73,18 +81,18 @@ export default function PluginsPage() {
       const r = await platformResults.setPluginEnabled(id, enabled)
       setBusy(null)
       if (!r.success) {
-        setActionError(r.error ?? '操作失败')
+        setActionError(r.error ?? t('plugins.opFailed'))
         return
       }
       void refetch()
     },
-    [refetch]
+    [refetch, t]
   )
 
   const runInstall = useCallback(async () => {
     const id = installId.trim()
     if (!id) {
-      setActionError('请填写插件 ID')
+      setActionError(t('plugins.idRequired'))
       return
     }
     setActionError(null)
@@ -92,15 +100,17 @@ export default function PluginsPage() {
     const r = await platformResults.installPlugin(id)
     setBusy(null)
     if (!r.success) {
-      setActionError(r.error ?? '安装失败')
+      setActionError(r.error ?? t('plugins.installFailed'))
       return
     }
     setInstallId('')
     void refetch()
-  }, [installId, refetch])
+  }, [installId, refetch, t])
 
   const plugins = data?.plugins ?? []
   const rawCliOutput = data?.rawCliOutput
+
+  const sortLocale = i18n.language === 'zh' ? 'zh-Hans-CN' : i18n.language === 'ja' ? 'ja' : 'en'
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase()
@@ -125,25 +135,28 @@ export default function PluginsPage() {
       const ae = isPluginEnabled(a.status)
       const be = isPluginEnabled(b.status)
       if (ae !== be) return ae ? -1 : 1
-      return (a.name || a.id).localeCompare(b.name || b.id, 'zh-Hans-CN')
+      return (a.name || a.id).localeCompare(b.name || b.id, sortLocale)
     })
     return list
-  }, [plugins, filter, statusFilter])
+  }, [plugins, filter, statusFilter, sortLocale])
 
   if (loading) {
-    return <LoadingState message="加载插件列表（openclaw plugins list）…" />
+    return <LoadingState message={t('plugins.loading')} />
   }
 
   if (error || !data) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-red-500">加载失败：{error ?? '未知错误'}</p>
+        <p className="text-sm text-red-500">
+          {t('plugins.loadFailed')}
+          {error ?? t('common.unknownError')}
+        </p>
         <button
           type="button"
           onClick={() => void refetch()}
           className="px-3 py-1.5 border border-border rounded text-sm"
         >
-          重试
+          {t('common.retry')}
         </button>
       </div>
     )
@@ -153,11 +166,9 @@ export default function PluginsPage() {
     <div className="space-y-6 max-w-5xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">插件</h1>
+          <h1 className="text-2xl font-bold">{t('plugins.title')}</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            数据来自本机 <code className="font-mono text-xs">openclaw plugins list</code>
-            （含内置与已识别插件）。在「状态」列可执行{' '}
-            <code className="font-mono text-xs">plugins enable / disable</code>；若网关已在运行，部分环境需重启后生效。
+            {t('plugins.intro')}
           </p>
         </div>
         <button
@@ -165,27 +176,27 @@ export default function PluginsPage() {
           onClick={() => void refetch()}
           className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent shrink-0"
         >
-          刷新
+          {t('plugins.refresh')}
         </button>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
         <input
           type="search"
-          placeholder="按名称、ID、状态、说明过滤…"
+          placeholder={t('plugins.filterPlaceholder')}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="w-full sm:max-w-md px-3 py-2 rounded border border-border bg-background text-sm"
         />
         <label className="flex items-center gap-2 text-sm shrink-0">
-          <span className="text-muted-foreground whitespace-nowrap">状态</span>
+          <span className="text-muted-foreground whitespace-nowrap">{t('plugins.statusLabel')}</span>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilterMode)}
             className="px-3 py-2 rounded border border-border bg-background text-sm min-w-[7.5rem]"
-            aria-label="按加载状态筛选插件"
+            aria-label={t('plugins.statusFilterAria')}
           >
-            {STATUS_FILTER_OPTIONS.map((opt) => (
+            {statusFilterOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -197,7 +208,7 @@ export default function PluginsPage() {
             type="text"
             value={installId}
             onChange={(e) => setInstallId(e.target.value)}
-            placeholder="输入插件 ID（例如 @openclaw/xxx）"
+            placeholder={t('plugins.installPlaceholder')}
             className="px-3 py-2 rounded border border-border bg-background text-sm min-w-[16rem]"
           />
           <button
@@ -206,7 +217,7 @@ export default function PluginsPage() {
             onClick={() => void runInstall()}
             className="px-3 py-2 text-sm border border-border rounded hover:bg-accent disabled:opacity-50"
           >
-            {busy?.id === installId.trim() ? '安装中…' : '安装插件'}
+            {busy?.id === installId.trim() ? t('plugins.installBusy') : t('plugins.install')}
           </button>
         </div>
       </div>
@@ -222,10 +233,10 @@ export default function PluginsPage() {
           <table className="w-full text-sm table-fixed min-w-[640px]">
             <thead className="bg-muted/50 text-left">
               <tr>
-                <th className="px-4 py-2 font-medium w-[20%]">名称 / ID</th>
-                <th className="px-4 py-2 font-medium w-[22%] min-w-[11rem]">状态</th>
-                <th className="px-4 py-2 font-medium w-[10%]">版本</th>
-                <th className="px-4 py-2 font-medium">说明</th>
+                <th className="px-4 py-2 font-medium w-[20%]">{t('plugins.thNameId')}</th>
+                <th className="px-4 py-2 font-medium w-[22%] min-w-[11rem]">{t('plugins.thStatus')}</th>
+                <th className="px-4 py-2 font-medium w-[10%]">{t('plugins.thVersion')}</th>
+                <th className="px-4 py-2 font-medium">{t('plugins.thDescription')}</th>
               </tr>
             </thead>
             <tbody>
@@ -253,24 +264,19 @@ export default function PluginsPage() {
                       <div className="flex flex-wrap gap-1">
                         <button
                           type="button"
-                          disabled={
-                            busy !== null ||
-                            isPluginEnabled(p.status)
-                          }
+                          disabled={busy !== null || isPluginEnabled(p.status)}
                           onClick={() => void runSetEnabled(p.id, true)}
                           className="px-2 py-0.5 text-xs rounded border border-border bg-background hover:bg-accent disabled:opacity-50 disabled:pointer-events-none"
                         >
-                          {busy?.id === p.id && busy.enabling ? '…' : '启用'}
+                          {busy?.id === p.id && busy.enabling ? '…' : t('plugins.enable')}
                         </button>
                         <button
                           type="button"
-                          disabled={
-                            busy !== null || isPluginDisabledStatus(p.status)
-                          }
+                          disabled={busy !== null || isPluginDisabledStatus(p.status)}
                           onClick={() => void runSetEnabled(p.id, false)}
                           className="px-2 py-0.5 text-xs rounded border border-border bg-background hover:bg-accent disabled:opacity-50 disabled:pointer-events-none"
                         >
-                          {busy?.id === p.id && !busy.enabling ? '…' : '禁用'}
+                          {busy?.id === p.id && !busy.enabling ? '…' : t('plugins.disable')}
                         </button>
                       </div>
                     </div>
@@ -286,16 +292,14 @@ export default function PluginsPage() {
             </tbody>
           </table>
           {filtered.length === 0 && (
-            <p className="px-4 py-6 text-center text-muted-foreground text-sm">无匹配项</p>
+            <p className="px-4 py-6 text-center text-muted-foreground text-sm">{t('plugins.noMatch')}</p>
           )}
         </div>
       )}
 
       {plugins.length === 0 && rawCliOutput && (
         <div className="rounded-lg border border-border bg-muted/20 p-4">
-          <p className="text-sm text-muted-foreground mb-2">
-            未能解析为表格，以下为 CLI 原始输出：
-          </p>
+          <p className="text-sm text-muted-foreground mb-2">{t('plugins.rawCliTitle')}</p>
           <pre className="text-xs font-mono whitespace-pre-wrap break-all max-h-96 overflow-auto">
             {rawCliOutput}
           </pre>
@@ -303,26 +307,24 @@ export default function PluginsPage() {
       )}
 
       {plugins.length === 0 && !rawCliOutput && (
-        <p className="text-sm text-muted-foreground">列表为空。请确认 CLI 可用且版本支持 plugins 子命令。</p>
+        <p className="text-sm text-muted-foreground">{t('plugins.emptyList')}</p>
       )}
 
       <div className="flex flex-wrap gap-3 text-sm">
-        <p className="text-muted-foreground w-full">
-          与「技能」并列：技能多来自 ClawHub；本页为 OpenClaw 内置/插件清单。
-        </p>
+        <p className="text-muted-foreground w-full">{t('plugins.footerNote')}</p>
         <a
           href="https://docs.openclaw.ai"
           target="_blank"
           rel="noopener noreferrer"
           className="px-px text-primary underline"
         >
-          文档
+          {t('plugins.docs')}
         </a>
         <Link to="/config" className="text-primary underline">
-          编辑配置
+          {t('plugins.editConfig')}
         </Link>
         <Link to="/skills" className="text-primary underline">
-          前往技能
+          {t('plugins.gotoSkills')}
         </Link>
       </div>
     </div>

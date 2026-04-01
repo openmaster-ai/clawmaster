@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { platformResults } from '@/adapters'
 import type { GatewayStatus, OpenClawConfig } from '@/lib/types'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
@@ -8,6 +9,7 @@ import { fail, ok } from '@/shared/adapters/types'
 import LoadingState from '@/shared/components/LoadingState'
 
 export default function Gateway() {
+  const { t } = useTranslation()
   const fetcher = useCallback(async (): Promise<
     AdapterResult<{ status: GatewayStatus; config: OpenClawConfig }>
   > => {
@@ -17,11 +19,11 @@ export default function Gateway() {
     ])
     const combined = allSuccess2(gw, cfg)
     if (!combined.success) {
-      return fail(combined.error ?? '加载失败')
+      return fail(combined.error ?? t('common.unknownError'))
     }
     const bundle = combined.data!
     return ok({ status: bundle.a, config: bundle.b })
-  }, [])
+  }, [t])
 
   const { data, loading, error, refetch } = useAdapterCall(fetcher)
   const [startBusy, setStartBusy] = useState(false)
@@ -39,7 +41,7 @@ export default function Gateway() {
     try {
       const r = await platformResults.startGateway()
       if (!r.success) {
-        alert(`启动失败: ${r.error ?? '未知错误'}`)
+        alert(t('gateway.startFailed', { detail: r.error ?? t('common.unknownError') }))
         return
       }
       for (let i = 0; i < 30; i++) {
@@ -51,9 +53,7 @@ export default function Gateway() {
         }
       }
       await refetch()
-      alert(
-        '仍未检测到网关已运行。若端口被占用或配置有误，请在系统终端执行 `openclaw gateway start` 查看报错，或打开「日志」页排查。'
-      )
+      alert(t('gateway.stillNotRunning'))
     } finally {
       setStartBusy(false)
     }
@@ -62,7 +62,7 @@ export default function Gateway() {
   async function handleStop() {
     const r = await platformResults.stopGateway()
     if (!r.success) {
-      alert(`停止失败: ${r.error ?? '未知错误'}`)
+      alert(t('gateway.stopFailed', { detail: r.error ?? t('common.unknownError') }))
       return
     }
     window.setTimeout(() => void refetch(), 1000)
@@ -71,7 +71,7 @@ export default function Gateway() {
   async function handleRestart() {
     const r = await platformResults.restartGateway()
     if (!r.success) {
-      alert(`重启失败: ${r.error ?? '未知错误'}`)
+      alert(t('gateway.restartFailed', { detail: r.error ?? t('common.unknownError') }))
       return
     }
     window.setTimeout(() => void refetch(), 1000)
@@ -81,7 +81,7 @@ export default function Gateway() {
     const token = data?.config?.gateway?.auth?.token
     if (token) {
       void navigator.clipboard.writeText(token)
-      alert('Token 已复制')
+      alert(t('gateway.tokenCopied'))
     }
   }
 
@@ -92,7 +92,7 @@ export default function Gateway() {
       const r = await platformResults.getWhatsAppLoginStatus()
       if (!active) return
       if (!r.success || !r.data) {
-        setWaError(r.error ?? '获取 WhatsApp 登录状态失败')
+        setWaError(r.error ?? t('gateway.waStatusFailed'))
         return
       }
       setWaError(null)
@@ -106,7 +106,7 @@ export default function Gateway() {
       active = false
       if (timer) window.clearTimeout(timer)
     }
-  }, [])
+  }, [t])
 
   async function handleWhatsAppStart() {
     setWaBusy(true)
@@ -114,7 +114,7 @@ export default function Gateway() {
     const r = await platformResults.startWhatsAppLogin()
     setWaBusy(false)
     if (!r.success || !r.data) {
-      setWaError(r.error ?? '启动扫码失败')
+      setWaError(r.error ?? t('gateway.waStartFailed'))
       return
     }
     setWaStatus(r.data)
@@ -125,7 +125,7 @@ export default function Gateway() {
     const r = await platformResults.cancelWhatsAppLogin()
     setWaBusy(false)
     if (!r.success || !r.data) {
-      setWaError(r.error ?? '取消扫码失败')
+      setWaError(r.error ?? t('gateway.waCancelFailed'))
       return
     }
     setWaError(null)
@@ -133,12 +133,15 @@ export default function Gateway() {
   }
 
   if (loading) {
-    return <LoadingState message="加载网关…" />
+    return <LoadingState message={t('gateway.loading')} />
   }
 
   if (error || !data) {
     return (
-      <div className="py-16 text-center text-sm text-red-500">加载失败：{error ?? '未知错误'}</div>
+      <div className="py-16 text-center text-sm text-red-500">
+        {t('gateway.loadFailed')}
+        {error ?? t('common.unknownError')}
+      </div>
     )
   }
 
@@ -173,7 +176,7 @@ export default function Gateway() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">网关管理</h1>
+      <h1 className="text-2xl font-bold">{t('gateway.title')}</h1>
 
       <div className="bg-card border border-border rounded-lg p-8 text-center">
         <div className="flex items-center justify-center gap-3 mb-2">
@@ -183,16 +186,13 @@ export default function Gateway() {
           <span
             className={`text-2xl font-bold ${status?.running ? 'text-green-600' : 'text-red-600'}`}
           >
-            {status?.running ? '运行中' : '已停止'}
+            {status?.running ? t('gateway.statusRunning') : t('gateway.statusStopped')}
           </span>
         </div>
         <p className="text-muted-foreground font-mono">{gatewayUrl}</p>
         <p className="text-xs text-muted-foreground max-w-lg mx-auto mt-3 text-left leading-relaxed">
-          这是 <span className="font-mono">WebSocket</span> 网关地址，供 OpenClaw 客户端与代理连接。本地 Control UI（网关仪表盘）默认在{' '}
-          <span className="font-mono">{dashboardHttpBase}</span>
-          {gatewayAuthToken
-            ? '；已配置令牌时，下方按钮会在链接中附带一次性认证片段（#token，不会出现在服务器访问日志里）。'
-            : '；若连接提示需要令牌，请在本页配置区查看 Token 或运行 `openclaw dashboard --no-open` 获取链接。'}
+          {t('gateway.wsHint', { url: dashboardHttpBase })}
+          {gatewayAuthToken ? t('gateway.tokenHashHint') : t('gateway.noTokenHint')}
         </p>
         <div className="mt-4 flex flex-wrap justify-center gap-3">
           {status?.running ? (
@@ -202,14 +202,14 @@ export default function Gateway() {
                 onClick={() => void handleStop()}
                 className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
               >
-                停止
+                {t('gateway.stop')}
               </button>
               <button
                 type="button"
                 onClick={() => void handleRestart()}
                 className="px-4 py-2 border border-border rounded hover:bg-accent"
               >
-                重启
+                {t('gateway.restart')}
               </button>
             </>
           ) : (
@@ -219,7 +219,7 @@ export default function Gateway() {
               onClick={() => void handleStart()}
               className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50"
             >
-              {startBusy ? '正在启动…' : '启动'}
+              {startBusy ? t('gateway.starting') : t('gateway.start')}
             </button>
           )}
           <a
@@ -228,61 +228,61 @@ export default function Gateway() {
             rel="noopener noreferrer"
             className="px-4 py-2 border border-border rounded hover:bg-accent"
           >
-            打开本地 Dashboard
+            {t('gateway.openDashboard')}
           </a>
         </div>
       </div>
 
       <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-4">配置</h3>
+        <h3 className="font-medium mb-4">{t('gateway.configTitle')}</h3>
         <div className="space-y-4">
           <div className="flex items-center gap-4">
-            <label className="w-24 text-sm text-muted-foreground">端口:</label>
+            <label className="w-24 text-sm text-muted-foreground">{t('gateway.portLabel')}</label>
             <input
               type="number"
               value={config?.gateway?.port || 18789}
               className="px-3 py-1.5 bg-muted rounded border border-border w-32"
               readOnly
             />
-            <span className="text-xs text-muted-foreground">（只读，需在配置文件中修改）</span>
+            <span className="text-xs text-muted-foreground">{t('gateway.portReadonly')}</span>
           </div>
           <div className="flex items-center gap-4">
-            <label className="w-24 text-sm text-muted-foreground">绑定模式:</label>
+            <label className="w-24 text-sm text-muted-foreground">{t('gateway.bindLabel')}</label>
             <div className="flex gap-4 text-sm">
               <label className="flex items-center gap-2">
                 <input type="radio" checked={config?.gateway?.bind === 'loopback'} readOnly />
-                <span>本地</span>
+                <span>{t('gateway.bindLoopback')}</span>
               </label>
               <label className="flex items-center gap-2">
                 <input type="radio" checked={config?.gateway?.bind === 'lan'} readOnly />
-                <span>局域网</span>
+                <span>{t('gateway.bindLan')}</span>
               </label>
               <label className="flex items-center gap-2">
                 <input type="radio" checked={config?.gateway?.bind === 'tailnet'} readOnly />
-                <span>Tailscale</span>
+                <span>{t('gateway.bindTailnet')}</span>
               </label>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <label className="w-24 text-sm text-muted-foreground">认证方式:</label>
+            <label className="w-24 text-sm text-muted-foreground">{t('gateway.authLabel')}</label>
             <div className="flex gap-4 text-sm">
               <label className="flex items-center gap-2">
                 <input type="radio" checked={config?.gateway?.auth?.mode === 'token'} readOnly />
-                <span>Token</span>
+                <span>{t('gateway.authToken')}</span>
               </label>
               <label className="flex items-center gap-2">
                 <input type="radio" checked={config?.gateway?.auth?.mode === 'password'} readOnly />
-                <span>密码</span>
+                <span>{t('gateway.authPassword')}</span>
               </label>
               <label className="flex items-center gap-2">
                 <input type="radio" checked={config?.gateway?.auth?.mode === 'none'} readOnly />
-                <span>无</span>
+                <span>{t('gateway.authNone')}</span>
               </label>
             </div>
           </div>
           {config?.gateway?.auth?.mode === 'token' && config?.gateway?.auth?.token && (
             <div className="flex items-center gap-4">
-              <label className="w-24 text-sm text-muted-foreground">Token:</label>
+              <label className="w-24 text-sm text-muted-foreground">{t('gateway.authToken')}:</label>
               <input
                 type="password"
                 value={config.gateway.auth.token}
@@ -294,21 +294,20 @@ export default function Gateway() {
                 onClick={copyToken}
                 className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent"
               >
-                复制
+                {t('gateway.copy')}
               </button>
             </div>
           )}
         </div>
-        <p className="mt-4 text-xs text-muted-foreground">
-          💡 配置修改需要编辑配置文件，请前往「配置」页面
-        </p>
+        <p className="mt-4 text-xs text-muted-foreground">{t('gateway.configFooter')}</p>
       </div>
 
       <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">WhatsApp 扫码登录</h3>
+        <h3 className="font-medium mb-3">{t('gateway.waTitle')}</h3>
         <div className="space-y-2 text-sm">
           <p className="text-muted-foreground">
-            当前状态：<span className="font-medium text-foreground">{waStatus?.status ?? 'idle'}</span>
+            {t('gateway.waStatus')}{' '}
+            <span className="font-medium text-foreground">{waStatus?.status ?? 'idle'}</span>
             {waStatus?.message ? ` · ${waStatus.message}` : ''}
           </p>
           {waStatus?.qr ? (
@@ -324,7 +323,7 @@ export default function Gateway() {
               disabled={waBusy}
               className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent disabled:opacity-50"
             >
-              {waBusy ? '处理中…' : '开始扫码'}
+              {waBusy ? t('gateway.waProcessing') : t('gateway.waStart')}
             </button>
             <button
               type="button"
@@ -332,17 +331,17 @@ export default function Gateway() {
               disabled={waBusy}
               className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent disabled:opacity-50"
             >
-              取消
+              {t('gateway.waCancel')}
             </button>
           </div>
         </div>
       </div>
 
       <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">最近日志</h3>
+        <h3 className="font-medium mb-3">{t('gateway.logsTitle')}</h3>
         <div className="bg-muted rounded p-3 text-sm font-mono text-muted-foreground h-32 overflow-auto">
-          <p>12:34:56 [INFO] Gateway started on port {config?.gateway?.port || 18789}</p>
-          <p className="text-xs text-muted-foreground mt-2">完整日志请前往「日志」页面查看</p>
+          <p>{t('gateway.logsPlaceholder', { port: config?.gateway?.port || 18789 })}</p>
+          <p className="text-xs text-muted-foreground mt-2">{t('gateway.logsFullHint')}</p>
         </div>
       </div>
     </div>

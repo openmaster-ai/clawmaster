@@ -16,6 +16,8 @@ import {
   bootstrapAfterInstallResult,
   formatBootstrapSummary,
 } from '@/shared/adapters/openclawBootstrap'
+import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
 
 interface StartupDetectorProps {
   onDetected: (info: SystemInfo) => void
@@ -83,52 +85,53 @@ export default function StartupDetector({
   const [installProgress, setInstallProgress] = useState(0)
   /** Summary after successful install/reinstall: doctor --fix + gateway start */
   const [bootstrapInfo, setBootstrapInfo] = useState<string | null>(null)
-  const [message, setMessage] = useState('正在检测环境...')
+  const [message, setMessage] = useState(() => i18n.t('startup.checkingEnv'))
   const [isTauriDetected] = useState<boolean | null>(() =>
     typeof window !== 'undefined' ? getIsTauri() : null
   )
+  const { t } = useTranslation()
 
   const detect = useCallback(async () => {
     try {
-      setMessage('正在检测系统环境...')
+      setMessage(t('startup.detectingSystem'))
       setStatus('checking')
 
       if (getIsTauri()) {
         console.log('[StartupDetector] Using Tauri adapter')
-        setMessage('正在通过 Tauri 检测系统...')
+        setMessage(t('startup.detectingTauri'))
         const info = await detectTauri()
         setSystemInfo(info)
 
         if (info.openclaw.installed) {
           setStatus('detected')
-          setMessage('检测到 OpenClaw 已安装')
+          setMessage(t('startup.openclawInstalled'))
         } else {
           setStatus('not-installed')
-          setMessage('未检测到 OpenClaw')
+          setMessage(t('startup.openclawMissing'))
         }
         return
       }
 
       console.log('[StartupDetector] Using Web API adapter')
-      setMessage('正在通过 Web API 检测系统...')
+      setMessage(t('startup.detectingWeb'))
       const info = await detectWeb()
       setSystemInfo(info)
 
       if (info.openclaw.installed) {
         setStatus('detected')
-        setMessage('检测到 OpenClaw 已安装')
+        setMessage(t('startup.openclawInstalled'))
       } else {
         setStatus('not-installed')
-        setMessage('未检测到 OpenClaw')
+        setMessage(t('startup.openclawMissing'))
       }
     } catch (err: unknown) {
       console.error('[StartupDetector] Detection error:', err)
       setStatus('error')
-      const errorMsg = err instanceof Error ? err.message : '检测失败'
+      const errorMsg = err instanceof Error ? err.message : t('startup.detectFailed')
       setMessage(errorMsg)
       onError(errorMsg)
     }
-  }, [onError])
+  }, [onError, t])
 
   useEffect(() => {
     console.log('[StartupDetector] Tauri environment detected:', getIsTauri())
@@ -160,7 +163,7 @@ export default function StartupDetector({
       if (cancelled) return
       setVersionsLoading(false)
       if (!r.success || r.data === undefined) {
-        setVersionsError(r.error ?? '获取版本列表失败')
+        setVersionsError(r.error ?? t('startup.fetchVersionsFailed'))
         setNpmMeta(null)
         setSelectedSpec('latest')
         return
@@ -171,7 +174,7 @@ export default function StartupDetector({
     return () => {
       cancelled = true
     }
-  }, [showInstallGuide, systemInfo?.npm.installed, versionsRetryToken])
+  }, [showInstallGuide, systemInfo?.npm.installed, versionsRetryToken, t])
 
   const runInstall = useCallback(async () => {
     setInstalling(true)
@@ -189,7 +192,7 @@ export default function StartupDetector({
           ok: false,
           code: -1,
           stdout: '',
-          stderr: b.error ?? '备份失败',
+          stderr: b.error ?? t('startup.backupFailed'),
         })
         setInstalling(false)
         setInstallPhase('idle')
@@ -205,7 +208,7 @@ export default function StartupDetector({
           ok: false,
           code: -1,
           stdout: '',
-          stderr: u.error ?? '卸载步骤失败',
+          stderr: u.error ?? t('startup.uninstallStepFailed'),
         })
         setInstalling(false)
         setInstallPhase('idle')
@@ -232,9 +235,7 @@ export default function StartupDetector({
         {
           id: 'uninstall',
           ok: u.data.ok,
-          message: u.data.ok
-            ? '已卸载全局 openclaw（含 npm rename 失败时的 --force / 目录清理回退）'
-            : '卸载 openclaw 仍失败，将继续尝试安装',
+          message: u.data.ok ? t('startup.uninstallOkMsg') : t('startup.uninstallWarnMsg'),
           stdout: u.data.stdout,
           stderr: u.data.stderr,
         },
@@ -245,10 +246,10 @@ export default function StartupDetector({
             i.success && i.data
               ? i.data.ok
                 ? localPkgPath.trim()
-                  ? '已从本地 .tgz 安装完成'
-                  : '安装完成'
-                : '安装失败'
-              : '安装请求失败',
+                  ? t('startup.installDoneLocal')
+                  : t('startup.installDone')
+                : t('startup.installFailed')
+              : t('startup.installCliFailed'),
           stdout: i.success && i.data ? i.data.stdout : '',
           stderr:
             i.success && i.data ? i.data.stderr : i.success === false ? (i.error ?? '') : '',
@@ -278,7 +279,7 @@ export default function StartupDetector({
         ok: false,
         code: -1,
         stdout: '',
-        stderr: r.error ?? '安装请求失败',
+        stderr: r.error ?? t('startup.installRequestFailed'),
       })
       setBootstrapInfo(null)
       return
@@ -291,7 +292,7 @@ export default function StartupDetector({
     }
     setInstalling(false)
     setInstallPhase('idle')
-  }, [selectedSpec, systemInfo?.openclaw.installed, localPkgPath])
+  }, [selectedSpec, systemInfo?.openclaw.installed, localPkgPath, t])
 
   if (showInstallGuide && systemInfo) {
     return (
@@ -299,32 +300,18 @@ export default function StartupDetector({
         <div className="w-16 h-16 bg-primary rounded-lg flex items-center justify-center text-white text-3xl mb-4">
           🦞
         </div>
-        <h1 className="text-xl font-bold mb-2">安装 OpenClaw</h1>
+        <h1 className="text-xl font-bold mb-2">{t('startup.installTitle')}</h1>
         <p className="text-muted-foreground text-center max-w-md mb-4">
-          {systemInfo.openclaw.installed ? (
-            <>
-              检测到已安装 OpenClaw：点击「一键重装」将按顺序执行——① 将{' '}
-              <code className="font-mono text-xs">~/.openclaw</code> 打成快照备份到{' '}
-              <code className="font-mono text-xs">~/.openclaw_snapshots</code>（若无数据目录则跳过）；②{' '}
-              <code className="font-mono text-xs">npm uninstall -g openclaw</code>（不卸载 clawhub）；③ 安装你选的版本。
-            </>
-          ) : (
-            <>
-              选择 npm 标签或版本后点击「一键安装」，执行全局安装（与终端{' '}
-              <code className="font-mono text-xs">npm install -g</code> 等价）。完成后请点「重新检测」。
-            </>
-          )}
+          {systemInfo.openclaw.installed ? t('startup.reinstallBlurb') : t('startup.installBlurb')}
         </p>
         <div className="bg-card border border-border rounded-lg p-4 w-full max-w-lg mb-4 space-y-4 text-sm">
           {systemInfo.npm.installed ? (
             <>
               <div>
-                <p className="font-medium mb-2">选择版本</p>
-                <p className="text-xs text-muted-foreground mb-2">
-                  列表来自 npm registry：发布标签 + 至多 120 个历史版本（按主版本号从新到旧排序）。
-                </p>
+                <p className="font-medium mb-2">{t('startup.chooseVersion')}</p>
+                <p className="text-xs text-muted-foreground mb-2">{t('startup.versionListHint')}</p>
                 {versionsLoading && (
-                  <p className="text-muted-foreground text-sm">正在拉取版本列表…</p>
+                  <p className="text-muted-foreground text-sm">{t('startup.fetchingVersions')}</p>
                 )}
                 {versionsError && (
                   <div className="rounded-md border border-destructive/50 bg-destructive/5 p-2 text-destructive text-sm mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -334,7 +321,7 @@ export default function StartupDetector({
                       className="text-primary underline text-xs shrink-0"
                       onClick={() => setVersionsRetryToken((n) => n + 1)}
                     >
-                      重试拉取
+                      {t('startup.retryFetch')}
                     </button>
                   </div>
                 )}
@@ -344,11 +331,11 @@ export default function StartupDetector({
                     value={selectedSpec}
                     onChange={(e) => setSelectedSpec(e.target.value)}
                   >
-                    <optgroup label="发布标签">
+                    <optgroup label={t('startup.optgroupTags')}>
                       <option value="latest">
                         latest
                         {npmMeta?.distTags.latest
-                          ? `（当前指向 ${npmMeta.distTags.latest}）`
+                          ? t('startup.pointsTo', { ver: npmMeta.distTags.latest })
                           : ''}
                       </option>
                       {npmMeta &&
@@ -362,7 +349,7 @@ export default function StartupDetector({
                           ))}
                     </optgroup>
                     {npmMeta && npmMeta.versions.length > 0 && (
-                      <optgroup label="版本号">
+                      <optgroup label={t('startup.optgroupVersions')}>
                         {npmMeta.versions.map((v) => (
                           <option key={v} value={v}>
                             {v}
@@ -374,27 +361,20 @@ export default function StartupDetector({
                 )}
               </div>
               <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 space-y-2">
-                <p className="font-medium text-sm">离线 / 无网：本地 .tgz 安装</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  在能联网的机器上执行{' '}
-                  <code className="rounded bg-muted px-1 font-mono text-[11px]">npm pack openclaw</code> 得到{' '}
-                  <code className="font-mono text-[11px]">.tgz</code>，或用发行页下载同名包，拷贝到本机后填写路径。
-                  填写后，「一键安装 / 重装」的<strong>最后一步</strong>会执行{' '}
-                  <code className="font-mono text-[11px]">npm install -g &lt;路径&gt;</code>，不访问 npm 仓库。
-                  若包内依赖仍需拉取，请事先在有网环境装好依赖、或使用 npm 离线镜像 / 缓存。
-                </p>
+                <p className="font-medium text-sm">{t('startup.offlineTgzTitle')}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{t('startup.offlineTgzBody')}</p>
                 <input
                   type="text"
                   value={localPkgPath}
                   onChange={(e) => setLocalPkgPath(e.target.value)}
-                  placeholder="例如 ~/Downloads/openclaw-2026.3.28.tgz"
+                  placeholder={t('startup.localTgzPlaceholder')}
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-mono"
                   spellCheck={false}
                   autoComplete="off"
                 />
                 {localPkgPath.trim() ? (
                   <p className="text-[11px] text-amber-700 dark:text-amber-500">
-                    已启用本地包：将忽略上方版本选择，仅用于最后一步安装。
+                    {t('startup.localTgzActive')}
                   </p>
                 ) : null}
               </div>
@@ -408,19 +388,19 @@ export default function StartupDetector({
                   ? systemInfo.openclaw.installed
                     ? (
                         <>
-                          正在执行重装步骤
+                          {t('startup.busyReinstall')}
                           <AnimatedEllipsis />
                         </>
                       )
                     : (
                         <>
-                          正在安装
+                          {t('startup.busyInstall')}
                           <AnimatedEllipsis />
                         </>
                       )
                   : systemInfo.openclaw.installed
-                    ? '一键重装（备份 → 卸载 → 安装）'
-                    : '一键安装到本机'}
+                    ? t('startup.btnReinstall')
+                    : t('startup.btnInstall')}
               </button>
               {installing && (
                 <div className="space-y-3 pt-2 rounded-lg border border-primary/15 bg-primary/[0.04] px-3 py-3">
@@ -437,27 +417,27 @@ export default function StartupDetector({
                           <>
                             {installPhase === 'backup' && (
                               <>
-                                正在备份数据
+                                {t('startup.phaseBackup')}
                                 <AnimatedEllipsis />
                               </>
                             )}
                             {installPhase === 'uninstall' && (
                               <>
-                                正在卸载旧版 CLI
+                                {t('startup.phaseUninstall')}
                                 <AnimatedEllipsis />
                               </>
                             )}
                             {installPhase === 'install' && (
                               <>
                                 {localPkgPath.trim()
-                                  ? '正在从本地 .tgz 安装'
-                                  : '正在安装（npm 可能较慢，请稍候）'}
+                                  ? t('startup.phaseInstallLocal')
+                                  : t('startup.phaseInstallNpm')}
                                 <AnimatedEllipsis />
                               </>
                             )}
                             {installPhase === 'idle' && (
                               <>
-                                准备中
+                                {t('startup.phaseIdle')}
                                 <AnimatedEllipsis />
                               </>
                             )}
@@ -465,14 +445,14 @@ export default function StartupDetector({
                         ) : (
                           <>
                             {localPkgPath.trim()
-                              ? '正在从本地 .tgz 安装 OpenClaw'
-                              : '正在安装 OpenClaw（npm 下载中，请稍候）'}
+                              ? t('startup.phaseInstallFresh')
+                              : t('startup.phaseInstallFreshNpm')}
                             <AnimatedEllipsis />
                           </>
                         )}
                       </p>
                       <p className="text-[11px] text-muted-foreground leading-snug">
-                        npm 下载与安装可能持续数分钟；进度停在某一步时，可看龙虾动画与条上光带表示仍在进行。
+                        {t('startup.npmWaitHint')}
                       </p>
                     </div>
                   </div>
@@ -480,13 +460,13 @@ export default function StartupDetector({
                     <span className="tabular-nums">
                       {systemInfo.openclaw.installed ? (
                         <>
-                          {installPhase === 'backup' && '步骤 1/3'}
-                          {installPhase === 'uninstall' && '步骤 2/3'}
-                          {installPhase === 'install' && '步骤 3/3'}
-                          {installPhase === 'idle' && '—'}
+                          {installPhase === 'backup' && t('startup.step1')}
+                          {installPhase === 'uninstall' && t('startup.step2')}
+                          {installPhase === 'install' && t('startup.step3')}
+                          {installPhase === 'idle' && t('startup.stepDash')}
                         </>
                       ) : (
-                        '全局安装'
+                        t('startup.globalInstall')
                       )}
                     </span>
                     {systemInfo.openclaw.installed ? (
@@ -526,7 +506,7 @@ export default function StartupDetector({
                         : 'font-medium text-destructive'
                     }
                   >
-                    {reinstallOutcome.ok ? '重装流程已完成' : '重装未完全成功，请查看各步骤'}
+                    {reinstallOutcome.ok ? t('startup.reinstallDone') : t('startup.reinstallPartial')}
                   </p>
                   <ul className="space-y-2">
                     {reinstallOutcome.steps.map((s) => (
@@ -538,9 +518,9 @@ export default function StartupDetector({
                       >
                         <div className="font-medium flex justify-between gap-2">
                           <span>
-                            {s.id === 'backup' && '1. 备份'}
-                            {s.id === 'uninstall' && '2. 卸载 openclaw'}
-                            {s.id === 'install' && '3. 安装'}
+                            {s.id === 'backup' && t('startup.stepBackup')}
+                            {s.id === 'uninstall' && t('startup.stepUninstall')}
+                            {s.id === 'install' && t('startup.stepInstall')}
                           </span>
                           <span>{s.ok ? '✓' : '✗'}</span>
                         </div>
@@ -564,27 +544,24 @@ export default function StartupDetector({
                       : 'border-destructive/40 bg-destructive/5 text-destructive'
                   }`}
                 >
-                  {installResult.ok ? '安装完成。\n' : '安装未成功。\n'}
+                  {installResult.ok ? t('startup.installOkLine') : t('startup.installFailLine')}
                   {installResult.stdout ? `${installResult.stdout}\n` : ''}
                   {installResult.stderr ? installResult.stderr : ''}
                 </div>
               )}
               {bootstrapInfo && (
                 <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-2">
-                  <p className="font-medium">安装后初始化</p>
+                  <p className="font-medium">{t('startup.postInstallTitle')}</p>
                   <pre className="font-mono whitespace-pre-wrap break-all text-[11px]">{bootstrapInfo}</pre>
-                  <p className="text-muted-foreground">
-                    若通道或模型仍为空，请在终端运行{' '}
-                    <code className="font-mono text-[11px]">openclaw onboard</code> 完成向导。
-                  </p>
+                  <p className="text-muted-foreground">{t('startup.postInstallOnboard')}</p>
                 </div>
               )}
             </>
           ) : (
-            <p className="text-destructive text-sm">当前未检测到 npm，无法使用一键安装。请先安装 Node.js。</p>
+            <p className="text-destructive text-sm">{t('startup.noNpm')}</p>
           )}
           <div className="border-t border-border pt-3 space-y-2">
-            <p className="font-medium">手动安装（可选）</p>
+            <p className="font-medium">{t('startup.manualTitle')}</p>
             <pre className="bg-muted p-3 rounded-md font-mono text-xs overflow-x-auto whitespace-pre-wrap break-all">
               npm install -g openclaw
             </pre>
@@ -593,16 +570,16 @@ export default function StartupDetector({
             </pre>
           </div>
           <p className="text-muted-foreground text-xs">
-            建议使用{' '}
+            {t('startup.suggestNode')}{' '}
             <a
               href="https://nodejs.org/"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              当前 LTS 版 Node.js
+              {t('startup.nodeLtsLink')}
             </a>
-            。文档：{' '}
+            {t('startup.suggestNodeDocs')}{' '}
             <a
               href="https://docs.openclaw.ai"
               target="_blank"
@@ -620,7 +597,7 @@ export default function StartupDetector({
             onClick={() => setShowInstallGuide(false)}
             className="px-6 py-2 border border-border rounded-lg hover:bg-accent"
           >
-            返回
+            {t('startup.btnBack')}
           </button>
           <button
             type="button"
@@ -630,7 +607,7 @@ export default function StartupDetector({
             }}
             className="px-6 py-2 border border-border rounded-lg hover:bg-accent"
           >
-            重新检测
+            {t('startup.btnDetectAgain')}
           </button>
           <button
             type="button"
@@ -640,7 +617,7 @@ export default function StartupDetector({
             }}
             className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
           >
-            进入管理界面
+            {t('startup.btnEnterApp')}
           </button>
         </div>
       </div>
@@ -653,11 +630,12 @@ export default function StartupDetector({
         <div className="w-16 h-16 bg-primary rounded-lg flex items-center justify-center text-white text-3xl mb-4 animate-pulse">
           🦞
         </div>
-        <h1 className="text-xl font-bold mb-2">龙虾管家</h1>
+        <h1 className="text-xl font-bold mb-2">{t('startup.appName')}</h1>
         <p className="text-muted-foreground">{message}</p>
         {isTauriDetected !== null && (
           <p className="text-xs text-muted-foreground mt-2">
-            模式: {isTauriDetected ? '桌面版' : 'Web版'}
+            {t('startup.modeLabel')}{' '}
+            {isTauriDetected ? t('startup.modeDesktop') : t('startup.modeWeb')}
           </p>
         )}
       </div>
@@ -670,30 +648,30 @@ export default function StartupDetector({
         <div className="w-16 h-16 bg-primary rounded-lg flex items-center justify-center text-white text-3xl mb-4">
           🦞
         </div>
-        <h1 className="text-xl font-bold mb-2">检测到 OpenClaw</h1>
-        <p className="text-muted-foreground mb-6">可以接管管理现有的 OpenClaw 安装</p>
+        <h1 className="text-xl font-bold mb-2">{t('startup.detectedTitle')}</h1>
+        <p className="text-muted-foreground mb-6">{t('startup.detectedSubtitle')}</p>
 
         <div className="bg-card border border-border rounded-lg p-4 w-full max-w-md mb-6">
-          <h3 className="font-medium mb-3">系统信息</h3>
+          <h3 className="font-medium mb-3">{t('startup.systemInfo')}</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">OpenClaw 版本</span>
+              <span className="text-muted-foreground">{t('startup.labelOcVersion')}</span>
               <span className="font-medium">{systemInfo.openclaw.version}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">配置文件</span>
+              <span className="text-muted-foreground">{t('startup.labelConfigPath')}</span>
               <span className="font-mono text-xs">{systemInfo.openclaw.configPath}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Node.js</span>
+              <span className="text-muted-foreground">{t('startup.labelNode')}</span>
               <span className={systemInfo.nodejs.installed ? 'text-green-600' : 'text-red-500'}>
-                {systemInfo.nodejs.installed ? systemInfo.nodejs.version : '未安装'}
+                {systemInfo.nodejs.installed ? systemInfo.nodejs.version : t('common.notInstalled')}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">npm</span>
+              <span className="text-muted-foreground">{t('startup.labelNpm')}</span>
               <span className={systemInfo.npm.installed ? 'text-green-600' : 'text-red-500'}>
-                {systemInfo.npm.installed ? systemInfo.npm.version : '未安装'}
+                {systemInfo.npm.installed ? systemInfo.npm.version : t('common.notInstalled')}
               </span>
             </div>
           </div>
@@ -704,14 +682,14 @@ export default function StartupDetector({
             onClick={() => onDetected(systemInfo)}
             className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
           >
-            接管现有安装
+            {t('startup.btnTakeOver')}
           </button>
           <button
             type="button"
             onClick={() => setShowInstallGuide(true)}
             className="px-6 py-2 border border-border rounded-lg hover:bg-accent"
           >
-            全新安装
+            {t('startup.btnFreshInstall')}
           </button>
         </div>
       </div>
@@ -724,22 +702,22 @@ export default function StartupDetector({
         <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center text-3xl mb-4">
           🦞
         </div>
-        <h1 className="text-xl font-bold mb-2">未检测到 OpenClaw</h1>
-        <p className="text-muted-foreground mb-6">龙虾管家可以帮你安装 OpenClaw</p>
+        <h1 className="text-xl font-bold mb-2">{t('startup.notInstalledTitle')}</h1>
+        <p className="text-muted-foreground mb-6">{t('startup.notInstalledSubtitle')}</p>
 
         <div className="bg-card border border-border rounded-lg p-4 w-full max-w-md mb-6">
-          <h3 className="font-medium mb-3">安装要求</h3>
+          <h3 className="font-medium mb-3">{t('startup.requirements')}</h3>
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2">
               {systemInfo?.nodejs.installed ? '✅' : '❌'}
-              <span>Node.js 18+</span>
+              <span>{t('startup.reqNode')}</span>
               {systemInfo?.nodejs.installed && (
                 <span className="text-muted-foreground ml-auto">{systemInfo.nodejs.version}</span>
               )}
             </div>
             <div className="flex items-center gap-2">
               {systemInfo?.npm.installed ? '✅' : '❌'}
-              <span>npm</span>
+              <span>{t('startup.reqNpm')}</span>
               {systemInfo?.npm.installed && (
                 <span className="text-muted-foreground ml-auto">{systemInfo.npm.version}</span>
               )}
@@ -753,18 +731,18 @@ export default function StartupDetector({
             onClick={() => setShowInstallGuide(true)}
             className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
           >
-            开始安装 OpenClaw
+            {t('startup.btnStartInstall')}
           </button>
         ) : (
           <div className="text-center">
-            <p className="text-red-500 mb-3">请先安装 Node.js 和 npm</p>
+            <p className="text-red-500 mb-3">{t('startup.installNodeFirst')}</p>
             <a
               href="https://nodejs.org/"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              下载 Node.js →
+              {t('startup.downloadNode')}
             </a>
           </div>
         )}
@@ -778,18 +756,13 @@ export default function StartupDetector({
       <div className="w-16 h-16 bg-red-500 rounded-lg flex items-center justify-center text-white text-3xl mb-4">
         ❌
       </div>
-      <h1 className="text-xl font-bold mb-2">检测失败</h1>
+      <h1 className="text-xl font-bold mb-2">{t('startup.errorTitle')}</h1>
       <p className="text-red-500 mb-4 text-center max-w-md">{message}</p>
 
       {isTauriDetected === false && (
         <div className="bg-card border border-border rounded-lg p-4 w-full max-w-md mb-6">
-          <h3 className="font-medium mb-2">⚠️ Tauri 环境未检测到</h3>
-          <p className="text-sm text-muted-foreground mb-3">
-            应用未能检测到 Tauri 桌面环境。这可能是安装问题。
-          </p>
-          <p className="text-sm text-muted-foreground">
-            请确保从正确的安装包安装，并重新启动应用。
-          </p>
+          <h3 className="font-medium mb-2">{t('startup.tauriMissingTitle')}</h3>
+          <p className="text-sm text-muted-foreground mb-3">{t('startup.tauriMissingBody')}</p>
         </div>
       )}
 
@@ -797,7 +770,7 @@ export default function StartupDetector({
         onClick={detect}
         className="px-6 py-2 border border-border rounded-lg hover:bg-accent"
       >
-        重试
+        {t('common.retry')}
       </button>
     </div>
   )

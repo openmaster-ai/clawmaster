@@ -3,7 +3,7 @@ import type { ClawModule } from '@/types/module'
 
 export default {
   id: 'gateway',
-  name: '网关',
+  nameKey: 'nav.gateway',
   icon: '🔌',
   navOrder: 20,
   route: {

@@ -3,7 +3,7 @@ import type { ClawModule } from '@/types/module'
 
 export default {
   id: 'docs',
-  name: '文档',
+  nameKey: 'nav.docs',
   icon: '📚',
   navOrder: 80,
   route: {
