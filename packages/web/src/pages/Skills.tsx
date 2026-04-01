@@ -1,5 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useInstallTask } from '@/shared/hooks/useInstallTask'
+import { InstallTask } from '@/shared/components/InstallTask'
 import {
   Camera,
   Receipt,
@@ -266,6 +268,7 @@ function SceneCard({
   onInstall: () => void
   t: (key: string, opts?: any) => string
 }) {
+  const sceneTask = useInstallTask()
   const Icon = scene.icon
   return (
     <div className="bg-card border border-border rounded-lg p-5 flex flex-col hover:border-primary/50 transition-colors">
@@ -286,14 +289,21 @@ function SceneCard({
           <CheckCircle2 className="w-4 h-4" />
           {t('skills.allInstalled')}
         </div>
+      ) : sceneTask.status !== 'idle' ? (
+        <InstallTask
+          label={t(scene.titleKey)}
+          status={sceneTask.status}
+          error={sceneTask.error}
+          onRetry={sceneTask.reset}
+        />
       ) : (
         <button
-          onClick={onInstall}
+          onClick={() => sceneTask.run(async () => { onInstall() })}
           disabled={installing}
           className="w-full py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-1.5"
         >
           <Download className="w-3.5 h-3.5" />
-          {installing ? t('skills.installing') : t('skills.oneClickInstall')}
+          {t('skills.oneClickInstall')}
         </button>
       )}
     </div>

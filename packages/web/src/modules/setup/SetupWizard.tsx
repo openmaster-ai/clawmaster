@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Shell, Check, ExternalLink, Globe, Download, Loader2, Server, HardDrive } from 'lucide-react'
+import { useInstallTask } from '@/shared/hooks/useInstallTask'
+import { InstallTask } from '@/shared/components/InstallTask'
 import {
   getOllamaStatus,
   installOllama,
@@ -913,9 +915,9 @@ function OllamaSetupPanel({
   const { t } = useTranslation()
   const [status, setStatus] = useState<OllamaStatus | null>(null)
   const [checking, setChecking] = useState(true)
-  const [installing, setInstalling] = useState(false)
-  const [starting, setStarting] = useState(false)
-  const [pulling, setPulling] = useState<string | null>(null)
+  const installTask = useInstallTask()
+  const startTask = useInstallTask()
+  const pullTask = useInstallTask()
 
   const checkStatus = useCallback(async () => {
     setChecking(true)
@@ -935,46 +937,31 @@ function OllamaSetupPanel({
   useEffect(() => { checkStatus() }, [checkStatus])
 
   async function handleInstall() {
-    setInstalling(true)
-    updateOnboard({ error: null })
-    const result = await installOllama()
-    if (!result.success) {
-      updateOnboard({ error: t('ollama.installFailed') + ': ' + result.error })
-    }
-    setInstalling(false)
+    await installTask.run(async () => {
+      updateOnboard({ error: null })
+      const result = await installOllama()
+      if (!result.success) throw new Error(result.error ?? t('ollama.installFailed'))
+    })
     await checkStatus()
   }
 
   async function handleStart() {
-    setStarting(true)
-    updateOnboard({ error: null })
-    await startOllama()
-    // Poll for readiness
-    for (let i = 0; i < 5; i++) {
-      await new Promise(r => setTimeout(r, 2000))
-      const result = await getOllamaStatus(
-        onboard.customBaseUrl.trim().replace(/\/v1\/?$/, '') || 'http://localhost:11434',
-      )
-      if (result.success && result.data?.running) {
-        setStatus(result.data)
-        setStarting(false)
-        updateOnboard({ apiKey: 'ollama' })
-        return
+    await startTask.run(async () => {
+      updateOnboard({ error: null })
+      await startOllama()
+      for (let i = 0; i < 5; i++) {
+        await new Promise(r => setTimeout(r, 2000))
+        const result = await getOllamaStatus(
+          onboard.customBaseUrl.trim().replace(/\/v1\/?$/, '') || 'http://localhost:11434',
+        )
+        if (result.success && result.data?.running) {
+          setStatus(result.data)
+          updateOnboard({ apiKey: 'ollama' })
+          return
+        }
       }
-    }
-    setStarting(false)
-    updateOnboard({ error: t('ollama.startFailed') })
-    await checkStatus()
-  }
-
-  async function handlePull(modelName: string) {
-    setPulling(modelName)
-    updateOnboard({ error: null })
-    const result = await pullModel(modelName)
-    if (!result.success) {
-      updateOnboard({ error: t('ollama.pullFailed', { model: modelName }) })
-    }
-    setPulling(null)
+      throw new Error(t('ollama.startFailed'))
+    })
     await checkStatus()
   }
 
@@ -1005,40 +992,50 @@ function OllamaSetupPanel({
 
       {/* Step 1: Install */}
       {!status?.installed && (
-        <div className="bg-card border border-border rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Download className="w-4 h-4 text-muted-foreground" />
-            <span className="font-medium">{t('ollama.installTitle')}</span>
+        <div className="space-y-3">
+          <div className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Download className="w-4 h-4 text-muted-foreground" />
+              <span className="font-medium">{t('ollama.installTitle')}</span>
+            </div>
+            <p className="text-sm text-muted-foreground mb-3">{t('ollama.installDesc')}</p>
+            {installTask.status === 'idle' && (
+              <button
+                onClick={handleInstall}
+                className="w-full py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90"
+              >
+                {t('ollama.installButton')}
+              </button>
+            )}
           </div>
-          <p className="text-sm text-muted-foreground mb-3">{t('ollama.installDesc')}</p>
-          <button
-            onClick={handleInstall}
-            disabled={installing}
-            className="w-full py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {installing && <Loader2 className="w-4 h-4 animate-spin" />}
-            {installing ? t('ollama.installing') : t('ollama.installButton')}
-          </button>
+          {installTask.status !== 'idle' && (
+            <InstallTask label="Ollama" status={installTask.status} error={installTask.error} onRetry={installTask.reset} />
+          )}
         </div>
       )}
 
       {/* Step 2: Start service */}
       {status?.installed && !status?.running && (
-        <div className="bg-card border border-border rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Server className="w-4 h-4 text-muted-foreground" />
-            <span className="font-medium">{t('ollama.startTitle')}</span>
-            <span className="text-xs text-muted-foreground">v{status.version}</span>
+        <div className="space-y-3">
+          <div className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Server className="w-4 h-4 text-muted-foreground" />
+              <span className="font-medium">{t('ollama.startTitle')}</span>
+              <span className="text-xs text-muted-foreground">v{status.version}</span>
+            </div>
+            <p className="text-sm text-muted-foreground mb-3">{t('ollama.notRunning')}</p>
+            {startTask.status === 'idle' && (
+              <button
+                onClick={handleStart}
+                className="w-full py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90"
+              >
+                {t('ollama.startButton')}
+              </button>
+            )}
           </div>
-          <p className="text-sm text-muted-foreground mb-3">{t('ollama.notRunning')}</p>
-          <button
-            onClick={handleStart}
-            disabled={starting}
-            className="w-full py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {starting && <Loader2 className="w-4 h-4 animate-spin" />}
-            {starting ? t('ollama.starting') : t('ollama.startButton')}
-          </button>
+          {startTask.status !== 'idle' && (
+            <InstallTask label="Ollama" description={t('ollama.starting')} status={startTask.status} error={startTask.error} onRetry={startTask.reset} />
+          )}
         </div>
       )}
 
@@ -1070,23 +1067,27 @@ function OllamaSetupPanel({
           )}
 
           {/* Pull popular models */}
-          <div className="flex flex-wrap gap-2 mb-3">
-            {['llama3.2', 'qwen2.5', 'deepseek-r1', 'gemma3', 'phi4'].map((m) => {
-              const alreadyPulled = status.models.some((sm) => sm.name.startsWith(m))
-              if (alreadyPulled) return null
-              return (
-                <button
-                  key={m}
-                  onClick={() => handlePull(m)}
-                  disabled={!!pulling}
-                  className="px-3 py-1 text-xs border border-border rounded-lg hover:bg-accent disabled:opacity-50 flex items-center gap-1"
-                >
-                  {pulling === m ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-                  {m}
-                </button>
-              )
-            })}
-          </div>
+          {pullTask.status !== 'idle' && (
+            <InstallTask label={pullTask.log ?? ''} status={pullTask.status} error={pullTask.error} onRetry={pullTask.reset} />
+          )}
+          {pullTask.status === 'idle' && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {['llama3.2', 'qwen2.5', 'deepseek-r1', 'gemma3', 'phi4'].map((m) => {
+                const alreadyPulled = status.models.some((sm) => sm.name.startsWith(m))
+                if (alreadyPulled) return null
+                return (
+                  <button
+                    key={m}
+                    onClick={() => { pullTask.run(async () => { const r = await pullModel(m); if (!r.success) throw new Error(r.error) }); checkStatus() }}
+                    className="px-3 py-1 text-xs border border-border rounded-lg hover:bg-accent flex items-center gap-1"
+                  >
+                    <Download className="w-3 h-3" />
+                    {m}
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           <a
             href="https://ollama.com/library"

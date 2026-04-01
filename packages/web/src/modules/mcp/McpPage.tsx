@@ -1,8 +1,10 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
+import { useInstallTask } from '@/shared/hooks/useInstallTask'
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
 import { LoadingState } from '@/shared/components/LoadingState'
+import { InstallTask } from '@/shared/components/InstallTask'
 import {
   getMcpServers,
   addMcpServer,
@@ -25,7 +27,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Loader2,
   ExternalLink,
   Plus,
   Eye,
@@ -184,6 +185,7 @@ function McpCard({
   onToggle: (enabled: boolean) => void
 }) {
   const { t } = useTranslation()
+  const installTask = useInstallTask()
   const [envInputs, setEnvInputs] = useState<Record<string, string>>(() => installed?.env ?? {})
   const [fsPath, setFsPath] = useState(
     () => installed?.args?.slice(2).join(', ') ?? catalog.defaultArgs?.join(', ') ?? '',
@@ -271,45 +273,60 @@ function McpCard({
             </a>
           )}
 
+          {/* Install progress */}
+          {installTask.status !== 'idle' && (
+            <InstallTask
+              label={catalog.name}
+              description={catalog.package}
+              status={installTask.status}
+              error={installTask.error}
+              onRetry={installTask.reset}
+            />
+          )}
+
           {/* Actions */}
-          <div className="flex items-center gap-2 pt-1">
-            {isInstalled ? (
-              <>
+          {installTask.status === 'idle' && (
+            <div className="flex items-center gap-2 pt-1">
+              {isInstalled ? (
+                <>
+                  <button
+                    onClick={() => onToggle(!installed.enabled)}
+                    disabled={operating}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-accent disabled:opacity-50"
+                  >
+                    {installed.enabled
+                      ? <><ToggleRight className="w-4 h-4 text-green-500" />{t('mcp.disable')}</>
+                      : <><ToggleLeft className="w-4 h-4 text-muted-foreground" />{t('mcp.enable')}</>
+                    }
+                  </button>
+                  <button
+                    onClick={onRemove}
+                    disabled={operating}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {operating ? t('mcp.removing') : t('mcp.remove')}
+                  </button>
+                </>
+              ) : (
                 <button
-                  onClick={() => onToggle(!installed.enabled)}
-                  disabled={operating}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-accent disabled:opacity-50"
+                  onClick={() => {
+                    const extraArgs = catalog.id === 'filesystem' && fsPath.trim()
+                      ? fsPath.split(',').map((p) => p.trim()).filter(Boolean)
+                      : undefined
+                    installTask.run(async () => {
+                      onInstall(envInputs, extraArgs)
+                    })
+                  }}
+                  disabled={operating || catalog.envVars.some((ev) => ev.required && !envInputs[ev.key]?.trim())}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50"
                 >
-                  {installed.enabled
-                    ? <><ToggleRight className="w-4 h-4 text-green-500" />{t('mcp.disable')}</>
-                    : <><ToggleLeft className="w-4 h-4 text-muted-foreground" />{t('mcp.enable')}</>
-                  }
+                  <Download className="w-3.5 h-3.5" />
+                  {t('mcp.install')}
                 </button>
-                <button
-                  onClick={onRemove}
-                  disabled={operating}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 disabled:opacity-50"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  {operating ? t('mcp.removing') : t('mcp.remove')}
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => {
-                  const extraArgs = catalog.id === 'filesystem' && fsPath.trim()
-                    ? fsPath.split(',').map((p) => p.trim()).filter(Boolean)
-                    : undefined
-                  onInstall(envInputs, extraArgs)
-                }}
-                disabled={operating || catalog.envVars.some((ev) => ev.required && !envInputs[ev.key]?.trim())}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50"
-              >
-                {operating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                {operating ? t('mcp.installing') : t('mcp.install')}
-              </button>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
