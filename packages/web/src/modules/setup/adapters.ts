@@ -7,6 +7,8 @@
  */
 
 import { execCommand } from '@/shared/adapters/platform'
+
+const TEMP = '${TMPDIR:-/tmp}'
 import { detectMirrors, getMirrorSetupCommands } from '@/shared/adapters/mirror'
 import {
   CAPABILITIES,
@@ -98,7 +100,7 @@ const realOnboardingAdapter: OnboardingAdapter = {
     // 通过 heredoc 写临时文件，再用 --batch-file 读取
     await execCommand('bash', [
       '-c',
-      `cat > /tmp/.openclaw-batch.json << 'CLAWEOF'\n${batchJson}\nCLAWEOF\nopenclaw config set --batch-file /tmp/.openclaw-batch.json --strict-json && rm -f /tmp/.openclaw-batch.json`,
+      `cat > ${TEMP}/.openclaw-batch.json << 'CLAWEOF'\n${batchJson}\nCLAWEOF\nopenclaw config set --batch-file ${TEMP}/.openclaw-batch.json --strict-json && rm -f ${TEMP}/.openclaw-batch.json`,
     ])
   },
 

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff, Copy } from 'lucide-react'
 
 interface PasswordFieldProps {
@@ -11,6 +12,7 @@ interface PasswordFieldProps {
  * 默认显示 sk-••••1234 格式，点击眼睛图标切换完整显示
  */
 export function PasswordField({ value, className = '' }: PasswordFieldProps) {
+  const { t } = useTranslation()
   const [visible, setVisible] = useState(false)
 
   function maskValue(v: string): string {
@@ -28,14 +30,14 @@ export function PasswordField({ value, className = '' }: PasswordFieldProps) {
       <button
         onClick={() => setVisible(!visible)}
         className="text-muted-foreground hover:text-foreground flex-shrink-0"
-        title={visible ? '隐藏' : '显示'}
+        title={visible ? t('common.hide') : t('common.show')}
       >
         {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
       </button>
       <button
         onClick={() => navigator.clipboard.writeText(value)}
         className="text-muted-foreground hover:text-foreground flex-shrink-0"
-        title="复制"
+        title={t('common.copyToClipboard')}
       >
         <Copy className="w-4 h-4" />
       </button>

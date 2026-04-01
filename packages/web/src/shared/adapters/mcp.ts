@@ -22,6 +22,7 @@ export type McpServersMap = Record<string, McpServerConfig>
 // ─── 配置文件路径 ───
 
 const MCP_CONFIG_PATH = '~/.openclaw/mcp.json'
+const TEMP = '${TMPDIR:-/tmp}'
 
 // ─── 配置读写 ───
 
@@ -75,7 +76,7 @@ async function syncToBridge(servers: McpServersMap): Promise<void> {
   try {
     await execCommand('bash', [
       '-c',
-      `cat > /tmp/.openclaw-mcp-bridge.json << 'CLAWEOF'\n${batchJson}\nCLAWEOF\nopenclaw config set --batch-file /tmp/.openclaw-mcp-bridge.json --strict-json && rm -f /tmp/.openclaw-mcp-bridge.json`,
+      `cat > ${TEMP}/.openclaw-mcp-bridge.json << 'CLAWEOF'\n${batchJson}\nCLAWEOF\nopenclaw config set --batch-file ${TEMP}/.openclaw-mcp-bridge.json --strict-json && rm -f ${TEMP}/.openclaw-mcp-bridge.json`,
     ])
   } catch {
     // Bridge plugin not installed — skip silently

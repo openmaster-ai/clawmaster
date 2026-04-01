@@ -246,13 +246,37 @@ fn run_openclaw_command(args: Vec<String>) -> Result<String, String> {
     }
 }
 
+/// Windows 上将 "bash" 解析为 Git Bash 路径
+fn resolve_cmd(cmd: &str) -> String {
+    if cfg!(target_os = "windows") && cmd == "bash" {
+        let candidates = [
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ];
+        for path in &candidates {
+            if std::path::Path::new(path).exists() {
+                return path.to_string();
+            }
+        }
+        // Also check LOCALAPPDATA
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            let p = format!(r"{}\Programs\Git\bin\bash.exe", local);
+            if std::path::Path::new(&p).exists() {
+                return p;
+            }
+        }
+    }
+    cmd.to_string()
+}
+
 // 执行任意命令（安装向导等场景需要运行 npm / pip / clawprobe 等非 openclaw 工具）
 #[tauri::command]
 fn exec_command(cmd: String, args: Vec<String>) -> Result<String, String> {
-    let output = Command::new(&cmd)
+    let resolved = resolve_cmd(&cmd);
+    let output = Command::new(&resolved)
         .args(&args)
         .output()
-        .map_err(|e| format!("执行命令失败: {}", e))?;
+        .map_err(|e| format!("Command failed: {} (resolved: {})", e, resolved))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();

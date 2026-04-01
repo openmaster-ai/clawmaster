@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { MemoryEntry, MemoryListResult, MemorySearchResult, MemorySearchItem, MemoryIntelligence } from '@/shared/adapters/powermem'
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function MemoryList({ listData, searchData, isSearch, loading, onDelete, onEdit, onRefresh }: Props) {
+  const { t } = useTranslation()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
@@ -38,20 +40,20 @@ export default function MemoryList({ listData, searchData, isSearch, loading, on
     <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-medium">
-          {isSearch ? `搜索结果 (${total})` : `记忆列表 (${total})`}
+          {isSearch ? `${t('memory.searchResults')} (${total})` : `${t('memory.list')} (${total})`}
         </h3>
         <button
           onClick={onRefresh}
           disabled={loading}
           className="px-3 py-1 text-sm border border-border rounded hover:bg-accent disabled:opacity-50"
         >
-          {loading ? '刷新中...' : '刷新'}
+          {loading ? t('memory.refreshing') : t('common.refresh')}
         </button>
       </div>
 
       {memories.length === 0 ? (
         <p className="text-muted-foreground text-sm py-8 text-center">
-          {isSearch ? '未找到匹配的记忆' : '暂无记忆'}
+          {isSearch ? t('memory.noSearchResults') : t('memory.noMemories')}
         </p>
       ) : (
         <div className="divide-y divide-border">
@@ -127,12 +129,6 @@ const TYPE_STYLES: Record<string, string> = {
   working: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  long_term: '长期',
-  short_term: '短期',
-  working: '工作',
-}
-
 function MemoryItem({
   item, expanded, editing, editText,
   onToggle, onDelete, onStartEdit, onEditChange, onSaveEdit, onCancelEdit,
@@ -148,6 +144,12 @@ function MemoryItem({
   onSaveEdit: () => void
   onCancelEdit: () => void
 }) {
+  const { t } = useTranslation()
+  const typeLabels: Record<string, string> = {
+    long_term: t('memory.typeLongTerm'),
+    short_term: t('memory.typeShortTerm'),
+    working: t('memory.typeWorking'),
+  }
   const retentionPct = item.currentRetention !== undefined ? Math.round(item.currentRetention * 100) : null
   const retentionColor = retentionPct === null ? '' :
     retentionPct > 70 ? 'text-green-600' :
@@ -164,33 +166,27 @@ function MemoryItem({
         <div className="flex-1 min-w-0">
           <p className="text-sm truncate">{item.content.slice(0, 120)}</p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
-            {/* 记忆类型标签 */}
             {item.memoryType && (
               <span className={`text-xs px-1.5 py-0.5 rounded ${TYPE_STYLES[item.memoryType] ?? 'bg-muted'}`}>
-                {TYPE_LABELS[item.memoryType] ?? item.memoryType}
+                {typeLabels[item.memoryType] ?? item.memoryType}
               </span>
             )}
-            {/* 重要度 */}
             {importancePct !== null && (
               <span className={`text-xs ${importancePct > 70 ? 'text-red-500' : importancePct > 40 ? 'text-yellow-500' : 'text-gray-400'}`}>
-                重要度 {importancePct}%
+                {t('memory.importance')} {importancePct}%
               </span>
             )}
-            {/* 保留率 */}
             {retentionPct !== null && (
               <span className={`text-xs ${retentionColor}`}>
-                保留 {retentionPct}%
+                {t('memory.retention')} {retentionPct}%
               </span>
             )}
-            {/* 搜索得分 */}
             {item.score !== undefined && (
-              <span className="text-xs text-blue-500">匹配 {(item.score * 100).toFixed(0)}%</span>
+              <span className="text-xs text-blue-500">{t('memory.match')} {(item.score * 100).toFixed(0)}%</span>
             )}
-            {/* Agent */}
             {item.agentId && (
               <span className="text-xs text-muted-foreground">Agent: {item.agentId}</span>
             )}
-            {/* 日期 */}
             {item.createdAt && (
               <span className="text-xs text-muted-foreground">
                 {new Date(item.createdAt).toLocaleDateString()}
@@ -203,7 +199,6 @@ function MemoryItem({
 
       {expanded && (
         <div className="mt-2 ml-2 pl-4 border-l-2 border-border space-y-2">
-          {/* 编辑模式 */}
           {editing ? (
             <div className="space-y-2">
               <textarea
@@ -212,8 +207,8 @@ function MemoryItem({
                 className="w-full h-24 text-sm bg-background p-3 rounded border border-border resize-none"
               />
               <div className="flex gap-2">
-                <button onClick={onSaveEdit} className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded">保存</button>
-                <button onClick={onCancelEdit} className="px-3 py-1 text-xs border border-border rounded">取消</button>
+                <button onClick={onSaveEdit} className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded">{t('common.save')}</button>
+                <button onClick={onCancelEdit} className="px-3 py-1 text-xs border border-border rounded">{t('common.cancel')}</button>
               </div>
             </div>
           ) : (
@@ -222,41 +217,39 @@ function MemoryItem({
             </div>
           )}
 
-          {/* 智能元数据 */}
           {item.intelligence && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
               {item.intelligence.decay_rate !== undefined && (
                 <div className="bg-muted/50 rounded p-2">
-                  <p className="text-muted-foreground">衰减率</p>
+                  <p className="text-muted-foreground">{t('memory.decayRate')}</p>
                   <p className="font-medium">{(item.intelligence.decay_rate * 100).toFixed(1)}%</p>
                 </div>
               )}
               {item.intelligence.review_count !== undefined && (
                 <div className="bg-muted/50 rounded p-2">
-                  <p className="text-muted-foreground">复习次数</p>
+                  <p className="text-muted-foreground">{t('memory.reviewCount')}</p>
                   <p className="font-medium">{item.intelligence.review_count}</p>
                 </div>
               )}
               {item.accessCount !== undefined && (
                 <div className="bg-muted/50 rounded p-2">
-                  <p className="text-muted-foreground">访问次数</p>
+                  <p className="text-muted-foreground">{t('memory.accessCount')}</p>
                   <p className="font-medium">{item.accessCount}</p>
                 </div>
               )}
               {item.nextReview && (
                 <div className="bg-muted/50 rounded p-2">
-                  <p className="text-muted-foreground">下次复习</p>
+                  <p className="text-muted-foreground">{t('memory.nextReview')}</p>
                   <p className="font-medium">{new Date(item.nextReview).toLocaleDateString()}</p>
                 </div>
               )}
             </div>
           )}
 
-          {/* 保留率进度条 */}
           {retentionPct !== null && (
             <div>
               <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                <span>记忆保留率</span>
+                <span>{t('memory.retentionRate')}</span>
                 <span className={retentionColor}>{retentionPct}%</span>
               </div>
               <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
@@ -270,21 +263,20 @@ function MemoryItem({
             </div>
           )}
 
-          {/* 操作按钮 */}
           <div className="flex gap-2">
             {!editing && (
               <button
                 onClick={(e) => { e.stopPropagation(); onStartEdit() }}
                 className="px-3 py-1 text-xs border border-border rounded hover:bg-accent"
               >
-                编辑
+                {t('common.edit')}
               </button>
             )}
             <button
               onClick={(e) => { e.stopPropagation(); onDelete() }}
               className="px-3 py-1 text-xs border border-red-200 text-red-500 rounded hover:bg-red-50 dark:hover:bg-red-950"
             >
-              删除
+              {t('common.delete')}
             </button>
           </div>
         </div>

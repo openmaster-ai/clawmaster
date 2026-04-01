@@ -10,6 +10,20 @@ export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI__' in window
 }
 
+/** 检测 Windows 环境（前端侧 — 通过 userAgent 推断） */
+export function isWindows(): boolean {
+  if (typeof navigator !== 'undefined') {
+    return /Win/i.test(navigator.userAgent ?? navigator.platform ?? '')
+  }
+  return false
+}
+
+/**
+ * 跨平台 temp 目录路径（用于 bash 脚本中）
+ * bash 在所有平台上都支持 $TMPDIR，Git Bash on Windows 也设置了它
+ */
+export const TEMP_DIR = '${TMPDIR:-/tmp}'
+
 /**
  * 执行 CLI 命令并返回 stdout
  *

@@ -47,7 +47,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-red-500">错误: {error}</div>
+        <div className="text-red-500">{t('common.error')}: {error}</div>
       </div>
     )
   }

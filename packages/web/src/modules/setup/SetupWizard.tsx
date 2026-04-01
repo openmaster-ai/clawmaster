@@ -524,7 +524,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                             <span className="text-foreground font-medium">{t(step.highlight)}</span>
                           </>
                         )}
-                        {step.yieldsToken && <span className="text-primary ml-1" title="此步骤产出 Token">*</span>}
+                        {step.yieldsToken && <span className="text-primary ml-1" title={t('setup.yieldsToken')}>*</span>}
                       </span>
                     </li>
                   ))}

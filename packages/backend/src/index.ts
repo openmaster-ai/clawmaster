@@ -1,30 +1,41 @@
 import express from 'express'
 import cors from 'cors'
 import { WebSocketServer, WebSocket } from 'ws'
-import { exec, execFile } from 'child_process'
+import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { readFileSync, existsSync } from 'fs'
-import { homedir } from 'os'
+import { homedir, tmpdir, platform } from 'os'
 import path from 'path'
 
-const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
+
+// ─── 跨平台 Shell 解析 ───
+
+const IS_WINDOWS = platform() === 'win32'
+
+/** 在 Windows 上定位 Git Bash，Linux/macOS 直接返回 'bash' */
+function resolveShell(): string {
+  if (!IS_WINDOWS) return 'bash'
+  // 常见 Git Bash 路径
+  const candidates = [
+    path.join(process.env['ProgramFiles'] ?? 'C:\\Program Files', 'Git', 'bin', 'bash.exe'),
+    path.join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'bin', 'bash.exe'),
+    path.join(process.env['LOCALAPPDATA'] ?? '', 'Programs', 'Git', 'bin', 'bash.exe'),
+  ]
+  for (const p of candidates) {
+    if (existsSync(p)) return p
+  }
+  // Fallback: assume bash is in PATH (WSL, MSYS2, etc.)
+  return 'bash'
+}
+
+const RESOLVED_SHELL = resolveShell()
 
 const app = express()
 app.use(cors())
 app.use(express.json())
 
 const PORT = 3001
-
-// Helper: 执行 openclaw 命令
-async function runOpenClaw(args: string): Promise<string> {
-  try {
-    const { stdout } = await execAsync(`openclaw ${args}`)
-    return stdout
-  } catch (error: any) {
-    throw new Error(error.message || 'Command failed')
-  }
-}
 
 // Helper: 安全读取配置文件（只读！）
 function readConfigFile(): any {
@@ -48,21 +59,21 @@ app.get('/api/system/detect', async (req, res) => {
     // 检测 Node.js
     let nodejs = { installed: false, version: '' }
     try {
-      const { stdout } = await execAsync('node --version 2>/dev/null')
+      const { stdout } = await execFileAsync('node', ['--version'])
       nodejs = { installed: true, version: stdout.trim() }
     } catch {}
 
     // 检测 npm
     let npm = { installed: false, version: '' }
     try {
-      const { stdout } = await execAsync('npm --version 2>/dev/null')
+      const { stdout } = await execFileAsync('npm', ['--version'])
       npm = { installed: true, version: stdout.trim() }
     } catch {}
 
     // 检测 OpenClaw
     let openclaw = { installed: false, version: '', configPath: '' }
     try {
-      const { stdout } = await execAsync('openclaw --version 2>/dev/null')
+      const { stdout } = await execFileAsync('openclaw', ['--version'])
       const match = stdout.match(/(\d{4}\.\d+\.\d+)/)
       openclaw = {
         installed: true,
@@ -80,15 +91,14 @@ app.get('/api/system/detect', async (req, res) => {
 // 网关状态
 app.get('/api/gateway/status', async (req, res) => {
   try {
-    const { stdout } = await execAsync('openclaw gateway status --json 2>/dev/null || openclaw gateway status')
-    // 简单解析状态
+    const { stdout } = await execFileAsync('openclaw', ['gateway', 'status', '--json'])
     const running = stdout.includes('running') || stdout.includes('active')
     res.json({
       running,
       port: 18789,
       uptime: running ? 3600 : undefined
     })
-  } catch (error: any) {
+  } catch {
     res.json({ running: false, port: 18789 })
   }
 })
@@ -195,6 +205,16 @@ app.get('/api/logs', (req, res) => {
   }
 })
 
+// Shell 信息（供前端检测平台）
+app.get('/api/shell-info', (req, res) => {
+  res.json({
+    shell: RESOLVED_SHELL,
+    tempDir: tmpdir(),
+    isWindows: IS_WINDOWS,
+    gitBashAvailable: IS_WINDOWS ? existsSync(RESOLVED_SHELL) : true,
+  })
+})
+
 // 通用命令执行（供 shared/adapters/platform.ts 的 execViaWeb 调用）
 app.post('/api/exec', async (req, res) => {
   const { cmd, args } = req.body
@@ -203,8 +223,9 @@ app.post('/api/exec', async (req, res) => {
     return
   }
   try {
-    // 使用 execFile 直接传参，避免 shell 解释导致参数拆分
-    const { stdout, stderr } = await execFileAsync(cmd, args ?? [], { shell: false })
+    // 在 Windows 上将 'bash' 解析为 Git Bash 路径
+    const resolvedCmd = (cmd === 'bash' && IS_WINDOWS) ? RESOLVED_SHELL : cmd
+    const { stdout, stderr } = await execFileAsync(resolvedCmd, args ?? [], { shell: false })
     res.json({ stdout: stdout.trim(), stderr: stderr.trim() })
   } catch (err: any) {
     res.status(500).json({ error: err.message, stdout: '', stderr: err.stderr || '' })

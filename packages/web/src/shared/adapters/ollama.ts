@@ -57,7 +57,23 @@ export function detectOllama(): Promise<AdapterResult<{ installed: boolean; vers
 
 export function installOllama(): Promise<AdapterResult<string>> {
   return wrapAsync(async () => {
-    // Try official install script (needs sudo on Linux)
+    // Windows: download and run the official installer
+    try {
+      // Detect Windows via uname (Git Bash returns MINGW*/MSYS*)
+      const uname = await execCommand('bash', ['-c', 'uname -s 2>/dev/null || echo Linux']).catch(() => 'Linux')
+      if (/MINGW|MSYS|Windows/i.test(uname)) {
+        const raw = await execCommand('bash', ['-c', [
+          'INSTALLER="${TMPDIR:-/tmp}/OllamaSetup.exe"',
+          'curl -fsSL -o "$INSTALLER" https://ollama.com/download/OllamaSetup.exe',
+          'echo "Downloaded OllamaSetup.exe. Running installer..."',
+          '"$INSTALLER" /SILENT /NORESTART',
+          'echo "Ollama installed on Windows"',
+        ].join(' && ')])
+        return raw.trim()
+      }
+    } catch { /* not Windows or installer failed — fall through */ }
+
+    // Linux/macOS: try official install script (needs sudo)
     try {
       const raw = await execCommand('bash', [
         '-c',

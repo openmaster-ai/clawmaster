@@ -75,7 +75,7 @@ export default function Config() {
   }
 
   if (!config) {
-    return <div className="text-red-500">无法加载配置</div>
+    return <div className="text-red-500">{t('config.loadFailed')}</div>
   }
 
   // 配置概览摘要
