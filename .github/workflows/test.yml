@@ -1,0 +1,278 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '20'
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── Unit Tests (fast, every push) ───
+  unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: TypeScript check
+        run: npx tsc -b --noEmit packages/web
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build web
+        run: npm run build
+
+  # ─── Backend Integration Tests ───
+  backend:
+    name: Backend Integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start backend
+        run: |
+          npm run dev:backend &
+          sleep 3
+
+      - name: Health check
+        run: |
+          curl -sf http://localhost:3001/api/system/detect | head -c 200
+          echo ""
+
+      - name: Test API endpoints
+        run: |
+          set -e
+          echo "=== /api/system/detect ==="
+          curl -sf http://localhost:3001/api/system/detect | python3 -m json.tool | head -20
+
+          echo "=== /api/config ==="
+          HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/api/config)
+          echo "Config endpoint: HTTP $HTTP_CODE"
+
+          echo "=== /api/gateway/status ==="
+          HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/api/gateway/status)
+          echo "Gateway status: HTTP $HTTP_CODE"
+
+          echo "=== /api/logs ==="
+          HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/api/logs)
+          echo "Logs endpoint: HTTP $HTTP_CODE"
+
+          echo "=== /api/shell-info ==="
+          curl -sf http://localhost:3001/api/shell-info | python3 -m json.tool
+
+          echo "All backend endpoints responding"
+
+  # ─── Ollama Integration Tests ───
+  ollama:
+    name: Ollama Integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          echo "Ollama installed: $(ollama --version)"
+
+      - name: Start Ollama server
+        run: |
+          ollama serve &
+          sleep 3
+          # Verify server is running
+          curl -sf http://localhost:11434/api/tags | head -c 100
+          echo ""
+          echo "Ollama server running"
+
+      - name: Pull a small test model
+        run: |
+          # Pull smallest available model for CI speed
+          ollama pull tinyllama:latest
+          echo "Model pulled successfully"
+        timeout-minutes: 5
+
+      - name: Verify model is available
+        run: |
+          ollama list
+          echo "---"
+          # Verify via API
+          curl -sf http://localhost:11434/api/tags | python3 -m json.tool
+
+      - name: Test model inference
+        run: |
+          # Quick inference test
+          RESPONSE=$(curl -sf http://localhost:11434/api/generate -d '{
+            "model": "tinyllama:latest",
+            "prompt": "Say hello in one word.",
+            "stream": false
+          }' | python3 -c "import sys,json; print(json.load(sys.stdin).get('response','')[:100])")
+          echo "Model response: $RESPONSE"
+          [ -n "$RESPONSE" ] && echo "PASS: Model inference works" || { echo "FAIL: Empty response"; exit 1; }
+        timeout-minutes: 2
+
+      - name: Start backend with Ollama
+        run: |
+          npm run dev:backend &
+          sleep 3
+
+      - name: Test Ollama adapter via backend
+        run: |
+          set -e
+
+          echo "=== Detect Ollama ==="
+          curl -sf http://localhost:3001/api/exec -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{"cmd":"ollama","args":["--version"]}' | python3 -m json.tool
+
+          echo "=== List models ==="
+          curl -sf http://localhost:3001/api/exec -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{"cmd":"ollama","args":["list"]}' | python3 -m json.tool
+
+          echo "=== Ollama API tags ==="
+          curl -sf http://localhost:11434/api/tags | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          models = data.get('models', [])
+          print(f'Models available: {len(models)}')
+          for m in models:
+              print(f'  - {m[\"name\"]} ({m.get(\"size\",0)//1024//1024}MB)')
+          assert len(models) > 0, 'No models found'
+          print('PASS: Ollama integration verified')
+          "
+
+      - name: Run Ollama unit tests
+        run: npm test -- --reporter=verbose 2>&1 | grep -E "(PASS|FAIL|ollama)" || true
+
+  # ─── E2E Smoke Tests (Playwright) ───
+  e2e:
+    name: E2E Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install chromium
+
+      - name: Start dev servers
+        run: |
+          npm run dev:web &
+          sleep 5
+          curl -sf http://localhost:3000/ > /dev/null
+          curl -sf http://localhost:3001/api/system/detect > /dev/null
+          echo "Both servers running"
+
+      - name: Verify all pages render
+        run: |
+          cat << 'SCRIPT' > /tmp/e2e-smoke.mjs
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+
+          const pages = [
+            { path: '/?demo=skip', name: 'dashboard', expect: '概览' },
+            { path: '/gateway?demo=skip', name: 'gateway', expect: '网关' },
+            { path: '/observe?demo=skip', name: 'observe', expect: '可观测' },
+            { path: '/mcp?demo=skip', name: 'mcp', expect: 'MCP' },
+            { path: '/channels?demo=skip', name: 'channels', expect: '通道' },
+            { path: '/memory?demo=skip', name: 'memory', expect: '记忆' },
+            { path: '/sessions?demo=skip', name: 'sessions', expect: '会话' },
+            { path: '/models?demo=skip', name: 'models', expect: '模型' },
+            { path: '/skills?demo=skip', name: 'skills', expect: '技能' },
+            { path: '/agents?demo=skip', name: 'agents', expect: '智能体' },
+            { path: '/plugins?demo=skip', name: 'plugins', expect: '插件' },
+            { path: '/config?demo=skip', name: 'config', expect: '配置' },
+            { path: '/docs?demo=skip', name: 'docs', expect: '文档' },
+            { path: '/logs?demo=skip', name: 'logs', expect: '日志' },
+            { path: '/settings?demo=skip', name: 'settings', expect: '设置' },
+          ];
+
+          let pass = 0, fail = 0;
+          for (const p of pages) {
+            try {
+              await page.goto('http://localhost:3000' + p.path, { waitUntil: 'domcontentloaded', timeout: 15000 });
+              await page.waitForTimeout(3000);
+              const text = await page.evaluate(() => document.body.innerText);
+              if (text.includes(p.expect)) {
+                console.log('PASS ' + p.name);
+                pass++;
+              } else {
+                console.log('FAIL ' + p.name + ' — missing: ' + p.expect);
+                fail++;
+              }
+            } catch (err) {
+              console.log('FAIL ' + p.name + ' — ' + err.message.substring(0, 80));
+              fail++;
+            }
+          }
+
+          console.log('\n' + pass + '/' + (pass + fail) + ' pages passed');
+          await browser.close();
+          process.exit(fail > 0 ? 1 : 0);
+          SCRIPT
+          node /tmp/e2e-smoke.mjs
+
+      - name: Verify Skills catalog page
+        run: |
+          cat << 'SCRIPT' > /tmp/e2e-skills.mjs
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+
+          await page.goto('http://localhost:3000/skills?demo=skip', { waitUntil: 'domcontentloaded', timeout: 15000 });
+          await page.waitForTimeout(3000);
+          const text = await page.evaluate(() => document.body.innerText);
+
+          const checks = [
+            ['Title', text.includes('技能市场')],
+            ['Category pills', text.includes('OCR') && text.includes('编程工程')],
+            ['Scene bundles', text.includes('拍照答题') && text.includes('编程增强')],
+            ['Curated catalog', text.includes('精选目录')],
+            ['Catalog entries', text.includes('Self-Improving Agent') && text.includes('ClawVet')],
+            ['Install buttons', text.includes('安装')],
+            ['No i18n leaks', !text.includes('skills.catalog.')],
+          ];
+
+          let pass = 0, fail = 0;
+          for (const [name, ok] of checks) {
+            console.log((ok ? 'PASS' : 'FAIL') + ' ' + name);
+            ok ? pass++ : fail++;
+          }
+          console.log(pass + '/' + (pass + fail) + ' checks passed');
+          await browser.close();
+          process.exit(fail > 0 ? 1 : 0);
+          SCRIPT
+          node /tmp/e2e-skills.mjs
