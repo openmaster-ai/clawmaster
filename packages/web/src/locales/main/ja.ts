@@ -1,4 +1,4 @@
-const translations = {
+export default {
   "common.loading": "読み込み中...",
   "common.retry": "再試行",
   "common.cancel": "キャンセル",
@@ -168,6 +168,28 @@ const translations = {
   "skills.confirmUninstall": "{{slug}}をアンインストールしますか？",
   "skills.sceneSkills": "スキル{{count}}個",
   "skills.allInstalled": "すべてインストール済み",
+  "skills.subtitle": "OpenClaw スキル拡張を発見してインストール",
+  "skills.allCategories": "すべて",
+  "skills.curatedCatalog": "厳選カタログ",
+  "skills.source": "ソース",
+  "skills.codingBoost": "コーディング強化",
+  "skills.codingBoostDesc": "自己改善 + 高品質コーディングで AI アシスタントを進化させる",
+  "skills.category.ocr": "OCR・文書",
+  "skills.category.writing": "文章作成",
+  "skills.category.coding": "コーディング",
+  "skills.category.productivity": "生産性",
+  "skills.category.agent": "エージェント",
+  "skills.catalog.paddleocrDoc.desc": "PaddleOCR ベースの文書解析、スキャン・PDF・複雑レイアウト対応",
+  "skills.catalog.paddleocrText.desc": "PaddleOCR 画像文字認識、多言語手書き・印刷体対応",
+  "skills.catalog.writingStyle.desc": "修正から自動的に文体を学習し、出力品質を継続的に改善",
+  "skills.catalog.selfImproving.desc": "セッション間で学習・エラー・改善を蓄積し、AI を持続的に進化",
+  "skills.catalog.agencyPack.desc": "80以上の専門 AI エージェント、エンジニアリング・デザイン・マーケティング等8分野",
+  "skills.catalog.okSkills.desc": "厳選 AI コーディングスキルと AGENTS.md プレイブック、マルチツール対応",
+  "skills.catalog.memoryPro.desc": "階層記憶システム：memory → knowledge → skill、自動知識蒸留",
+  "skills.catalog.skillnote.desc": "オープンソースのスキルレジストリ、SKILL.md ファイルのクロスプラットフォーム配布",
+  "skills.catalog.clawvet.desc": "スキルセキュリティ検査ツール、インジェクション攻撃とサプライチェーンリスクを検出",
+  "skills.catalog.ontoskills.desc": "OWL 2 スキルコンパイラ、スキルをセマンティック Web オントロジーに変換・検証",
+  "skills.catalog.findSkills.desc": "ClawHub・GitHub 等からスキルを検索するディスカバリーガイド",
   "settings.title": "設定",
   "settings.appearance": "外観",
   "settings.mode": "モード:",
@@ -767,7 +789,5 @@ const translations = {
   "memory.sectionOpenclaw": "OpenClawメモリ",
   "memory.sectionPowermem": "PowerMem",
   "memory.statusLoading": "ステータス読み込み中...",
-  "memory.subtitleTabs": "OpenClaw CLIメモリとPowerMem統合"
+  "memory.subtitleTabs": "OpenClaw CLIメモリとPowerMem統合",
 } as const
-
-export default translations

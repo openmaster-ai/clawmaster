@@ -1,7 +1,8 @@
 suite: skills-marketplace
 name: 技能市场
 description: |
-  验证技能页面的场景推荐、技能列表、市场搜索、安装/卸载功能
+  验证技能页面的完整功能：
+  分类过滤、场景推荐、精选目录、已安装技能、市场搜索、安装/卸载
 
 preconditions:
   - dev server 已启动
@@ -11,33 +12,110 @@ viewport: { width: 1280, height: 800 }
 
 cases:
   - id: skill-01
-    name: 场景推荐区块
+    name: 页面头部和分类过滤器
     steps:
-      - action: navigate_to
-        target: 技能页面
+      - action: navigate
+        url: "{BASE_URL}/skills"
       - action: wait
-        duration: 1500ms
+        duration: 2000ms
+      - action: screenshot
+        name: skill-page-header
+    assertions:
+      - 页面标题"技能市场"
+      - 副标题"发现并安装 OpenClaw 技能扩展"
+      - 显示刷新按钮
+      - 显示"访问 ClawHub 在线市场 →"外部链接
+      - 显示分类过滤器 pill 按钮："全部"默认选中
+      - 分类 pill 包含：OCR 文档、写作风格、编程工程、效率工具、智能体
+
+  - id: skill-02
+    name: 分类过滤功能
+    steps:
+      - action: click
+        target: text("编程工程")
+      - action: wait
+        duration: 500ms
+      - action: screenshot
+        name: skill-filter-coding
+    assertions:
+      - "编程工程"pill 高亮（bg-card shadow-sm）
+      - 场景区域仅显示与编程相关的场景（"编程增强"）
+      - 精选目录仅显示编程类技能（Self-Improving Agent、Agency Skills Pack、OK Skills）
+      - OCR 类技能不可见
+      - 点击"全部"恢复完整显示
+
+  - id: skill-03
+    name: 场景推荐区块（4 张卡片）
+    steps:
+      - action: click
+        target: text("全部")
+      - action: wait
+        duration: 500ms
       - action: screenshot
         name: skill-scenes
     assertions:
       - 显示"推荐场景"标题
-      - 显示 3 张场景卡片，横向排列（md 及以上）
-      - 拍照答题卡片：📸 图标 + 描述含"OCR""飞书/微信/钉钉" + 一键安装按钮
-      - 发票整理卡片：🧾 图标 + 描述含"发票""归档" + 一键安装按钮
-      - 错题本卡片：📝 图标 + 描述含"错题""复习" + 一键安装按钮
+      - 显示 4 张场景卡片（lg 屏幕 4 列）
+      - 拍照答题：Camera 图标 + "2 个技能" + 描述含"OCR" + 一键安装按钮
+      - 发票整理：Receipt 图标 + "1 个技能" + 描述含"发票" + 一键安装按钮
+      - 错题本：BookOpen 图标 + "1 个技能" + 描述含"错题" + 一键安装按钮
+      - 编程增强：Code 图标 + "2 个技能" + 描述含"自我改进" + 一键安装按钮
+      - 已全部安装的场景显示绿色"已全部安装"标签（CheckCircle2）
 
-  - id: skill-02
+  - id: skill-04
+    name: 精选目录网格
+    steps:
+      - action: scroll_to
+        target: 精选目录区域
+      - action: screenshot
+        name: skill-catalog-grid
+    assertions:
+      - 显示"精选目录"标题
+      - 显示 3 列卡片网格（lg 屏幕）
+      - 每张卡片包含：技能名称 + slug（mono 字体）+ 分类标签（彩色）+ 描述 + 源码链接 + 安装按钮
+      - 至少显示 11 张技能卡片
+      - 包含技能：PaddleOCR Doc Parsing、Writing Style、Self-Improving Agent、Agency Skills Pack、ClawVet 等
+      - 已安装的技能显示绿色"已安装"标签 + "卸载"按钮
+      - 未安装的技能显示"安装"按钮
+      - 分类标签颜色：OCR 蓝色、写作紫色、编程绿色、效率琥珀色、智能体玫红色
+
+  - id: skill-05
+    name: 精选目录安装流程
+    steps:
+      - action: click
+        target: 某未安装技能卡片的"安装"按钮
+      - action: observe
+        duration: 10000ms
+    assertions:
+      - 点击后显示 InstallTask 进度组件
+      - 进度组件显示安装状态（进行中/成功/失败）
+      - 安装成功后卡片显示"已安装"绿色标签
+      - 安装成功后按钮变为"卸载"
+
+  - id: skill-06
+    name: 源码链接
+    steps:
+      - action: observe
+        target: 精选目录卡片的"源码"链接
+    assertions:
+      - "源码"链接有 ExternalLink 图标
+      - 链接有 target="_blank" 属性
+      - 链接指向 GitHub 或 ClawHub URL
+
+  - id: skill-07
     name: 已安装技能 tab
     steps:
+      - action: scroll_to
+        target: 已安装 tab 区域
       - action: observe
         target: "已安装"tab 区域
     assertions:
       - "已安装 (N)"tab 默认选中
-      - 显示过滤输入框"过滤已安装技能..."
-      - 如有技能：显示技能卡片（名称 + 版本 + 描述 + 卸载按钮）
-      - 如无技能：显示"暂无已安装技能"
+      - 显示过滤输入框
+      - 如有技能：显示技能卡片（名称 + 版本 + 描述 + slug + 卸载按钮）
+      - 如无技能：显示 Package 图标 + "暂无已安装技能"
 
-  - id: skill-03
+  - id: skill-08
     name: 搜索市场 tab
     steps:
       - action: click
@@ -46,45 +124,23 @@ cases:
         name: skill-market-tab
     assertions:
       - "搜索市场"tab 高亮
-      - 显示搜索输入框"搜索 ClawHub 5400+ 技能..."
+      - 搜索输入框 placeholder 变为市场搜索提示
       - 显示"搜索"按钮
-      - 显示"访问 ClawHub 在线市场 →"链接
-      - 初始状态显示"输入关键词搜索 ClawHub 技能市场"提示
+      - 初始状态显示 Search 图标 + 搜索提示文字
 
-  - id: skill-04
-    name: 市场搜索交互
-    preconditions:
-      - clawhub CLI 可用
-    steps:
-      - action: fill
-        target: 搜索输入框
-        value: "paddleocr"
-      - action: click
-        target: text("搜索")
-      - action: wait
-        duration: 3000ms
-      - action: screenshot
-        name: skill-search-results
-    assertions:
-      - 搜索按钮变为"搜索中..."再恢复
-      - 搜索结果显示匹配的技能卡片
-      - 每张卡片有"安装"按钮
-      - 也支持按 Enter 触发搜索
-
-  - id: skill-05
+  - id: skill-09
     name: 场景一键安装
     steps:
       - action: click
-        target: 拍照答题卡片的"一键安装"按钮
+        target: 某场景卡片的"一键安装"按钮
       - action: observe
-        duration: 3000ms
+        duration: 10000ms
     assertions:
-      - 按钮变为"安装中..."
-      - 按钮置灰（disabled）
-      - 安装完成后按钮恢复
+      - 显示 InstallTask 进度组件替代安装按钮
+      - 安装完成后场景显示"已全部安装"绿色标签
       - 已安装 tab 数字更新
 
-  - id: skill-06
+  - id: skill-10
     name: 技能卸载
     preconditions:
       - 有已安装的技能
@@ -92,8 +148,9 @@ cases:
       - action: click
         target: 某个技能的"卸载"按钮
       - action: observe
+        duration: 3000ms
     assertions:
       - 弹出确认对话框
-      - 按钮变为"处理中..."
-      - 卸载完成后技能从列表消失
+      - 确认后技能从已安装列表消失
+      - 精选目录中该技能恢复为"安装"按钮
       - 已安装数字更新

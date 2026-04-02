@@ -1,4 +1,4 @@
-const translations = {
+export default {
   "common.loading": "Loading...",
   "common.retry": "Retry",
   "common.cancel": "Cancel",
@@ -168,6 +168,28 @@ const translations = {
   "skills.confirmUninstall": "Uninstall {{slug}}?",
   "skills.sceneSkills": "{{count}} skills",
   "skills.allInstalled": "All installed",
+  "skills.subtitle": "Discover and install OpenClaw skill extensions",
+  "skills.allCategories": "All",
+  "skills.curatedCatalog": "Curated Catalog",
+  "skills.source": "Source",
+  "skills.codingBoost": "Coding Boost",
+  "skills.codingBoostDesc": "Self-improvement + quality coding practices for evolving AI assistants",
+  "skills.category.ocr": "OCR & Docs",
+  "skills.category.writing": "Writing",
+  "skills.category.coding": "Coding",
+  "skills.category.productivity": "Productivity",
+  "skills.category.agent": "Agent",
+  "skills.catalog.paddleocrDoc.desc": "PaddleOCR-based document parsing for scanned files, PDFs, and complex layouts",
+  "skills.catalog.paddleocrText.desc": "PaddleOCR image text recognition supporting multilingual handwriting and print",
+  "skills.catalog.writingStyle.desc": "Auto-learns your writing style from corrections and continuously improves output",
+  "skills.catalog.selfImproving.desc": "Captures learnings, errors, and improvements across sessions for continuous AI evolution",
+  "skills.catalog.agencyPack.desc": "80+ specialist AI agents covering engineering, design, marketing, testing, and more",
+  "skills.catalog.okSkills.desc": "Curated AI coding agent skills and AGENTS.md playbooks, multi-tool compatible",
+  "skills.catalog.memoryPro.desc": "Hierarchical memory system: memory to knowledge to skill, auto-distills knowledge",
+  "skills.catalog.skillnote.desc": "Open-source skill registry for distributing and managing SKILL.md files across platforms",
+  "skills.catalog.clawvet.desc": "Skill security vetting tool that scans for injection attacks and supply chain risks",
+  "skills.catalog.ontoskills.desc": "OWL 2 skill compiler that transforms skills into validated semantic web ontologies",
+  "skills.catalog.findSkills.desc": "Skill discovery guide for searching skills from ClawHub, GitHub, and other sources",
   "settings.title": "Settings",
   "settings.appearance": "Appearance",
   "settings.mode": "Mode:",
@@ -767,7 +789,5 @@ const translations = {
   "memory.sectionOpenclaw": "OpenClaw Memory",
   "memory.sectionPowermem": "PowerMem",
   "memory.statusLoading": "Loading status...",
-  "memory.subtitleTabs": "OpenClaw CLI memory and PowerMem integration"
+  "memory.subtitleTabs": "OpenClaw CLI memory and PowerMem integration",
 } as const
-
-export default translations

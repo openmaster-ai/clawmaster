@@ -11,7 +11,7 @@
 | `03-memory-module.yaml` | 10 | 记忆管理完整功能（降级/健康/列表/搜索/添加/编辑/删除/Agent 切换） |
 | `04-observe-module.yaml` | 9 | 可观测 Dashboard（降级/费用卡片/图表/健康度/建议/会话） |
 | `05-config-and-security.yaml` | 10 | 配置编辑 + API Key 脱敏 + 预算 + 主题切换 |
-| `06-skills-marketplace.yaml` | 6 | 技能市场（场景推荐/列表/搜索/安装/卸载） |
+| `06-skills-marketplace.yaml` | 10 | 技能市场（分类过滤/场景推荐/精选目录/安装卸载/市场搜索） |
 | `07-setup-install-real.yaml` | 16 | 安装向导真实安装全流程（检测/卸载/安装/CapabilityGuard/错误处理/API） |
 | `08-onboarding-config.yaml` | 17 | 安装后配置引导（初始化/API Key/模型/网关/通道/跳过/汇总） |
 | `09-gateway-module.yaml` | 6 | 网关管理（状态指示/启动停止/配置概览/Token 复制/重启） |
@@ -24,7 +24,7 @@
 | `16-docs-module.yaml` | 4 | 文档中心（快速链接/搜索交互/结果展示/外部链接） |
 | `17-logs-module.yaml` | 5 | 日志查看（列表/级别过滤/搜索/颜色编码/刷新） |
 | `18-dashboard-module.yaml` | 6 | 概览页面（系统信息/网关状态/通道/速览卡片/快捷操作/模型代理） |
-| **合计** | **148** | |
+| **合计** | **152** | |
 
 ## 用例格式
 

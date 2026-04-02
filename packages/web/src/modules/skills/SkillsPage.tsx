@@ -6,6 +6,7 @@ import {
   Camera,
   Receipt,
   BookOpen,
+  Code,
   RefreshCw,
   ExternalLink,
   Search,
@@ -24,42 +25,22 @@ import {
 import type { SkillInfo } from '@/lib/types'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
+import {
+  SKILL_CATALOG,
+  SCENE_BUNDLES,
+  CATEGORY_ORDER,
+  CATEGORY_COLORS,
+  type SkillCategory,
+  type CatalogSkill,
+  type SceneBundle,
+} from './catalog'
 
-interface SceneConfig {
-  id: string
-  titleKey: string
-  descKey: string
-  skills: string[]
-  icon: LucideIcon
-  color: string
+const SCENE_ICON_MAP: Record<string, LucideIcon> = {
+  camera: Camera,
+  receipt: Receipt,
+  'book-open': BookOpen,
+  code: Code,
 }
-
-const SCENES: SceneConfig[] = [
-  {
-    id: 'photo-qa',
-    titleKey: 'skills.photoQa',
-    descKey: 'skills.photoQaDesc',
-    skills: ['paddleocr-doc-parsing', 'paddleocr-text-recognition'],
-    icon: Camera,
-    color: 'text-blue-500 bg-blue-100 dark:bg-blue-900/40',
-  },
-  {
-    id: 'invoice',
-    titleKey: 'skills.invoice',
-    descKey: 'skills.invoiceDesc',
-    skills: ['paddleocr-doc-parsing'],
-    icon: Receipt,
-    color: 'text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40',
-  },
-  {
-    id: 'mistakes',
-    titleKey: 'skills.mistakes',
-    descKey: 'skills.mistakesDesc',
-    skills: ['paddleocr-text-recognition'],
-    icon: BookOpen,
-    color: 'text-amber-500 bg-amber-100 dark:bg-amber-900/40',
-  },
-]
 
 export default function Skills() {
   return (
@@ -78,6 +59,7 @@ function SkillsContent() {
   const [operating, setOperating] = useState<string | null>(null)
   const [view, setView] = useState<'installed' | 'market'>('installed')
   const [query, setQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<SkillCategory | 'all'>('all')
 
   const skills = installedSkills ?? []
   const installedSlugs = useMemo(() => new Set(skills.map((s) => s.slug)), [skills])
@@ -89,6 +71,18 @@ function SkillsContent() {
       (s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q),
     )
   }, [skills, query])
+
+  const filteredCatalog = useMemo(
+    () => selectedCategory === 'all' ? SKILL_CATALOG : SKILL_CATALOG.filter((s) => s.category === selectedCategory),
+    [selectedCategory],
+  )
+
+  const filteredScenes = useMemo(
+    () => selectedCategory === 'all' ? SCENE_BUNDLES : SCENE_BUNDLES.filter((b) =>
+      b.skills.some((slug) => SKILL_CATALOG.find((s) => s.slug === slug)?.category === selectedCategory),
+    ),
+    [selectedCategory],
+  )
 
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return
@@ -121,9 +115,9 @@ function SkillsContent() {
     setOperating(null)
   }
 
-  async function handleSceneInstall(scenSkills: string[]) {
+  async function handleSceneInstall(sceneSkills: string[]) {
     setOperating('scene')
-    for (const slug of scenSkills) {
+    for (const slug of sceneSkills) {
       const result = await installSkillResult(slug)
       if (!result.success) {
         alert(t('skills.installFailed', { message: result.error }))
@@ -139,10 +133,13 @@ function SkillsContent() {
   }
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-5xl space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">{t('skills.title')}</h1>
+        <div>
+          <h1 className="text-2xl font-bold">{t('skills.title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('skills.subtitle')}</p>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => refetch()}
@@ -163,23 +160,60 @@ function SkillsContent() {
         </div>
       </div>
 
-      {/* Recommended Scenes */}
+      {/* Category filter */}
+      <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit flex-wrap">
+        <CategoryPill
+          active={selectedCategory === 'all'}
+          onClick={() => setSelectedCategory('all')}
+          label={t('skills.allCategories')}
+        />
+        {CATEGORY_ORDER.map((cat) => (
+          <CategoryPill
+            key={cat}
+            active={selectedCategory === cat}
+            onClick={() => setSelectedCategory(cat)}
+            label={t(`skills.category.${cat}`)}
+          />
+        ))}
+      </div>
+
+      {/* Scene Bundles */}
+      {filteredScenes.length > 0 && (
+        <div>
+          <h3 className="font-medium mb-3">{t('skills.recommendedScenes')}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {filteredScenes.map((scene) => {
+              const allInstalled = isSceneInstalled(scene.skills)
+              return (
+                <SceneCard
+                  key={scene.id}
+                  scene={scene}
+                  allInstalled={allInstalled}
+                  installing={operating === 'scene'}
+                  onInstall={() => handleSceneInstall(scene.skills)}
+                  t={t}
+                />
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Curated Catalog */}
       <div>
-        <h3 className="font-medium mb-3">{t('skills.recommendedScenes')}</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {SCENES.map((scene) => {
-            const allInstalled = isSceneInstalled(scene.skills)
-            return (
-              <SceneCard
-                key={scene.id}
-                scene={scene}
-                allInstalled={allInstalled}
-                installing={operating === 'scene'}
-                onInstall={() => handleSceneInstall(scene.skills)}
-                t={t}
-              />
-            )
-          })}
+        <h3 className="font-medium mb-3">{t('skills.curatedCatalog')}</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredCatalog.map((catalog) => (
+            <CatalogCard
+              key={catalog.slug}
+              catalog={catalog}
+              installed={installedSlugs.has(catalog.slug)}
+              operating={operating === catalog.slug}
+              onInstall={() => handleInstall(catalog.slug)}
+              onUninstall={() => handleUninstall(catalog.slug)}
+              t={t}
+            />
+          ))}
         </div>
       </div>
 
@@ -250,6 +284,19 @@ function SkillsContent() {
 
 // ─── Sub-components ───
 
+function CategoryPill({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+        active ? 'bg-card shadow-sm' : 'hover:bg-card/50'
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
 function SceneCard({
   scene,
   allInstalled,
@@ -257,14 +304,14 @@ function SceneCard({
   onInstall,
   t,
 }: {
-  scene: SceneConfig
+  scene: SceneBundle
   allInstalled: boolean
   installing: boolean
   onInstall: () => void
   t: (key: string, opts?: any) => string
 }) {
   const sceneTask = useInstallTask()
-  const Icon = scene.icon
+  const Icon = SCENE_ICON_MAP[scene.icon] ?? Package
   return (
     <div className="bg-card border border-border rounded-lg p-5 flex flex-col hover:border-primary/50 transition-colors">
       <div className="flex items-start gap-3 mb-3">
@@ -301,6 +348,89 @@ function SceneCard({
           {t('skills.oneClickInstall')}
         </button>
       )}
+    </div>
+  )
+}
+
+function CatalogCard({
+  catalog,
+  installed,
+  operating,
+  onInstall,
+  onUninstall,
+  t,
+}: {
+  catalog: CatalogSkill
+  installed: boolean
+  operating: boolean
+  onInstall: () => void
+  onUninstall: () => void
+  t: (key: string, opts?: any) => string
+}) {
+  const installTask = useInstallTask()
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-4 hover:border-primary/30 transition-colors">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{catalog.name}</span>
+            {installed && (
+              <span className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                <CheckCircle2 className="w-3 h-3" />
+                {t('common.installed')}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground font-mono mt-0.5">{catalog.slug}</p>
+        </div>
+        <span className={`px-2 py-0.5 text-xs rounded-full flex-shrink-0 ${CATEGORY_COLORS[catalog.category]}`}>
+          {t(`skills.category.${catalog.category}`)}
+        </span>
+      </div>
+      <p className="text-sm text-muted-foreground mb-3">{t(catalog.descriptionKey)}</p>
+
+      <div className="flex items-center gap-2">
+        {catalog.sourceUrl && (
+          <a
+            href={catalog.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-primary hover:underline"
+          >
+            <ExternalLink className="w-3 h-3" />
+            {t('skills.source')}
+          </a>
+        )}
+        <div className="flex-1" />
+
+        {installTask.status !== 'idle' ? (
+          <InstallTask
+            label={catalog.name}
+            status={installTask.status}
+            error={installTask.error}
+            onRetry={installTask.reset}
+          />
+        ) : installed ? (
+          <button
+            onClick={onUninstall}
+            disabled={operating}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 disabled:opacity-50"
+          >
+            <Trash2 className="w-3 h-3" />
+            {t('skills.uninstall')}
+          </button>
+        ) : (
+          <button
+            onClick={() => installTask.run(async () => { onInstall() })}
+            disabled={operating}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50"
+          >
+            <Download className="w-3 h-3" />
+            {t('skills.install')}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
