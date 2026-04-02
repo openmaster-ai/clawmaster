@@ -198,77 +198,31 @@ jobs:
           curl -sf http://localhost:3001/api/system/detect > /dev/null
           echo "Both servers running"
 
-      - name: Verify all pages render
+      - name: Smoke test — all 15 pages render
         run: |
-          cat << 'SCRIPT' > e2e-smoke.mjs
+          cat << 'SCRIPT' > _smoke.mjs
           import { chromium } from 'playwright';
           const browser = await chromium.launch({ headless: true });
           const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-
-          // Smoke test: verify each page renders without crash (non-blank).
-          // In CI, OpenClaw isn't installed so data-dependent pages show error/empty states — that's fine.
-          // We check that React rendered *something* (sidebar + page shell), not specific data.
-          const pages = [
-            '/', '/gateway', '/observe', '/mcp', '/channels', '/memory',
+          const paths = ['/', '/gateway', '/observe', '/mcp', '/channels', '/memory',
             '/sessions', '/models', '/skills', '/agents', '/plugins',
-            '/config', '/docs', '/logs', '/settings',
-          ];
-
+            '/config', '/docs', '/logs', '/settings'];
           let pass = 0, fail = 0;
-          for (const path of pages) {
-            const name = path === '/' ? 'dashboard' : path.slice(1);
+          for (const p of paths) {
+            const name = p === '/' ? 'dashboard' : p.slice(1);
             try {
-              await page.goto('http://localhost:3000' + path + '?demo=skip', { waitUntil: 'domcontentloaded', timeout: 15000 });
+              await page.goto('http://localhost:3000' + p + '?demo=skip', { waitUntil: 'domcontentloaded', timeout: 15000 });
               await page.waitForTimeout(3000);
               const len = await page.evaluate(() => document.body.innerText.trim().length);
-              // Page must render at least sidebar nav (~50 chars) to be considered non-blank
-              if (len > 50) {
-                console.log('PASS ' + name + ' (' + len + ' chars)');
-                pass++;
-              } else {
-                console.log('FAIL ' + name + ' — blank page (' + len + ' chars)');
-                fail++;
-              }
-            } catch (err) {
-              console.log('FAIL ' + name + ' — ' + err.message.substring(0, 80));
-              fail++;
-            }
+              if (len > 50) { console.log('PASS ' + name); pass++; }
+              else { console.log('FAIL ' + name + ' (blank)'); fail++; }
+            } catch (e) { console.log('FAIL ' + name + ' — ' + e.message.slice(0, 60)); fail++; }
           }
-
-          console.log('\n' + pass + '/' + (pass + fail) + ' pages passed');
+          console.log(pass + '/' + (pass + fail) + ' pages rendered');
           await browser.close();
           process.exit(fail > 0 ? 1 : 0);
           SCRIPT
-          node e2e-smoke.mjs
+          node _smoke.mjs
 
-      - name: Verify Skills catalog page
-        run: |
-          cat << 'SCRIPT' > e2e-skills.mjs
-          import { chromium } from 'playwright';
-          const browser = await chromium.launch({ headless: true });
-          const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-
-          await page.goto('http://localhost:3000/skills?demo=skip', { waitUntil: 'domcontentloaded', timeout: 15000 });
-          await page.waitForTimeout(3000);
-          const text = await page.evaluate(() => document.body.innerText);
-
-          const checks = [
-            ['ClawHub link', text.includes('ClawHub')],
-            ['Category: OCR', text.includes('OCR')],
-            ['PaddleOCR in catalog', text.includes('PaddleOCR')],
-            ['Self-Improving Agent', text.includes('Self-Improving Agent')],
-            ['ClawVet', text.includes('ClawVet')],
-            ['Writing Style', text.includes('Writing Style')],
-            ['No i18n key leaks', !text.includes('skills.catalog.') && !text.includes('skills.category.')],
-          ];
-
-          let pass = 0, fail = 0;
-          for (const [name, ok] of checks) {
-            console.log((ok ? 'PASS' : 'FAIL') + ' ' + name);
-            ok ? pass++ : fail++;
-          }
-          console.log(pass + '/' + (pass + fail) + ' checks passed');
-          await browser.close();
-          process.exit(fail > 0 ? 1 : 0);
-          SCRIPT
-          node e2e-skills.mjs
+      - name: Run YAML UI tests (CI-safe suites)
+        run: node tests/ui/runner.mjs --suites 06,10,16,18
