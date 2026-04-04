@@ -81,6 +81,11 @@ async function execViaWeb(cmd: string, args: string[]): Promise<string> {
     throw new Error(`Command failed (${res.status}): ${body}`)
   }
   const data = await res.json()
+  if (data?.ok === false) {
+    const detail = data.stderr || data.error || data.stdout || 'unknown command failure'
+    const exitCode = data.exitCode ?? 'error'
+    throw new Error(`Command failed (${exitCode}): ${detail}`)
+  }
   return data.stdout ?? ''
 }
 

@@ -7,6 +7,7 @@ import path from 'path'
 
 const execFileAsync = promisify(execFile)
 const IS_WINDOWS = platform() === 'win32'
+const INVALID_REQUEST_RE = /Missing cmd parameter|Args must be an array of strings|Command (?:path is not allowed|is not allowed)/
 const ALLOWED_COMMANDS = new Set([
   'bash',
   'clawhub',
@@ -98,14 +99,22 @@ export function registerExecRoutes(app: Express): void {
     try {
       const normalized = normalizeExecRequest(cmd, args)
       const { stdout, stderr } = await execFileAsync(normalized.cmd, normalized.args, { shell: false })
-      res.json({ stdout: stdout.trim(), stderr: stderr.trim() })
+      res.json({ ok: true, stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0 })
     } catch (err: any) {
       const message = err instanceof Error ? err.message : String(err)
-      const status =
-        /Missing cmd parameter|Args must be an array of strings|Command (?:path is not allowed|is not allowed)/.test(message)
-          ? 400
-          : 500
-      res.status(status).json({ error: message, stdout: '', stderr: err?.stderr || '' })
+      if (INVALID_REQUEST_RE.test(message)) {
+        res.status(400).json({ error: message, stdout: '', stderr: err?.stderr || '' })
+        return
+      }
+
+      const exitCode = typeof err?.code === 'number' ? err.code : err?.code === 'ENOENT' ? 127 : 1
+      res.json({
+        ok: false,
+        error: message,
+        stdout: (err?.stdout || '').trim(),
+        stderr: (err?.stderr || '').trim(),
+        exitCode,
+      })
     }
   })
 }

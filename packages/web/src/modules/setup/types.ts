@@ -136,7 +136,9 @@ export interface ProviderConfig {
   defaultModel: string
   baseUrl?: string // 预置 baseUrl（如 DeepSeek、SiliconFlow）
   needsBaseUrl?: boolean // 需要用户手动输入 baseUrl（如自定义兼容端点）
-  /** openclaw config key 覆盖（如 siliconflow 使用 openrouter 作为 config key 以支持带斜杠的模型 ID） */
+  /** 自定义 provider 的 API 类型（如 OpenAI-compatible 端点） */
+  api?: string
+  /** openclaw config key 覆盖 */
   configKeyOverride?: string
   /** API Key 管理页面链接 */
   keyUrl?: string
@@ -243,9 +245,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
   },
   siliconflow: {
     label: 'SiliconFlow',
-    // 使用 openrouter 作为 config key，因为 openclaw 的 openrouter 提供商
-    // 正确处理 baseUrl + 带斜杠的模型 ID（如 deepseek-ai/DeepSeek-V3）
-    configKeyOverride: 'openrouter',
+    api: 'openai-completions',
     keyUrl: 'https://cloud.siliconflow.cn/account/ak',
     baseUrl: 'https://api.siliconflow.cn/v1',
     models: [
@@ -328,7 +328,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
   // ── 自定义兼容端点 ──
   'custom-openai-compatible': {
     label: 'Custom (OpenAI Compatible)',
-    configKeyOverride: 'openrouter', // 使用 openrouter 以支持带斜杠的模型 ID
+    api: 'openai-completions',
     needsBaseUrl: true,
     models: [], // 用户手动输入模型 ID
     defaultModel: '',

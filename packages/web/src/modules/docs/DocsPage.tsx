@@ -44,23 +44,27 @@ export default function Docs() {
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <h1 className="text-2xl font-bold">{t('docs.title')}</h1>
+    <div className="page-shell page-shell-prose">
+      <div className="page-header">
+        <div className="page-header-copy">
+          <h1 className="page-title">{t('docs.title')}</h1>
+          <p className="page-subtitle">{t('docs.commonDocs')}</p>
+        </div>
+      </div>
 
-      {/* 搜索 */}
-      <div className="flex gap-3">
+      <div className="toolbar-card">
         <input
           type="text"
           placeholder={t('docs.searchPlaceholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          className="flex-1 px-4 py-2 bg-card rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          className="control-input flex-1"
         />
         <button
           onClick={handleSearch}
           disabled={searching || !query.trim()}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 text-sm"
+          className="button-primary"
         >
           {searching ? t('common.searching') : t('common.search')}
         </button>
@@ -77,7 +81,7 @@ export default function Docs() {
               href={r.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="block bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition"
+              className="list-card block transition hover:border-primary/50"
             >
               <p className="font-medium text-primary">{r.title}</p>
               {r.url && <p className="text-xs text-muted-foreground font-mono mt-0.5">{r.url}</p>}
@@ -87,7 +91,7 @@ export default function Docs() {
         </div>
       )}
       {searched && !searching && results.length === 0 && !error && (
-        <p className="text-muted-foreground text-center py-4">{t('docs.noResults')}</p>
+        <div className="state-panel min-h-0 py-8 text-muted-foreground">{t('docs.noResults')}</div>
       )}
 
       {/* 快速链接 */}
@@ -101,7 +105,7 @@ export default function Docs() {
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition"
+                className="list-card transition hover:border-primary/50"
               >
                 <p className="font-medium">{link.label}</p>
                 <p className="text-sm text-muted-foreground mt-1">{link.desc}</p>

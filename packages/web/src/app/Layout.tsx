@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils'
 import { changeLanguage } from '@/i18n'
 import type { GatewayStatus } from '@/lib/types'
 import { getGatewayStatusResult } from '@/shared/adapters/gateway'
+import { platformResults } from '@/shared/adapters/platformResults'
 import { getClawModules } from './moduleRegistry'
-import type { NavGroup } from '@/types/module'
 import {
   LayoutDashboard,
   BarChart3,
@@ -28,6 +28,7 @@ import {
   Menu,
   X,
   HardDrive,
+  ArrowUpCircle,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -56,20 +57,61 @@ function resolveIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Box
 }
 
-// ─── Nav group config ───
-
-const GROUP_ORDER: NavGroup[] = ['main', 'manage', 'system']
-const GROUP_LABEL_KEYS: Record<NavGroup, string | null> = {
-  main: null,                    // No label for top group
-  manage: 'layout.group.manage',
-  system: 'layout.group.system',
-}
-
 interface NavItem {
   path: string
   labelKey: string
   icon: LucideIcon
-  group: NavGroup
+}
+
+interface NavSection {
+  id: string
+  labelKey: string
+  descriptionKey: string
+  paths: string[]
+}
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    id: 'live',
+    labelKey: 'layout.section.live',
+    descriptionKey: 'layout.section.liveDesc',
+    paths: ['/', '/gateway', '/observe', '/sessions'],
+  },
+  {
+    id: 'workspace',
+    labelKey: 'layout.section.workspace',
+    descriptionKey: 'layout.section.workspaceDesc',
+    paths: ['/channels', '/models', '/agents', '/memory'],
+  },
+  {
+    id: 'extend',
+    labelKey: 'layout.section.extend',
+    descriptionKey: 'layout.section.extendDesc',
+    paths: ['/skills', '/plugins', '/mcp', '/docs'],
+  },
+  {
+    id: 'control',
+    labelKey: 'layout.section.control',
+    descriptionKey: 'layout.section.controlDesc',
+    paths: ['/config', '/settings'],
+  },
+]
+
+const PAGE_META: Record<string, { sectionId: string; descriptionKey: string }> = {
+  '/': { sectionId: 'live', descriptionKey: 'layout.page.dashboard' },
+  '/gateway': { sectionId: 'live', descriptionKey: 'layout.page.gateway' },
+  '/observe': { sectionId: 'live', descriptionKey: 'layout.page.observe' },
+  '/sessions': { sectionId: 'live', descriptionKey: 'layout.page.sessions' },
+  '/channels': { sectionId: 'workspace', descriptionKey: 'layout.page.channels' },
+  '/models': { sectionId: 'workspace', descriptionKey: 'layout.page.models' },
+  '/agents': { sectionId: 'workspace', descriptionKey: 'layout.page.agents' },
+  '/memory': { sectionId: 'workspace', descriptionKey: 'layout.page.memory' },
+  '/skills': { sectionId: 'extend', descriptionKey: 'layout.page.skills' },
+  '/plugins': { sectionId: 'extend', descriptionKey: 'layout.page.plugins' },
+  '/mcp': { sectionId: 'extend', descriptionKey: 'layout.page.mcp' },
+  '/docs': { sectionId: 'extend', descriptionKey: 'layout.page.docs' },
+  '/config': { sectionId: 'control', descriptionKey: 'layout.page.config' },
+  '/settings': { sectionId: 'control', descriptionKey: 'layout.page.settings' },
 }
 
 // ─── Dark mode ───
@@ -102,6 +144,16 @@ interface LayoutProps {
   children: React.ReactNode
 }
 
+type UpdateBannerState =
+  | { status: 'idle' | 'checking' | 'unavailable' | 'up-to-date' | 'error' }
+  | { status: 'available'; currentVersion: string; latestVersion: string }
+
+function normalizeVersion(version: string | undefined): string {
+  const raw = String(version ?? '').replace(/^v/i, '').trim()
+  const match = raw.match(/\d+\.\d+\.\d+[\w.-]*/)
+  return match ? match[0] : raw
+}
+
 export default function Layout({ children }: LayoutProps) {
   const { t, i18n } = useTranslation()
   const location = useLocation()
@@ -109,6 +161,8 @@ export default function Layout({ children }: LayoutProps) {
   const [dark, setDark] = useState(isDark)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [gwStatus, setGwStatus] = useState<GatewayStatus | null>(null)
+  const [updateBanner, setUpdateBanner] = useState<UpdateBannerState>({ status: 'idle' })
+  const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false)
 
   // Poll gateway status for footer indicator
   const pollGateway = useCallback(async () => {
@@ -122,24 +176,70 @@ export default function Layout({ children }: LayoutProps) {
     return () => window.clearInterval(id)
   }, [pollGateway])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function checkForOpenclawUpdate() {
+      setUpdateBanner({ status: 'checking' })
+
+      const system = await platformResults.detectSystem()
+      const currentVersion = normalizeVersion(system.data?.openclaw.version)
+      if (!system.success || !system.data?.openclaw.installed || !currentVersion) {
+        if (!cancelled) setUpdateBanner({ status: 'unavailable' })
+        return
+      }
+
+      const versions = await platformResults.listOpenclawNpmVersions()
+      const latestVersion = normalizeVersion(
+        versions.data?.distTags.latest ?? versions.data?.versions[0]
+      )
+
+      if (!versions.success || !latestVersion) {
+        if (!cancelled) setUpdateBanner({ status: 'error' })
+        return
+      }
+
+      if (!cancelled) {
+        setUpdateBanner(
+          currentVersion === latestVersion
+            ? { status: 'up-to-date' }
+            : { status: 'available', currentVersion, latestVersion },
+        )
+      }
+    }
+
+    void checkForOpenclawUpdate()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (updateBanner.status === 'available') {
+      setUpdateBannerDismissed(false)
+    }
+  }, [updateBanner])
+
   const modules = getClawModules()
   const navItems: NavItem[] = useMemo(() =>
     modules.map((m) => ({
       path: m.route.path,
       labelKey: m.nameKey,
       icon: resolveIcon(m.icon),
-      group: m.group ?? 'main',
     })),
     [modules],
   )
 
-  const groupedNav = useMemo(() => {
-    const groups: Record<NavGroup, NavItem[]> = { main: [], manage: [], system: [] }
-    for (const item of navItems) {
-      groups[item.group].push(item)
-    }
-    return groups
-  }, [navItems])
+  const navItemsByPath = useMemo(() => new Map(navItems.map((item) => [item.path, item])), [navItems])
+
+  const navSections = useMemo(() => {
+    return NAV_SECTIONS.map((section) => ({
+      ...section,
+      items: section.paths
+        .map((path) => navItemsByPath.get(path))
+        .filter((item): item is NavItem => Boolean(item)),
+    })).filter((section) => section.items.length > 0)
+  }, [navItemsByPath])
 
   useEffect(() => {
     applyDarkMode(getStoredDarkMode())
@@ -158,53 +258,67 @@ export default function Layout({ children }: LayoutProps) {
 
   const currentLabel = navItems.find((item) => item.path === currentPath)
   const pageTitle = currentLabel ? t(currentLabel.labelKey) : t('layout.appName')
+  const currentMeta = PAGE_META[currentPath]
+  const currentSection = navSections.find((section) => section.id === currentMeta?.sectionId) ?? navSections[0]
+  const pageDescription = currentMeta ? t(currentMeta.descriptionKey) : t('layout.section.liveDesc')
 
   const sidebarContent = (
     <>
-      {/* Header — aligned with main header via same h-11 height */}
-      <div className="h-11 px-4 border-b border-border flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center text-primary-foreground">
-            <Shell className="w-4 h-4" />
+      <div className="app-sidebar-header shrink-0">
+        <div className="app-brand">
+          <div className="app-brand-mark">
+            <Shell className="h-4 w-4" />
           </div>
-          <div>
-            <h1 className="font-semibold text-sm leading-tight">{t('layout.appName')}</h1>
+          <div className="app-brand-copy">
+            <h1 className="app-brand-name">{t('layout.appName')}</h1>
+            <p className="app-brand-subtitle">{t('layout.appSub')}</p>
           </div>
         </div>
-        <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 rounded-md text-muted-foreground hover:text-foreground">
-          <X className="w-5 h-5" />
+        <button onClick={() => setSidebarOpen(false)} className="app-icon-button lg:hidden">
+          <X className="h-5 w-5" />
         </button>
       </div>
 
-      {/* Nav groups */}
-      <nav className="flex-1 overflow-auto py-2 px-2 space-y-4">
-        {GROUP_ORDER.map((group) => {
-          const items = groupedNav[group]
-          if (items.length === 0) return null
-          const labelKey = GROUP_LABEL_KEYS[group]
+      <div className="app-sidebar-overview">
+        <div className="app-sidebar-overview-card">
+          <p className="app-sidebar-eyebrow">{currentSection ? t(currentSection.labelKey) : t('layout.appName')}</p>
+          <p className="app-sidebar-summary">{pageTitle}</p>
+          <p className="app-sidebar-note">{pageDescription}</p>
+          <div className="app-sidebar-status-row">
+            <span className={`h-2 w-2 rounded-full ${gwStatus?.running ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span>{gwStatus?.running ? t('layout.status.gatewayRunning') : t('layout.status.gatewayStopped')}</span>
+          </div>
+        </div>
+      </div>
+
+      <nav className="app-sidebar-nav">
+        {navSections.map((section) => {
+          const items = section.items
           return (
-            <div key={group}>
-              {labelKey && (
-                <p className="px-3 mb-1 text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider">
-                  {t(labelKey)}
-                </p>
-              )}
+            <div key={section.id} className="app-nav-section">
+              <div className="app-nav-section-head">
+                <p className="app-nav-section-title">{t(section.labelKey)}</p>
+                <p className="app-nav-section-copy">{t(section.descriptionKey)}</p>
+              </div>
               {items.map((item) => {
                 const isActive = currentPath === item.path
                 const Icon = item.icon
+                const showUpdateBadge =
+                  item.path === '/settings' &&
+                  updateBanner.status === 'available' &&
+                  !isActive
                 return (
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={cn(
-                      'flex items-center gap-2.5 px-3 py-1.5 rounded-md text-[13px] transition-colors',
-                      isActive
-                        ? 'bg-primary/10 text-primary font-medium'
-                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                    )}
+                    className={cn('app-nav-link', isActive && 'app-nav-link-active')}
                   >
-                    <Icon className="w-4 h-4 shrink-0" />
+                    <Icon className="h-4 w-4 shrink-0" />
                     <span>{t(item.labelKey)}</span>
+                    {isActive && <span className="app-nav-link-chip">{t('layout.current')}</span>}
+                    {showUpdateBadge && (
+                      <span className="app-nav-link-chip">{t('layout.update.badge')}</span>
+                    )}
                   </Link>
                 )
               })}
@@ -216,37 +330,37 @@ export default function Layout({ children }: LayoutProps) {
   )
 
   return (
-    <div className="flex h-screen bg-background">
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-52 border-r border-border flex-col bg-card/50 shrink-0">
+    <div className="app-shell">
+      <aside className="app-sidebar hidden shrink-0 lg:flex lg:w-[clamp(15rem,18vw,17rem)] lg:flex-col">
         {sidebarContent}
       </aside>
 
-      {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-40 flex">
           <div className="fixed inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
-          <aside className="relative z-50 w-64 bg-background border-r border-border flex flex-col">
+          <aside className="app-sidebar relative z-50 flex w-[min(84vw,18rem)] flex-col">
             {sidebarContent}
           </aside>
         </div>
       )}
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header — same h-11 as sidebar header for alignment */}
-        <header className="h-11 border-b border-border flex items-center justify-between px-4 shrink-0">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent">
-              <Menu className="w-5 h-5" />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="app-topbar shrink-0">
+          <div className="flex min-w-0 items-center gap-3">
+            <button onClick={() => setSidebarOpen(true)} className="app-icon-button lg:hidden">
+              <Menu className="h-5 w-5" />
             </button>
-            <h2 className="font-medium text-sm">{pageTitle}</h2>
+            <div className="app-topbar-copy">
+              <p className="app-topbar-meta">{currentSection ? t(currentSection.labelKey) : t('layout.appName')}</p>
+              <h2 className="app-topbar-title">{pageTitle}</h2>
+              <p className="app-topbar-subtitle">{pageDescription}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="app-topbar-controls">
             <select
               value={i18n.language}
               onChange={(e) => changeLanguage(e.target.value)}
-              className="px-1.5 py-1 text-xs bg-transparent border border-border rounded-md text-muted-foreground hover:text-foreground cursor-pointer"
+              className="app-mini-select"
             >
               <option value="zh">中文</option>
               <option value="en">EN</option>
@@ -254,19 +368,43 @@ export default function Layout({ children }: LayoutProps) {
             </select>
             <button
               onClick={toggleDarkMode}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              className="app-icon-button"
               title={dark ? t('layout.darkMode.toLight') : t('layout.darkMode.toDark')}
             >
-              {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-4">{children}</main>
+        {updateBanner.status === 'available' && !updateBannerDismissed && (
+          <div className="px-4 pt-3 lg:px-6">
+            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <ArrowUpCircle className="h-4 w-4 shrink-0 text-primary" />
+                <p className="min-w-0 text-foreground">
+                  {t('layout.update.available', { version: updateBanner.latestVersion })}
+                </p>
+              </div>
+              <Link to="/settings" className="button-secondary text-xs">
+                {t('layout.update.action')}
+              </Link>
+              <button
+                onClick={() => setUpdateBannerDismissed(true)}
+                className="app-icon-button"
+                aria-label={t('layout.update.dismiss')}
+                title={t('layout.update.dismiss')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
-        <footer className="h-7 border-t border-border flex items-center px-4 text-[11px] text-muted-foreground gap-3 shrink-0">
+        <main className="app-main">{children}</main>
+
+        <footer className="app-footer shrink-0">
           <span className="flex items-center gap-1">
-            <span className={`w-1.5 h-1.5 rounded-full ${gwStatus?.running ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span className={`h-1.5 w-1.5 rounded-full ${gwStatus?.running ? 'bg-green-500' : 'bg-red-500'}`} />
             {gwStatus?.running ? t('layout.status.gatewayRunning') : t('layout.status.gatewayStopped')}
           </span>
           {gwStatus?.running && gwStatus.port && (

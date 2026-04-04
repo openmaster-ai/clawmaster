@@ -327,6 +327,8 @@ export function parseGatewayStatusJsonPayload(s: string): {
   }
 }
 
+const GATEWAY_STATUS_TIMEOUT_MS = 3000
+
 /** Treat TCP connect to local port as gateway up (CLI status can lag under LaunchAgent / PATH mismatch) */
 export function probeGatewayTcpPort(
   port: number,
@@ -360,14 +362,20 @@ export function execOpenclawGatewayStatusJson(): Promise<{
       execFile(
         '/bin/zsh',
         ['-ilc', 'openclaw gateway status --json'],
-        { maxBuffer: 20 * 1024 * 1024, env: process.env },
+        { maxBuffer: 20 * 1024 * 1024, env: process.env, timeout: GATEWAY_STATUS_TIMEOUT_MS },
         (error: ExecFileException | null, stdout: string, stderr: string) => {
           if (error && error.message?.includes('maxBuffer')) {
             reject(error)
             return
           }
+          const timedOut =
+            Boolean(error?.killed) ||
+            error?.signal === 'SIGTERM' ||
+            error?.message?.toLowerCase().includes('timed out')
           const code =
-            error && typeof error.code === 'number'
+            timedOut
+              ? 124
+              : error && typeof error.code === 'number'
               ? error.code
               : error
                 ? 1
@@ -375,7 +383,10 @@ export function execOpenclawGatewayStatusJson(): Promise<{
           resolve({
             code,
             stdout: String(stdout ?? '').trim(),
-            stderr: String(stderr ?? '').trim(),
+            stderr: [
+              String(stderr ?? '').trim(),
+              timedOut ? `openclaw gateway status --json timed out after ${GATEWAY_STATUS_TIMEOUT_MS}ms` : '',
+            ].filter(Boolean).join('\n'),
           })
         }
       )
@@ -394,14 +405,20 @@ export function execOpenclawGatewayStatusPlain(): Promise<{
       execFile(
         '/bin/zsh',
         ['-ilc', 'openclaw gateway status'],
-        { maxBuffer: 20 * 1024 * 1024, env: process.env },
+        { maxBuffer: 20 * 1024 * 1024, env: process.env, timeout: GATEWAY_STATUS_TIMEOUT_MS },
         (error: ExecFileException | null, stdout: string, stderr: string) => {
           if (error && error.message?.includes('maxBuffer')) {
             reject(error)
             return
           }
+          const timedOut =
+            Boolean(error?.killed) ||
+            error?.signal === 'SIGTERM' ||
+            error?.message?.toLowerCase().includes('timed out')
           const code =
-            error && typeof error.code === 'number'
+            timedOut
+              ? 124
+              : error && typeof error.code === 'number'
               ? error.code
               : error
                 ? 1
@@ -409,7 +426,10 @@ export function execOpenclawGatewayStatusPlain(): Promise<{
           resolve({
             code,
             stdout: String(stdout ?? '').trim(),
-            stderr: String(stderr ?? '').trim(),
+            stderr: [
+              String(stderr ?? '').trim(),
+              timedOut ? `openclaw gateway status timed out after ${GATEWAY_STATUS_TIMEOUT_MS}ms` : '',
+            ].filter(Boolean).join('\n'),
           })
         }
       )

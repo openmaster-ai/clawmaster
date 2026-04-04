@@ -74,11 +74,11 @@ export default function Config() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">{t('common.loading')}</div>
+    return <div className="state-panel text-muted-foreground">{t('common.loading')}</div>
   }
 
   if (!config) {
-    return <div className="text-red-500">{t('config.loadFailed')}</div>
+    return <div className="state-panel text-red-500">{t('config.loadFailed')}</div>
   }
 
   // 配置概览摘要
@@ -88,24 +88,42 @@ export default function Config() {
   const defaultModel = config.agents?.defaults?.model?.primary || t('common.notSet')
 
   return (
-    <div className="max-w-5xl space-y-6">
-      <h1 className="text-2xl font-bold">{t('config.title')}</h1>
+    <div className="page-shell page-shell-wide">
+      <div className="page-header">
+        <div className="page-header-copy">
+          <div className="page-header-meta">
+            <span>{t('config.countUnit', { count: providerCount })} {t('config.providers')}</span>
+            <span>{t('config.countUnit', { count: channelCount })} {t('config.channels')}</span>
+          </div>
+          <h1 className="page-title">{t('config.title')}</h1>
+          <p className="page-subtitle">{t('config.advancedHint')}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={loadConfig} className="button-secondary">
+            {t('common.refresh')}
+          </button>
+          <button onClick={handleExport} className="button-secondary">
+            {t('common.export')}
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !!jsonError}
+            className="button-primary"
+          >
+            {saving ? t('common.saving') : t('common.save')}
+          </button>
+        </div>
+      </div>
 
-      {/* 配置概览 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="metric-grid">
         <SummaryCard label={t('config.gatewayPort')} value={String(gateway.port || 18789)} page={t('layout.nav.gateway')} />
         <SummaryCard label={t('config.defaultModel')} value={defaultModel} page={t('layout.nav.models')} />
         <SummaryCard label={t('config.providers')} value={t('config.countUnit', { count: providerCount })} page={t('layout.nav.models')} />
         <SummaryCard label={t('config.channels')} value={t('config.countUnit', { count: channelCount })} page={t('layout.nav.channels')} />
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        {t('config.advancedHint')}
-      </p>
-
-      {/* JSON 编辑器 */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
+      <div className="surface-card">
+        <div className="section-heading mb-4">
           <span className="text-sm font-medium">openclaw.json</span>
           <span className="text-xs text-muted-foreground font-mono">
             {config ? t('config.charCount', { count: jsonText.length.toLocaleString() }) : ''}
@@ -115,35 +133,13 @@ export default function Config() {
           value={jsonText}
           onChange={(e) => handleJsonChange(e.target.value)}
           spellCheck={false}
-          className="w-full h-[55vh] text-sm font-mono bg-background p-4 rounded border border-border resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+          className="control-textarea h-[55vh] resize-none font-mono"
         />
         {jsonError && (
           <p className="mt-2 text-xs text-red-500">{t('config.jsonError', { error: jsonError })}</p>
         )}
-      </div>
-
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleSave}
-          disabled={saving || !!jsonError}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90 disabled:opacity-50"
-        >
-          {saving ? t('common.saving') : t('common.save')}
-        </button>
-        <button
-          onClick={loadConfig}
-          className="px-4 py-2 border border-border rounded hover:bg-accent"
-        >
-          {t('common.refresh')}
-        </button>
-        <button
-          onClick={handleExport}
-          className="px-4 py-2 border border-border rounded hover:bg-accent"
-        >
-          {t('common.export')}
-        </button>
         {saveMsg && (
-          <span className={`text-sm ${saveError ? 'text-red-500' : 'text-green-600'}`}>
+          <span className={`mt-3 inline-flex text-sm ${saveError ? 'text-red-500' : 'text-green-600'}`}>
             {saveMsg}
           </span>
         )}
@@ -155,11 +151,11 @@ export default function Config() {
 function SummaryCard({ label, value, page }: { label: string; value: string; page?: string }) {
   const { t } = useTranslation()
   return (
-    <div className="bg-card border border-border rounded-lg p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium mt-0.5 font-mono truncate">{value}</p>
+    <div className="metric-card">
+      <p className="metric-label">{label}</p>
+      <p className="metric-value truncate font-mono text-[1.65rem]">{value}</p>
       {page && (
-        <p className="text-[10px] text-muted-foreground mt-1">{t('config.managedIn', { page })}</p>
+        <p className="metric-meta">{t('config.managedIn', { page })}</p>
       )}
     </div>
   )

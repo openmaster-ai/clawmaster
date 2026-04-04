@@ -38,6 +38,10 @@ export async function getGatewayStatus() {
     return { running: false, port }
   }
 
+  if (r.code === 124) {
+    return { running: false, port }
+  }
+
   const plain = await execOpenclawGatewayStatusPlain()
   const text = `${plain.stdout}\n${plain.stderr}`
   if (/running|active|已运行|运行/i.test(text)) return { running: true, port }

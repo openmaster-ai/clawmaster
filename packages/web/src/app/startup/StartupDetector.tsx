@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { CheckCircle2, XCircle } from 'lucide-react'
 import type { SystemInfo } from '@/lib/types'
 
 interface StartupDetectorProps {
@@ -68,7 +69,7 @@ export default function StartupDetector({ onDetected, onNewInstall, onError }: S
 
   if (status === 'checking') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
+      <div className="fullscreen-shell">
         <div className="w-16 h-16 bg-primary rounded-lg flex items-center justify-center text-white text-3xl mb-4 animate-pulse">
           <img src="/logo.svg" alt="" className="w-8 h-8" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
         </div>
@@ -85,14 +86,14 @@ export default function StartupDetector({ onDetected, onNewInstall, onError }: S
 
   if (status === 'detected' && systemInfo) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
+      <div className="fullscreen-shell">
         <div className="w-16 h-16 bg-primary rounded-lg flex items-center justify-center text-white text-3xl mb-4">
           <img src="/logo.svg" alt="" className="w-8 h-8" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
         </div>
         <h1 className="text-xl font-bold mb-2">{t('startup.detected')}</h1>
         <p className="text-muted-foreground mb-6">{t('startup.canTakeover')}</p>
 
-        <div className="bg-card border border-border rounded-lg p-4 w-full max-w-md mb-6">
+        <div className="fullscreen-panel">
           <h3 className="font-medium mb-3">{t('startup.systemInfo')}</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
@@ -138,25 +139,33 @@ export default function StartupDetector({ onDetected, onNewInstall, onError }: S
 
   if (status === 'not-installed') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
+      <div className="fullscreen-shell">
         <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center text-3xl mb-4">
           <img src="/logo.svg" alt="" className="w-8 h-8" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
         </div>
         <h1 className="text-xl font-bold mb-2">{t('startup.notInstalled')}</h1>
         <p className="text-muted-foreground mb-6">{t('startup.canHelp')}</p>
 
-        <div className="bg-card border border-border rounded-lg p-4 w-full max-w-md mb-6">
+        <div className="fullscreen-panel">
           <h3 className="font-medium mb-3">{t('startup.requirements')}</h3>
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2">
-              {systemInfo?.nodejs.installed ? '✅' : '❌'}
+              {systemInfo?.nodejs.installed ? (
+                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+              ) : (
+                <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+              )}
               <span>Node.js 18+</span>
               {systemInfo?.nodejs.installed && (
                 <span className="text-muted-foreground ml-auto">{systemInfo.nodejs.version}</span>
               )}
             </div>
             <div className="flex items-center gap-2">
-              {systemInfo?.npm.installed ? '✅' : '❌'}
+              {systemInfo?.npm.installed ? (
+                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+              ) : (
+                <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+              )}
               <span>npm</span>
               {systemInfo?.npm.installed && (
                 <span className="text-muted-foreground ml-auto">{systemInfo.npm.version}</span>
@@ -190,15 +199,15 @@ export default function StartupDetector({ onDetected, onNewInstall, onError }: S
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
-      <div className="w-16 h-16 bg-red-500 rounded-lg flex items-center justify-center text-white text-3xl mb-4">
-        ❌
+    <div className="fullscreen-shell">
+      <div className="w-16 h-16 bg-red-500 rounded-lg flex items-center justify-center text-white mb-4">
+        <XCircle className="w-8 h-8" />
       </div>
       <h1 className="text-xl font-bold mb-2">{t('startup.detectFailed')}</h1>
-      <p className="text-red-500 mb-4 text-center max-w-md">{message}</p>
+      <p className="mb-4 w-full max-w-md text-center text-red-500">{message}</p>
 
       {isTauriDetected === false && (
-        <div className="bg-card border border-border rounded-lg p-4 w-full max-w-md mb-6">
+        <div className="fullscreen-panel">
           <h3 className="font-medium mb-2">{t('startup.tauriNotDetected')}</h3>
           <p className="text-sm text-muted-foreground mb-3">{t('startup.tauriNotDetectedDesc')}</p>
         </div>

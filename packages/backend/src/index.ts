@@ -9,7 +9,7 @@ const PORT = Number.parseInt(process.env.BACKEND_PORT ?? process.env.PORT ?? '30
 registerDomainRoutes(app)
 
 const server = app.listen(PORT, () => {
-  console.log(`🦞 OpenClaw Manager Backend on http://localhost:${PORT}`)
+  console.log(`OpenClaw Manager Backend on http://localhost:${PORT}`)
 })
 
 attachLogsStreamServer(server)

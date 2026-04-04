@@ -62,24 +62,23 @@ function McpContent() {
   }
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="page-shell page-shell-wide">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">{t('mcp.title')}</h1>
-          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">{t('mcp.subtitle')}</p>
+      <div className="page-header">
+        <div className="page-header-copy">
+          <h1 className="page-title">{t('mcp.title')}</h1>
+          <p className="page-subtitle max-w-2xl">{t('mcp.subtitle')}</p>
         </div>
         <button
           onClick={() => refetch()}
-          className="p-2 border border-border rounded hover:bg-accent"
+          className="button-secondary p-2"
           title={t('common.refresh') ?? 'Refresh'}
         >
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Category filter */}
-      <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit flex-wrap">
+      <div className="pill-group">
         <CategoryPill
           active={selectedCategory === 'all'}
           onClick={() => setSelectedCategory('all')}
@@ -96,7 +95,7 @@ function McpContent() {
       </div>
 
       {/* Catalog grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filteredCatalog.map((catalog) => (
           <McpCard
             key={catalog.id}
@@ -156,8 +155,8 @@ function CategoryPill({ active, onClick, label }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-        active ? 'bg-card shadow-sm' : 'hover:bg-card/50'
+      className={`pill-button ${
+        active ? 'pill-button-active' : 'pill-button-inactive'
       }`}
     >
       {label}
@@ -194,7 +193,7 @@ function McpCard({
   const isInstalled = !!installed
 
   return (
-    <div className={`bg-card border rounded-lg transition-colors ${
+    <div className={`surface-card transition-colors ${
       expanded ? 'border-primary/40' : 'border-border hover:border-primary/30'
     }`}>
       {/* Card header */}
@@ -285,27 +284,27 @@ function McpCard({
           )}
 
           {/* Actions */}
-          {installTask.status === 'idle' && (
-            <div className="flex items-center gap-2 pt-1">
-              {isInstalled ? (
-                <>
-                  <button
-                    onClick={() => onToggle(!installed.enabled)}
-                    disabled={operating}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-accent disabled:opacity-50"
-                  >
-                    {installed.enabled
-                      ? <><ToggleRight className="w-4 h-4 text-green-500" />{t('mcp.disable')}</>
+        {installTask.status === 'idle' && (
+          <div className="flex items-center gap-2 pt-1">
+            {isInstalled ? (
+              <>
+                <button
+                  onClick={() => onToggle(!installed.enabled)}
+                  disabled={operating}
+                  className="button-secondary disabled:opacity-50"
+                >
+                  {installed.enabled
+                    ? <><ToggleRight className="w-4 h-4 text-green-500" />{t('mcp.disable')}</>
                       : <><ToggleLeft className="w-4 h-4 text-muted-foreground" />{t('mcp.enable')}</>
                     }
                   </button>
-                  <button
-                    onClick={onRemove}
-                    disabled={operating}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 disabled:opacity-50"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    {operating ? t('mcp.removing') : t('mcp.remove')}
+                <button
+                  onClick={onRemove}
+                  disabled={operating}
+                  className="button-danger disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {operating ? t('mcp.removing') : t('mcp.remove')}
                   </button>
                 </>
               ) : (
@@ -319,7 +318,7 @@ function McpCard({
                     })
                   }}
                   disabled={operating || catalog.envVars.some((ev) => ev.required && !envInputs[ev.key]?.trim())}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50"
+                  className="button-primary disabled:opacity-50"
                 >
                   <Download className="w-3.5 h-3.5" />
                   {t('mcp.install')}
@@ -354,12 +353,12 @@ function EnvVarInput({
           type={sensitive && !visible ? 'password' : 'text'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="flex-1 px-3 py-1.5 bg-background border border-border rounded text-sm font-mono"
+          className="control-input flex-1 font-mono"
         />
         {sensitive && (
           <button
             onClick={() => setVisible(!visible)}
-            className="p-1.5 border border-border rounded hover:bg-accent"
+            className="button-secondary p-1.5"
           >
             {visible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           </button>
@@ -388,31 +387,31 @@ function CustomServerForm({
   }, [id, pkg, onAdd])
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4">
+    <div className="surface-card">
       <div className="flex items-center gap-2 mb-3">
         <Plus className="w-4 h-4 text-muted-foreground" />
         <span className="font-medium">{t('mcp.customServer')}</span>
       </div>
       <p className="text-sm text-muted-foreground mb-3">{t('mcp.customServerDesc')}</p>
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <input
           type="text"
           value={id}
           onChange={(e) => setId(e.target.value)}
           placeholder={t('mcp.customIdPlaceholder')}
-          className="w-40 px-3 py-2 bg-background border border-border rounded text-sm"
+          className="control-input w-full sm:flex-1"
         />
         <input
           type="text"
           value={pkg}
           onChange={(e) => setPkg(e.target.value)}
           placeholder={t('mcp.customPackagePlaceholder')}
-          className="flex-1 px-3 py-2 bg-background border border-border rounded text-sm font-mono"
+          className="control-input w-full font-mono sm:flex-[2_1_0%]"
         />
         <button
           onClick={handleAdd}
           disabled={!id.trim() || !pkg.trim() || operating}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+          className="button-primary text-sm disabled:opacity-50"
         >
           {t('mcp.addCustom')}
         </button>

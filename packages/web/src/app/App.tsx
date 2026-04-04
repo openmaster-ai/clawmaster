@@ -6,6 +6,8 @@ import { getClawModules } from './moduleRegistry'
 import { SetupWizard } from '@/modules/setup'
 import { LoadingState } from '@/shared/components/LoadingState'
 
+const APP_READY_STORAGE_KEY = 'clawmaster-app-ready'
+
 function hasAnyDemoParam(): boolean {
   if (typeof window === 'undefined') return false
   const params = new URLSearchParams(window.location.search)
@@ -13,11 +15,22 @@ function hasAnyDemoParam(): boolean {
   return !!demo && demo !== 'install'
 }
 
+function getInitialAppReady(): boolean {
+  if (hasAnyDemoParam()) return true
+  if (typeof window === 'undefined') return false
+  return localStorage.getItem(APP_READY_STORAGE_KEY) === '1'
+}
+
 function App() {
-  const [appReady, setAppReady] = useState(hasAnyDemoParam)
+  const [appReady, setAppReady] = useState(getInitialAppReady)
+
+  function handleSetupComplete() {
+    localStorage.setItem(APP_READY_STORAGE_KEY, '1')
+    setAppReady(true)
+  }
 
   if (!appReady) {
-    return <SetupWizard onComplete={() => setAppReady(true)} />
+    return <SetupWizard onComplete={handleSetupComplete} />
   }
 
   const modules = getClawModules()

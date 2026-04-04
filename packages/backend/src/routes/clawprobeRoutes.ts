@@ -48,15 +48,7 @@ export function registerClawprobeRoutes(app: express.Express): void {
       res.json(await clawprobeBootstrap())
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error)
-      const ext = error as { stdout?: string; stderr?: string }
-      res.status(500).json({
-        ok: false,
-        alreadyRunning: false,
-        daemonRunning: false,
-        message: msg,
-        stdout: ext.stdout,
-        stderr: ext.stderr,
-      })
+      res.status(500).type('text').send(msg)
     }
   })
 }

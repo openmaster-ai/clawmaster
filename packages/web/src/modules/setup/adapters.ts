@@ -17,6 +17,31 @@ import {
   type CapabilityId,
 } from './types'
 
+interface PluginsListJson {
+  plugins?: Array<{ id?: string; status?: string; version?: string }>
+}
+
+async function detectMemoryCapability(): Promise<CapabilityStatus> {
+  const raw = await execCommand('openclaw', ['plugins', 'list', '--json'])
+  const data = JSON.parse(raw) as PluginsListJson
+  const plugin = data.plugins?.find((p) => p.id === 'memory-powermem')
+  if (!plugin) {
+    return {
+      id: 'memory',
+      name: 'capability.memory',
+      status: 'not_installed',
+    }
+  }
+
+  const enabled = !/\bdisabled\b|\boff\b/i.test(plugin.status ?? '')
+  return {
+    id: 'memory',
+    name: 'capability.memory',
+    status: enabled ? 'installed' : 'not_installed',
+    version: enabled ? plugin.version : undefined,
+  }
+}
+
 // ─── 接口 ───
 
 export interface OnboardingAdapter {
@@ -93,7 +118,17 @@ const realOnboardingAdapter: OnboardingAdapter = {
     const effectiveBaseUrl = baseUrl || cfg?.baseUrl
     // Ollama: use placeholder key, always include baseUrl
     const effectiveKey = provider === 'ollama' ? (apiKey || 'ollama') : apiKey
-    const providerObj: Record<string, unknown> = { apiKey: effectiveKey, models: [] }
+    const providerObj: Record<string, unknown> = {
+      apiKey: effectiveKey,
+      models: [],
+    }
+    if (cfg?.api) {
+      providerObj.api = cfg.api
+      providerObj.models = cfg.models.map((model) => ({
+        id: model.id,
+        name: model.name,
+      }))
+    }
     if (effectiveBaseUrl) providerObj.baseUrl = effectiveBaseUrl
     const r = await setConfigResult(`models.providers.${configKey}`, providerObj)
     if (!r.success) throw new Error(r.error ?? 'Failed to set API key')
@@ -151,34 +186,36 @@ export const realSetupAdapter: SetupAdapter = {
   onboarding: realOnboardingAdapter,
 
   async detectCapabilities(onUpdate) {
-    const results: CapabilityStatus[] = []
+    return Promise.all(
+      CAPABILITIES.map(async (cap) => {
+        onUpdate({ id: cap.id, name: cap.name, status: 'checking' })
 
-    for (const cap of CAPABILITIES) {
-      onUpdate({ id: cap.id, name: cap.name, status: 'checking' })
-
-      try {
-        const output = await execCommand(cap.detectCmd, cap.detectArgs)
-        const match = output.match(/v?(\d+\.\d+[\w.-]*)/)
-        const status: CapabilityStatus = {
-          id: cap.id,
-          name: cap.name,
-          status: 'installed',
-          version: match ? match[1] : output.trim().slice(0, 20),
+        try {
+          const status =
+            cap.id === 'memory'
+              ? await detectMemoryCapability()
+              : await execCommand(cap.detectCmd, cap.detectArgs).then((output) => {
+                  const match = output.match(/v?(\d+\.\d+[\w.-]*)/)
+                  return {
+                    id: cap.id,
+                    name: cap.name,
+                    status: 'installed',
+                    version: match ? match[1] : output.trim().slice(0, 20),
+                  } satisfies CapabilityStatus
+                })
+          onUpdate(status)
+          return status
+        } catch {
+          const status: CapabilityStatus = {
+            id: cap.id,
+            name: cap.name,
+            status: 'not_installed',
+          }
+          onUpdate(status)
+          return status
         }
-        onUpdate(status)
-        results.push(status)
-      } catch {
-        const status: CapabilityStatus = {
-          id: cap.id,
-          name: cap.name,
-          status: 'not_installed',
-        }
-        onUpdate(status)
-        results.push(status)
-      }
-    }
-
-    return results
+      }),
+    )
   },
 
   async installCapabilities(ids, onProgress) {

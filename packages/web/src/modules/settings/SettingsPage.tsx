@@ -52,20 +52,26 @@ export default function Settings() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">{t('common.loading')}</div>
+    return <div className="state-panel text-muted-foreground">{t('common.loading')}</div>
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <h1 className="text-2xl font-bold">{t('settings.title')}</h1>
+    <div className="page-shell page-shell-narrow">
+      <div className="page-header">
+        <div className="page-header-copy">
+          <h1 className="page-title">{t('settings.title')}</h1>
+          <p className="page-subtitle">{t('settings.aboutDesc')}</p>
+        </div>
+      </div>
 
-      {/* 外观 */}
-      <section className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">{t('settings.appearance')}</h3>
+      <section className="surface-card">
+        <div className="section-heading">
+          <h3 className="section-title">{t('settings.appearance')}</h3>
+        </div>
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <label className="w-20 text-sm text-muted-foreground">{t('settings.mode')}</label>
-            <div className="flex gap-3">
+          <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+            <label className="text-sm text-muted-foreground">{t('settings.mode')}</label>
+            <div className="flex flex-wrap gap-3">
               {([
                 { mode: 'system' as const, label: t('settings.modeSystem') },
                 { mode: 'light' as const, label: t('settings.modeLight') },
@@ -76,7 +82,7 @@ export default function Settings() {
                   onClick={() => { setTheme(m); applyTheme(m) }}
                   className={`px-3 py-1.5 rounded-lg text-sm border transition ${
                     theme === m
-                      ? 'bg-primary text-primary-foreground border-primary'
+                      ? 'bg-foreground text-background border-foreground'
                       : 'border-border hover:bg-accent'
                   }`}
                 >
@@ -85,9 +91,9 @@ export default function Settings() {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <label className="w-20 text-sm text-muted-foreground">{t('settings.color')}</label>
-            <div className="flex gap-3">
+          <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+            <label className="text-sm text-muted-foreground">{t('settings.color')}</label>
+            <div className="flex flex-wrap gap-3">
               {([
                 { id: '', label: t('settings.colorOrange'), color: 'bg-orange-500' },
                 { id: 'theme-ocean', label: t('settings.colorOcean'), color: 'bg-blue-500' },
@@ -100,7 +106,7 @@ export default function Settings() {
                     if (ct.id) root.classList.add(ct.id)
                     localStorage.setItem('clawmaster-color-theme', ct.id)
                   }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border border-border hover:bg-accent transition"
+                  className="button-secondary px-3 py-1.5 text-sm"
                 >
                   <span className={`w-3 h-3 rounded-full ${ct.color}`} />
                   {ct.label}
@@ -108,12 +114,12 @@ export default function Settings() {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <label className="w-20 text-sm text-muted-foreground">{t('settings.language')}</label>
+          <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+            <label className="text-sm text-muted-foreground">{t('settings.language')}</label>
             <select
               value={i18n.language}
               onChange={(e) => changeLanguage(e.target.value)}
-              className="px-3 py-1.5 bg-card rounded-lg border border-border text-sm"
+              className="control-select"
             >
               <option value="zh">简体中文</option>
               <option value="en">English</option>
@@ -125,8 +131,10 @@ export default function Settings() {
 
       {/* 系统 — desktop-only settings */}
       {isTauri() && (
-        <section className="bg-card border border-border rounded-lg p-4">
-          <h3 className="font-medium mb-3">{t('settings.system')}</h3>
+        <section className="surface-card">
+          <div className="section-heading">
+            <h3 className="section-title">{t('settings.system')}</h3>
+          </div>
           <div className="space-y-2">
             <label className="flex items-center gap-2">
               <input type="checkbox" defaultChecked disabled />
@@ -146,16 +154,18 @@ export default function Settings() {
       )}
 
       {/* 花费预算 */}
-      <section className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">{t('settings.budget')}</h3>
+      <section className="surface-card">
+        <div className="section-heading">
+          <h3 className="section-title">{t('settings.budget')}</h3>
+        </div>
         <p className="text-sm text-muted-foreground mb-3">{t('settings.budgetDesc')}</p>
         <div className="space-y-3">
           {(['day', 'week', 'month'] as const).map((period) => {
             const labelKeys = { day: 'settings.budgetDay', week: 'settings.budgetWeek', month: 'settings.budgetMonth' }
             const key = `clawmaster-budget-${period}`
             return (
-              <div key={period} className="flex items-center gap-4">
-                <label className="w-20 text-sm text-muted-foreground">{t(labelKeys[period])}:</label>
+              <div key={period} className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+                <label className="text-sm text-muted-foreground">{t(labelKeys[period])}:</label>
                 <div className="flex items-center gap-1">
                   <span className="text-sm">$</span>
                   <input
@@ -168,7 +178,7 @@ export default function Settings() {
                       if (e.target.value) localStorage.setItem(key, e.target.value)
                       else localStorage.removeItem(key)
                     }}
-                    className="w-24 px-2 py-1.5 bg-background border border-border rounded text-sm"
+                    className="control-input min-w-0 flex-1 px-2 py-1.5"
                   />
                 </div>
               </div>
@@ -178,8 +188,10 @@ export default function Settings() {
       </section>
 
       {/* 系统信息 */}
-      <section className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">{t('settings.systemInfo')}</h3>
+      <section className="surface-card">
+        <div className="section-heading">
+          <h3 className="section-title">{t('settings.systemInfo')}</h3>
+        </div>
         {systemInfo && (
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
@@ -212,11 +224,13 @@ export default function Settings() {
       <UpdateSection currentVersion={systemInfo?.openclaw.version} installed={!!systemInfo?.openclaw.installed} onUpdated={loadSystemInfo} />
 
       {/* 危险操作 */}
-      <section className="bg-card border border-red-500/50 rounded-lg p-4">
-        <h3 className="font-medium text-red-500 mb-3">{t('settings.danger')}</h3>
+      <section className="surface-card border-red-500/50">
+        <div className="section-heading">
+          <h3 className="section-title text-red-500">{t('settings.danger')}</h3>
+        </div>
         <div className="flex gap-3">
           <button
-            className="px-4 py-2 border border-border rounded-lg hover:bg-accent"
+            className="button-secondary"
             onClick={async () => {
               if (!window.confirm(t('settings.resetConfigConfirm'))) return
               const r = await platformResults.resetOpenclawConfig()
@@ -230,7 +244,7 @@ export default function Settings() {
             {t('settings.resetConfig')}
           </button>
           <button
-            className="px-4 py-2 bg-red-500 text-primary-foreground rounded-lg hover:bg-red-600"
+            className="button-danger"
             onClick={async () => {
               if (!window.confirm(t('settings.uninstallConfirm'))) return
               const r = await platformResults.uninstallOpenclawCli()
@@ -249,8 +263,10 @@ export default function Settings() {
       </section>
 
       {/* 关于 */}
-      <section className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-2">{t('settings.about')}</h3>
+      <section className="surface-card">
+        <div className="section-heading">
+          <h3 className="section-title">{t('settings.about')}</h3>
+        </div>
         <p className="text-sm text-muted-foreground">{t('settings.aboutName')}</p>
         <p className="text-sm text-muted-foreground">{t('settings.aboutDesc')}</p>
         <p className="text-sm text-muted-foreground">{t('settings.aboutCommunity')}</p>
@@ -267,9 +283,9 @@ export default function Settings() {
         </div>
 
         {/* Acknowledgments */}
-        <div className="mt-4 pt-3 border-t border-border">
-          <h4 className="text-sm font-medium mb-2">{t('settings.acknowledgments')}</h4>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <div className="section-subcard mt-5">
+          <h4 className="text-sm font-medium">{t('settings.acknowledgments')}</h4>
+          <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
             {[
               { name: 'OpenClaw', url: 'https://github.com/openclaw/openclaw', desc: t('settings.ack.openclaw') },
               { name: 'ClawProbe', url: 'https://github.com/openclaw/clawprobe', desc: t('settings.ack.clawprobe') },
@@ -278,7 +294,14 @@ export default function Settings() {
               { name: 'Tauri', url: 'https://tauri.app', desc: t('settings.ack.tauri') },
               { name: 'Ollama', url: 'https://ollama.com', desc: t('settings.ack.ollama') },
             ].map((p) => (
-              <a key={p.name} href={p.url} target="_blank" rel="noopener noreferrer" className="hover:text-primary truncate" title={p.desc}>
+              <a
+                key={p.name}
+                href={p.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-xl border border-transparent px-3 py-2 transition hover:border-primary/20 hover:bg-card/70 hover:text-primary"
+                title={p.desc}
+              >
                 <span className="font-medium text-foreground">{p.name}</span> {p.desc}
               </a>
             ))}
@@ -396,8 +419,10 @@ function UpdateSection({
   const recentVersions = versions?.versions.slice(0, 20) ?? []
 
   return (
-    <section className="bg-card border border-border rounded-lg p-4">
-      <h3 className="font-medium mb-3">{t('settings.update')}</h3>
+    <section className="surface-card">
+      <div className="section-heading">
+        <h3 className="section-title">{t('settings.update')}</h3>
+      </div>
       <div className="space-y-3 text-sm">
         {/* Current version */}
         <div className="flex items-center justify-between">
@@ -411,7 +436,7 @@ function UpdateSection({
         {(state === 'idle' || state === 'error') && updateTask.status === 'idle' && (
           <button
             onClick={handleCheck}
-            className="flex items-center gap-1.5 px-4 py-2 border border-border rounded-lg hover:bg-accent"
+            className="button-secondary"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             {t('settings.checkUpdate')}
@@ -444,9 +469,9 @@ function UpdateSection({
 
         {/* Update available */}
         {(state === 'available' || state === 'up-to-date') && versions && updateTask.status === 'idle' && (
-          <div className="bg-muted/30 rounded-lg p-3 space-y-3">
+          <div className="inline-note space-y-3">
             {/* Channel selector */}
-            <div className="flex items-center gap-3">
+            <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
               <label className="text-muted-foreground">{t('settings.updateChannel')}</label>
               <select
                 value={channel}
@@ -458,7 +483,7 @@ function UpdateSection({
                   const upToDate = currentVersion && currentVersion.includes(ver)
                   setState(upToDate ? 'up-to-date' : 'available')
                 }}
-                className="px-3 py-1.5 bg-background rounded border border-border text-sm"
+                className="control-select"
               >
                 <option value="stable">Stable</option>
                 <option value="beta">Beta</option>
@@ -467,7 +492,7 @@ function UpdateSection({
             </div>
 
             {/* Version selector */}
-            <div className="flex items-center gap-3">
+            <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
               <label className="text-muted-foreground">{t('settings.targetVersion')}</label>
               <select
                 value={selectedVersion}
@@ -476,7 +501,7 @@ function UpdateSection({
                   const upToDate = currentVersion && currentVersion.includes(e.target.value)
                   setState(upToDate ? 'up-to-date' : 'available')
                 }}
-                className="px-3 py-1.5 bg-background rounded border border-border text-sm font-mono min-w-[180px]"
+                className="control-select w-full font-mono"
               >
                 {recentVersions.map((v) => (
                   <option key={v} value={v}>
@@ -490,7 +515,7 @@ function UpdateSection({
             {!isUpToDate && selectedVersion && (
               <button
                 onClick={handleUpdate}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 text-sm"
+                className="button-primary text-sm"
               >
                 {currentVersion && selectedVersion < currentVersion
                   ? t('settings.downgrade', { version: selectedVersion })

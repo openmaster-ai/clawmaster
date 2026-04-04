@@ -118,7 +118,7 @@ function PowermemEnvEditorBlock() {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             spellCheck={false}
-            className="w-full min-h-[140px] text-xs font-mono px-3 py-2 bg-background border border-border rounded-md resize-y"
+            className="control-textarea min-h-[140px] text-xs font-mono"
             aria-label={t('memory.powermemEnvEditorTitle')}
           />
           <div className="flex flex-wrap items-center gap-2">
@@ -126,7 +126,7 @@ function PowermemEnvEditorBlock() {
               type="button"
               onClick={() => void load()}
               disabled={loading || saving}
-              className="px-3 py-1.5 text-xs border border-border rounded-md hover:bg-accent disabled:opacity-50"
+              className="button-secondary px-3 py-1.5 text-xs disabled:opacity-50"
             >
               {t('memory.powermemEnvReload')}
             </button>
@@ -134,7 +134,7 @@ function PowermemEnvEditorBlock() {
               type="button"
               onClick={() => void save()}
               disabled={!dirty || saving || loading}
-              className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:opacity-90 disabled:opacity-50"
+              className="button-primary px-3 py-1.5 text-xs disabled:opacity-50"
             >
               {saving ? t('memory.powermemEnvSaving') : t('memory.powermemEnvSave')}
             </button>
@@ -156,7 +156,7 @@ function JsonPreview({ value }: { value: unknown }) {
         ? value
         : JSON.stringify(value, null, 2)
   return (
-    <pre className="text-xs bg-muted border border-border rounded p-3 overflow-auto max-h-64 whitespace-pre-wrap">
+    <pre className="mono-note max-h-64 overflow-auto whitespace-pre-wrap">
       {text || '—'}
     </pre>
   )
@@ -202,7 +202,7 @@ function OpenclawMemoryPanel() {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card/30 p-5 space-y-4">
+    <div className="surface-card space-y-4">
       <div className="border-b border-border pb-3">
         <h3 className="text-base font-semibold">{t('memory.sectionOpenclaw')}</h3>
         <p className="text-sm text-muted-foreground mt-1">{t('memory.openclawHelp')}</p>
@@ -216,7 +216,7 @@ function OpenclawMemoryPanel() {
           <button
             type="button"
             onClick={() => void refetchOcStatus()}
-            className="px-3 py-1.5 text-sm border border-border rounded"
+            className="button-secondary px-3 py-1.5 text-sm"
           >
             {t('memory.retry')}
           </button>
@@ -240,7 +240,7 @@ function OpenclawMemoryPanel() {
           placeholder={t('memory.agentPlaceholder')}
           value={ocAgent}
           onChange={(e) => setOcAgent(e.target.value)}
-          className="w-full px-3 py-2 text-sm bg-muted border border-border rounded"
+          className="control-input"
         />
         <div className="flex flex-col sm:flex-row gap-2">
           <input
@@ -248,13 +248,13 @@ function OpenclawMemoryPanel() {
             placeholder={t('memory.openclawSearchPlaceholder')}
             value={ocQuery}
             onChange={(e) => setOcQuery(e.target.value)}
-            className="flex-1 px-3 py-2 text-sm bg-muted border border-border rounded"
+            className="control-input flex-1"
           />
           <button
             type="button"
             disabled={ocSearchLoading}
             onClick={() => void runOpenclawSearch()}
-            className="px-4 py-2 text-sm bg-primary text-white rounded disabled:opacity-50 shrink-0"
+            className="button-primary shrink-0 disabled:opacity-50"
           >
             {ocSearchLoading ? t('memory.searching') : t('memory.search')}
           </button>
@@ -265,7 +265,7 @@ function OpenclawMemoryPanel() {
       {ocHits && ocHits.length > 0 ? (
         <ul className="space-y-3">
           {ocHits.map((h) => (
-            <li key={h.id} className="border border-border rounded-lg p-3 text-sm bg-background">
+            <li key={h.id} className="list-card bg-background/70 text-sm">
               {h.score !== undefined && Number.isFinite(h.score) ? (
                 <span className="text-xs text-muted-foreground mr-2">score: {h.score.toFixed(3)}</span>
               ) : null}
@@ -380,7 +380,7 @@ function PowermemMemoryPanel() {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card/30 p-5 space-y-4">
+    <div className="surface-card space-y-4">
       <div className="border-b border-border pb-3">
         <h3 className="text-base font-semibold">{t('memory.sectionPowermem')}</h3>
         <p className="text-sm text-muted-foreground mt-1">{t('memory.powermemHelp')}</p>
@@ -391,7 +391,7 @@ function PowermemMemoryPanel() {
       ) : pmMetaErr ? (
         <p className="text-sm text-red-500">{pmMetaErr}</p>
       ) : pmMeta ? (
-        <div className="text-sm space-y-1 bg-muted/50 border border-border rounded-lg p-4">
+        <div className="inline-note space-y-1">
           <p>
             <span className="text-muted-foreground">{t('memory.pluginState')}:</span>{' '}
             {!pmMeta.configured
@@ -486,7 +486,7 @@ function PowermemMemoryPanel() {
           <button
             type="button"
             onClick={() => void refetchPmList()}
-            className="px-3 py-1.5 text-sm border border-border rounded"
+            className="button-secondary px-3 py-1.5 text-sm"
           >
             {t('memory.retry')}
           </button>
@@ -498,7 +498,7 @@ function PowermemMemoryPanel() {
             <button
               type="button"
               onClick={() => void refetchPmList()}
-              className="px-3 py-1.5 text-xs border border-border rounded"
+              className="button-secondary px-3 py-1.5 text-xs"
             >
               {t('memory.refreshList')}
             </button>
@@ -507,7 +507,7 @@ function PowermemMemoryPanel() {
             {(pmList ?? []).map((row) => (
               <li
                 key={row.id}
-                className="border border-border rounded-lg p-3 flex justify-between gap-3 items-start bg-background"
+                className="list-card flex items-start justify-between gap-3 bg-background/70"
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-muted-foreground">#{row.memoryId}</p>
@@ -519,7 +519,7 @@ function PowermemMemoryPanel() {
                 <button
                   type="button"
                   onClick={() => void deletePowermemRow(row.id)}
-                  className="text-xs text-red-500 border border-border px-2 py-1 rounded shrink-0"
+                  className="button-danger shrink-0 px-2 py-1 text-xs"
                 >
                   {t('memory.delete')}
                 </button>
@@ -544,13 +544,13 @@ function PowermemMemoryPanel() {
               placeholder={t('memory.powermemSearchPlaceholder')}
               value={pmQuery}
               onChange={(e) => setPmQuery(e.target.value)}
-              className="flex-1 px-3 py-2 text-sm bg-muted border border-border rounded"
+              className="control-input flex-1"
             />
             <button
               type="button"
               disabled={pmSearchLoading}
               onClick={() => void runPowermemSearch()}
-              className="px-4 py-2 text-sm bg-primary text-white rounded disabled:opacity-50 shrink-0"
+              className="button-primary shrink-0 disabled:opacity-50"
             >
               {pmSearchLoading ? t('memory.searching') : t('memory.search')}
             </button>
@@ -559,7 +559,7 @@ function PowermemMemoryPanel() {
           {pmSearchRows && pmSearchRows.length > 0 ? (
             <ul className="space-y-2">
               {pmSearchRows.map((row) => (
-                <li key={`s-${row.id}`} className="border border-border rounded p-2 text-sm bg-background">
+                <li key={`s-${row.id}`} className="list-card bg-background/70 p-3 text-sm">
                   <span className="text-xs text-muted-foreground">#{row.memoryId}</span>
                   <p className="mt-1 whitespace-pre-wrap">{row.content}</p>
                 </li>
@@ -579,20 +579,22 @@ export default function MemoryPage() {
   const [tab, setTab] = useState<'openclaw' | 'powermem'>('openclaw')
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">{t('memory.title')}</h2>
-        <p className="text-sm text-muted-foreground mt-1">{t('memory.subtitleTabs')}</p>
+    <div className="page-shell page-shell-medium">
+      <div className="page-header">
+        <div className="page-header-copy">
+          <h1 className="page-title">{t('memory.title')}</h1>
+          <p className="page-subtitle">{t('memory.subtitleTabs')}</p>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="pill-group">
         <button
           type="button"
           onClick={() => setTab('openclaw')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`pill-button ${
             tab === 'openclaw'
-              ? 'bg-primary text-white'
-              : 'border border-border hover:bg-accent text-muted-foreground'
+              ? 'pill-button-active'
+              : 'pill-button-inactive'
           }`}
         >
           {t('memory.tabOpenclaw')}
@@ -600,10 +602,10 @@ export default function MemoryPage() {
         <button
           type="button"
           onClick={() => setTab('powermem')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`pill-button ${
             tab === 'powermem'
-              ? 'bg-primary text-white'
-              : 'border border-border hover:bg-accent text-muted-foreground'
+              ? 'pill-button-active'
+              : 'pill-button-inactive'
           }`}
         >
           {t('memory.tabPowermem')}

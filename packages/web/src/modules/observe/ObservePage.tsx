@@ -1,10 +1,13 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { platformResults } from '@/adapters'
+import { getSetupAdapter } from '@/modules/setup/adapters'
 import { allSuccess2 } from '@/shared/adapters/resultHelpers'
 import type { AdapterResult } from '@/shared/adapters/types'
 import { fail, ok } from '@/shared/adapters/types'
+import { InstallTask } from '@/shared/components/InstallTask'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
+import { useInstallTask } from '@/shared/hooks/useInstallTask'
 import { LoadingState } from '@/shared/components/LoadingState'
 import type { ClawprobeConfigJson, ClawprobeCostJson, ClawprobeStatusJson } from '@/types/clawprobe'
 import { cn } from '@/lib/utils'
@@ -26,6 +29,8 @@ export default function ObservePage() {
   const [costPeriod, setCostPeriod] = useState<'day' | 'week' | 'month' | 'all'>('week')
   const [bootstrapBusy, setBootstrapBusy] = useState(false)
   const [bootstrapHint, setBootstrapHint] = useState<string | null>(null)
+  const [installHint, setInstallHint] = useState<string | null>(null)
+  const installTask = useInstallTask()
 
   const costPeriods = useMemo(
     () =>
@@ -76,15 +81,52 @@ export default function ObservePage() {
     void refetch()
   }, [refetch, t])
 
-  if (loading && !data) {
-    return <LoadingState message={t('observe.loading')} />
-  }
+  const handleInstallClawprobe = useCallback(async () => {
+    setInstallHint(null)
+    await installTask.run(async () => {
+      const adapter = getSetupAdapter()
+      await adapter.installCapabilities(['observe'], () => {})
+      const bootstrap = await platformResults.clawprobeBootstrap()
+      if (!bootstrap.success || !bootstrap.data) {
+        throw new Error(bootstrap.error ?? t('common.unknownError'))
+      }
+      setInstallHint(bootstrap.data.message)
+      await refetch()
+    })
+  }, [installTask, refetch, t])
 
   if (error || !data) {
+    if (loading && !data && !error) {
+      return (
+        <div className="page-shell page-shell-medium gap-8 pb-10">
+          <div className="page-header">
+            <div className="page-header-copy">
+              <h1 className="page-title">{t('observe.title')}</h1>
+              <p className="page-subtitle">{t('observe.subtitle')}</p>
+            </div>
+          </div>
+          <div className="state-panel">
+            <LoadingState message={t('observe.loading')} fullPage={false} />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="state-panel">
+              <LoadingState message={t('observe.sectionSession')} fullPage={false} />
+            </div>
+            <div className="state-panel">
+              <LoadingState message={t('observe.costTrend')} fullPage={false} />
+            </div>
+          </div>
+        </div>
+      )
+    }
     return (
-      <div className="space-y-4 max-w-3xl">
-        <h1 className="text-2xl font-bold">{t('observe.title')}</h1>
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+        <div className="page-shell page-shell-prose">
+        <div className="page-header">
+          <div className="page-header-copy">
+            <h1 className="page-title">{t('observe.title')}</h1>
+          </div>
+        </div>
+        <div className="surface-card-danger text-sm text-destructive">
           <p className="font-medium mb-2">{t('observe.errorTitle')}</p>
           <p className="text-muted-foreground mb-3">{error ?? t('common.unknownError')}</p>
           <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
@@ -95,7 +137,7 @@ export default function ObservePage() {
             type="button"
             onClick={() => void handleBootstrapClawprobe()}
             disabled={bootstrapBusy}
-            className="mt-3 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground disabled:opacity-50"
+            className="button-primary mt-3"
           >
             {bootstrapBusy ? t('observe.bootstrapWorking') : t('observe.bootstrapAuto')}
           </button>
@@ -107,7 +149,7 @@ export default function ObservePage() {
           <button
             type="button"
             onClick={() => void refetch()}
-            className="mt-4 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground"
+            className="button-primary mt-4"
           >
             {t('observe.retry')}
           </button>
@@ -118,25 +160,26 @@ export default function ObservePage() {
 
   const { status, cost, config } = data
   const maxDailyUsd = Math.max(...cost.daily.map((d) => d.usd), 0.01)
+  const installRequired = status.installRequired === true
 
   return (
-    <div className="space-y-8 max-w-4xl pb-10">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{t('observe.title')}</h1>
-          <p className="text-sm text-muted-foreground">{t('observe.subtitle')}</p>
+    <div className="page-shell page-shell-medium gap-8 pb-10">
+      <div className="page-header">
+        <div className="page-header-copy">
+          <h1 className="page-title">{t('observe.title')}</h1>
+          <p className="page-subtitle">{t('observe.subtitle')}</p>
         </div>
         <button
           type="button"
           onClick={() => void refetch()}
-          className="text-sm px-3 py-1.5 rounded-md border border-border hover:bg-accent self-start"
+          className="button-secondary self-start"
         >
           {t('observe.refresh')}
         </button>
       </div>
 
       {config && (
-        <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs font-mono text-muted-foreground space-y-1">
+        <div className="mono-note space-y-1">
           <div>
             <span className="text-foreground/80">openclawDir</span> {config.openclawDir}
           </div>
@@ -149,10 +192,42 @@ export default function ObservePage() {
         </div>
       )}
 
+      {installRequired && (
+        <section className="surface-card border-amber-500/30 bg-amber-500/5 text-center">
+          <div className="space-y-1">
+            <h2 className="text-base font-semibold">{t('observe.installTitle')}</h2>
+            <p className="text-sm text-muted-foreground">{t('observe.installBody')}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleInstallClawprobe()}
+              disabled={installTask.status === 'running'}
+              className="button-primary"
+            >
+              {installTask.status === 'running'
+                ? t('observe.installWorking')
+                : t('observe.installAction')}
+            </button>
+            <span className="text-xs font-mono text-muted-foreground">npm i -g clawprobe</span>
+          </div>
+          <InstallTask
+            label="ClawProbe"
+            description="npm i -g clawprobe"
+            status={installTask.status}
+            error={installTask.error}
+            onRetry={installTask.reset}
+          />
+          {installHint ? (
+            <p className="text-xs whitespace-pre-wrap text-muted-foreground">{installHint}</p>
+          ) : null}
+        </section>
+      )}
+
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">{t('observe.sectionSession')}</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border border-border p-4 space-y-2">
+          <div className="surface-card space-y-2">
             <div className="text-xs text-muted-foreground uppercase tracking-wide">{t('observe.daemonLabel')}</div>
             <div className="text-lg font-medium">
               {status.daemonRunning ? (
@@ -168,7 +243,7 @@ export default function ObservePage() {
               type="button"
               onClick={() => void handleBootstrapClawprobe()}
               disabled={bootstrapBusy}
-              className="mt-1 px-3 py-1.5 text-xs rounded-md border border-border hover:bg-accent disabled:opacity-50"
+              className="button-secondary mt-1 px-3 py-1.5 text-xs disabled:opacity-50"
             >
               {bootstrapBusy
                 ? t('observe.bootstrapShort')
@@ -182,7 +257,7 @@ export default function ObservePage() {
               </pre>
             ) : null}
           </div>
-          <div className="rounded-lg border border-border p-4 space-y-2">
+          <div className="surface-card space-y-2">
             <div className="text-xs text-muted-foreground uppercase tracking-wide">
               {t('observe.todayCostLabel')}
             </div>
@@ -197,7 +272,7 @@ export default function ObservePage() {
           <div className="flex flex-wrap gap-2 justify-between items-center">
             <span className="text-sm font-medium">{t('observe.contextUsage')}</span>
             {status.model && (
-              <span className="text-xs text-muted-foreground font-mono truncate max-w-[min(100%,18rem)]">
+              <span className="min-w-0 flex-1 text-right text-xs text-muted-foreground font-mono truncate">
                 {status.model}
               </span>
             )}
@@ -229,17 +304,17 @@ export default function ObservePage() {
       <section className="space-y-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold">{t('observe.costTrend')}</h2>
-          <div className="flex flex-wrap gap-1">
+          <div className="pill-group">
             {costPeriods.map((p) => (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => setCostPeriod(p.id)}
                 className={cn(
-                  'px-2.5 py-1 text-xs rounded-md border transition-colors',
+                  'pill-button text-xs',
                   costPeriod === p.id
-                    ? 'border-primary bg-primary/10 text-primary font-medium'
-                    : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted'
+                    ? 'pill-button-active'
+                    : 'pill-button-inactive'
                 )}
               >
                 {t(p.labelKey)}
@@ -248,7 +323,7 @@ export default function ObservePage() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-border p-4 space-y-3">
+        <div className="surface-card space-y-3">
           <div className="flex flex-wrap gap-4 text-sm">
             <div>
               <span className="text-muted-foreground">{t('observe.total')} </span>
@@ -273,15 +348,15 @@ export default function ObservePage() {
           ) : (
             <ul className="space-y-2">
               {cost.daily.map((d) => (
-                <li key={d.date} className="flex items-center gap-3 text-sm">
-                  <span className="w-28 font-mono text-xs text-muted-foreground">{d.date}</span>
-                  <div className="flex-1 h-2 rounded bg-muted overflow-hidden min-w-[4rem]">
+                <li key={d.date} className="grid gap-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+                  <span className="font-mono text-xs text-muted-foreground">{d.date}</span>
+                  <div className="h-2 overflow-hidden rounded bg-muted">
                     <div
                       className="h-full rounded bg-primary/80"
                       style={{ width: `${Math.min(100, (d.usd / maxDailyUsd) * 100)}%` }}
                     />
                   </div>
-                  <span className="w-20 text-right font-mono text-xs">${d.usd.toFixed(4)}</span>
+                  <span className="font-mono text-xs sm:text-right">${d.usd.toFixed(4)}</span>
                 </li>
               ))}
             </ul>

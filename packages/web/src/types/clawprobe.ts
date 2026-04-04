@@ -11,6 +11,7 @@ export interface ClawprobeStatusSuggestion {
 export interface ClawprobeStatusJson {
   agent: string
   daemonRunning: boolean
+  installRequired?: boolean
   sessionKey: string | null
   sessionId: string | null
   model: string | null

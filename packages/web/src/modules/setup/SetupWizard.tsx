@@ -1,6 +1,23 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Shell, Check, ExternalLink, Globe, Download, Loader2, Server, HardDrive } from 'lucide-react'
+import {
+  Shell,
+  Check,
+  ExternalLink,
+  Globe,
+  Download,
+  Loader2,
+  Server,
+  HardDrive,
+  ArrowRight,
+  CircleDashed,
+  CheckCircle2,
+  AlertCircle,
+  Bot,
+  Radar,
+  ScanSearch,
+  type LucideIcon,
+} from 'lucide-react'
 import { useInstallTask } from '@/shared/hooks/useInstallTask'
 import { InstallTask } from '@/shared/components/InstallTask'
 import {
@@ -35,6 +52,30 @@ interface SetupWizardProps {
   onComplete: () => void
 }
 
+const CAPABILITY_TONES: Record<CapabilityId, string> = {
+  engine: 'bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900',
+  memory: 'bg-emerald-600 text-white',
+  observe: 'bg-amber-500 text-stone-950',
+  ocr: 'bg-sky-600 text-white',
+  agent: 'bg-rose-600 text-white',
+}
+
+const CAPABILITY_DESC_KEYS: Record<CapabilityId, string> = {
+  engine: 'capability.engine.desc',
+  memory: 'capability.memory.desc',
+  observe: 'capability.observe.desc',
+  ocr: 'capability.ocr.desc',
+  agent: 'capability.agent.desc',
+}
+
+const CAPABILITY_ICONS: Record<CapabilityId, LucideIcon> = {
+  engine: Shell,
+  memory: HardDrive,
+  observe: Radar,
+  ocr: ScanSearch,
+  agent: Bot,
+}
+
 /**
  * 安装向导
  *
@@ -60,9 +101,13 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const startDetection = useCallback(async () => {
     setPhase('detecting')
     setError(null)
+    const requiredIds = new Set(CAPABILITIES.filter((c) => c.required).map((c) => c.id))
+    const latest = new Map<CapabilityId, CapabilityStatus>()
+    let advanced = false
 
     try {
       const results = await adapter.detectCapabilities((status) => {
+        latest.set(status.id, status)
         setCapabilities((prev) => {
           const idx = prev.findIndex((c) => c.id === status.id)
           if (idx >= 0) {
@@ -72,14 +117,28 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           }
           return [...prev, status]
         })
+
+        if (advanced) return
+        const requiredStatuses = Array.from(requiredIds)
+          .map((id) => latest.get(id))
+          .filter((item): item is CapabilityStatus => Boolean(item))
+        const requiredSettled =
+          requiredStatuses.length === requiredIds.size &&
+          requiredStatuses.every((item) => item.status !== 'checking')
+
+        if (!requiredSettled) return
+
+        advanced = true
+        const requiredAllInstalled = requiredStatuses.every((item) => item.status === 'installed')
+        setPhase(requiredAllInstalled ? 'done' : 'ready')
       })
 
-      // 只看 required 能力是否全部就绪
-      const requiredIds = new Set(CAPABILITIES.filter((c) => c.required).map((c) => c.id))
       const requiredAllInstalled = results
         .filter((r) => requiredIds.has(r.id))
         .every((r) => r.status === 'installed')
-      setPhase(requiredAllInstalled ? 'done' : 'ready')
+      if (!advanced) {
+        setPhase(requiredAllInstalled ? 'done' : 'ready')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setPhase('error')
@@ -92,12 +151,15 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   }, [startDetection])
 
   // ─── 安装阶段 ───
-  const startInstall = useCallback(async () => {
+  const startInstall = useCallback(async (requestedIds?: CapabilityId[]) => {
     // 只安装 required 的缺失能力
     const requiredIds = new Set(CAPABILITIES.filter((c) => c.required).map((c) => c.id))
-    const missing = capabilities
-      .filter((c) => c.status === 'not_installed' && requiredIds.has(c.id))
-      .map((c) => c.id)
+    const missing =
+      requestedIds && requestedIds.length > 0
+        ? requestedIds
+        : capabilities
+            .filter((c) => c.status === 'not_installed' && requiredIds.has(c.id))
+            .map((c) => c.id)
 
     if (missing.length === 0) {
       setPhase('done')
@@ -239,12 +301,43 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   // ─── 渲染 ───
 
   const requiredIds = new Set(CAPABILITIES.filter((c) => c.required).map((c) => c.id))
-  const requiredMissing = capabilities.filter((c) => c.status === 'not_installed' && requiredIds.has(c.id))
-  const optionalMissing = capabilities.filter((c) => c.status === 'not_installed' && !requiredIds.has(c.id))
+  const capabilityCards = CAPABILITIES.map(
+    (capability) =>
+      capabilities.find((item) => item.id === capability.id) ?? {
+        id: capability.id,
+        name: capability.name,
+        status: 'checking' as const,
+      },
+  )
+  const requiredMissing = capabilityCards.filter(
+    (c) => c.status === 'not_installed' && requiredIds.has(c.id),
+  )
+  const optionalMissing = capabilityCards.filter(
+    (c) => c.status === 'not_installed' && !requiredIds.has(c.id),
+  )
+  const installedCount = capabilityCards.filter((c) => c.status === 'installed').length
+  const pendingCount = capabilityCards.filter((c) => c.status === 'not_installed').length
+  const workingCount =
+    phase === 'installing'
+      ? Object.values(installProgress).filter(
+          (item) => item.status === 'installing' || item.status === 'waiting',
+        ).length
+      : capabilityCards.filter((c) => c.status === 'checking').length
+  const isCapabilityPhase = ['detecting', 'ready', 'installing', 'done', 'error'].includes(phase)
+  const stageLabel =
+    phase === 'detecting'
+      ? t('setup.stageDetecting')
+      : phase === 'installing'
+        ? t('setup.stageInstalling')
+        : phase === 'done'
+          ? t('setup.stageConfigured')
+          : phase === 'error'
+            ? t('setup.failed')
+            : t('setup.stageReady')
   const isDemo = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('demo') === 'install'
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-background p-6 relative">
+    <div className="fullscreen-shell px-6">
       {/* Language Switcher */}
       <div className="absolute top-4 right-4 flex items-center gap-1 text-muted-foreground">
         <Globe className="w-4 h-4" />
@@ -259,104 +352,135 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         </select>
       </div>
 
-      {/* Logo */}
-      <div className="w-16 h-16 bg-primary rounded-xl flex items-center justify-center mb-4 shadow-lg">
-        <Shell className="w-9 h-9 text-primary-foreground" />
-      </div>
-      <h1 className="text-2xl font-bold mb-1">{t('setup.appName')}</h1>
-      <p className="text-sm text-muted-foreground mb-6">{t('setup.appSlogan')}</p>
+      {isCapabilityPhase ? (
+        <div className="fullscreen-step setup-stage">
+          <section className="setup-hero">
+            <div className="setup-hero-grid">
+              <div>
+                <div className="flex items-center gap-4">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+                    <Shell className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <p className="setup-hero-kicker">{stageLabel}</p>
+                    <h1 className="setup-hero-title">{t('setup.appName')}</h1>
+                  </div>
+                </div>
+                <p className="setup-hero-copy">{t('setup.capabilityReview')}</p>
+                <p className="mt-4 text-sm text-muted-foreground">
+                  {t('setup.stageSummary', { stage: stageLabel })}
+                </p>
+                {isDemo && (
+                  <div className="mt-4 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                    {t('setup.demoMode')}
+                  </div>
+                )}
+              </div>
 
-      {isDemo && (
-        <div className="mb-4 px-3 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-          {t('setup.demoMode')}
-        </div>
-      )}
+              <div className="setup-summary-card">
+                <p className="setup-summary-label">{t('setup.stageSummary', { stage: stageLabel })}</p>
+                <div className="setup-summary-grid">
+                  <SummaryMetric label={t('setup.summaryInstalled')} value={String(installedCount)} />
+                  <SummaryMetric label={t('setup.summaryPending')} value={String(pendingCount)} />
+                  <SummaryMetric label={t('setup.summaryWorking')} value={String(workingCount)} />
+                </div>
+              </div>
+            </div>
+          </section>
 
-      {/* 检测中 */}
-      {phase === 'detecting' && (
-        <div className="w-full max-w-md">
-          <p className="text-center text-muted-foreground mb-4">{t('setup.detecting')}</p>
-          <CapabilityList capabilities={capabilities} />
-        </div>
-      )}
-
-      {/* 检测完成，required 有缺失 → 必须安装 */}
-      {phase === 'ready' && requiredMissing.length > 0 && (
-        <div className="w-full max-w-md">
-          <p className="text-center text-muted-foreground mb-4">
-            {t('setup.coreNotInstalled')}
-          </p>
-          <CapabilityList capabilities={capabilities} />
-          <button
-            onClick={startInstall}
-            className="mt-6 w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition"
-          >
-            {t('setup.installCore')}
-          </button>
-        </div>
-      )}
-
-      {/* 检测完成，required 全部就绪但有 optional 缺失 → 可跳过 */}
-      {phase === 'ready' && requiredMissing.length === 0 && (
-        <div className="w-full max-w-md">
-          <p className="text-center text-muted-foreground mb-4">
-            {optionalMissing.length > 0 ? t('setup.coreReadyOptional', { count: optionalMissing.length }) : t('setup.coreReady')}
-          </p>
-          <CapabilityList capabilities={capabilities} />
-          <button
-            onClick={onComplete}
-            className="mt-6 w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition"
-          >
-            {t('setup.enterMaster')}
-          </button>
-          {optionalMissing.length > 0 && (
-            <p className="mt-2 text-center text-xs text-muted-foreground">
-              {t('setup.optionalLater')}
-            </p>
+          {phase === 'error' && (
+            <div className="surface-card-danger text-sm text-destructive">
+              {error ?? t('setup.unknownError')}
+            </div>
           )}
-        </div>
-      )}
 
-      {/* 安装中 */}
-      {phase === 'installing' && (
-        <div className="w-full max-w-md">
-          <p className="text-center text-muted-foreground mb-4">{t('setup.installing')}</p>
-          <InstallList
-            capabilities={capabilities}
+          <CapabilityDeck
+            capabilities={capabilityCards}
             progress={installProgress}
+            phase={phase}
+            onInstall={startInstall}
           />
-        </div>
-      )}
 
-      {/* 全部就绪（或 required 就绪）→ 引导配置 */}
-      {phase === 'done' && (
-        <div className="w-full max-w-md">
-          <p className="text-center text-green-600 font-medium mb-4">
-            {optionalMissing.length > 0
-              ? t('setup.coreReadyOptional', { count: optionalMissing.length })
-              : t('setup.allReady')}
-          </p>
-          <CapabilityList capabilities={capabilities} />
-          <button
-            onClick={() => setPhase('onboard_init')}
-            className="mt-6 w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition"
-          >
-            {t('setup.startConfig')}
-          </button>
-          <button
-            onClick={onComplete}
-            className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-foreground transition"
-          >
-            {t('setup.skipConfig')}
-          </button>
+          <div className="surface-card-muted">
+            <div className="setup-action-row">
+              {phase === 'detecting' && (
+                <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                  <CircleDashed className="h-4 w-4 animate-spin" />
+                  <span>{t('setup.detecting')}</span>
+                </div>
+              )}
+
+              {phase === 'ready' && requiredMissing.length > 0 && (
+                <button onClick={() => void startInstall()} className="button-primary">
+                  <Download className="h-4 w-4" />
+                  {t('setup.installCore')}
+                </button>
+              )}
+
+              {phase === 'ready' && requiredMissing.length === 0 && (
+                <>
+                  <button onClick={() => setPhase('onboard_init')} className="button-primary">
+                    <ArrowRight className="h-4 w-4" />
+                    {t('setup.startConfig')}
+                  </button>
+                  <button onClick={onComplete} className="button-secondary">
+                    {t('setup.enterMaster')}
+                  </button>
+                </>
+              )}
+
+              {phase === 'installing' && (
+                <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>{t('setup.installing')}</span>
+                </div>
+              )}
+
+              {phase === 'done' && (
+                <>
+                  <button onClick={() => setPhase('onboard_init')} className="button-primary">
+                    <ArrowRight className="h-4 w-4" />
+                    {t('setup.startConfig')}
+                  </button>
+                  <button onClick={onComplete} className="button-secondary">
+                    {t('setup.skipConfig')}
+                  </button>
+                </>
+              )}
+
+              {phase === 'error' && (
+                <button onClick={startDetection} className="button-secondary">
+                  {t('common.retry')}
+                </button>
+              )}
+            </div>
+
+            {(optionalMissing.length > 0 || phase === 'ready' || phase === 'done') && (
+              <p className="mt-3 text-sm text-muted-foreground">
+                {requiredMissing.length > 0
+                  ? t('setup.coreNotInstalled')
+                  : optionalMissing.length > 0
+                    ? t('setup.optionalLater')
+                    : t('setup.coreReady')}
+              </p>
+            )}
+          </div>
         </div>
+      ) : (
+        <>
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-primary shadow-lg">
+            <Shell className="h-9 w-9 text-primary-foreground" />
+          </div>
+          <h1 className="mb-1 text-2xl font-bold">{t('setup.appName')}</h1>
+          <p className="mb-6 text-sm text-muted-foreground">{t('setup.appSlogan')}</p>
+        </>
       )}
 
       {/* ─── 配置引导步骤 ─── */}
 
       {/* 步骤 1: 初始化配置文件 */}
       {phase === 'onboard_init' && (
-        <div className="w-full max-w-md">
+        <div className="fullscreen-step">
           <OnboardingProgress current={0} />
           {onboard.busy && (
             <p className="text-center text-muted-foreground animate-pulse">{t('setup.initConfig')}</p>
@@ -387,7 +511,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         const models = PROVIDERS[onboard.provider]?.models ?? []
         const hasModels = models.length > 0
         return (
-          <div className="w-full max-w-md">
+          <div className="fullscreen-step">
             <OnboardingProgress current={2} />
             <p className="text-center font-medium mb-4">{t('setup.selectModel')}</p>
             {hasModels && (
@@ -435,7 +559,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
       {/* 步骤 4: 启动网关 */}
       {phase === 'onboard_gateway' && (
-        <div className="w-full max-w-md">
+        <div className="fullscreen-step">
           <OnboardingProgress current={3} />
           <p className="text-center font-medium mb-4">{t('setup.startGateway')}</p>
           <div className="bg-card border border-border rounded-lg p-6 text-center">
@@ -483,7 +607,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           ? selectedChannel.tokenFields.every((f) => onboard.channelTokens[f.key]?.trim())
           : false
         return (
-          <div className="w-full max-w-md">
+          <div className="fullscreen-step">
             <OnboardingProgress current={4} />
             <p className="text-center font-medium mb-1">{t('setup.addChannel')}</p>
             <p className="text-center text-xs text-muted-foreground mb-4">{t('setup.channelOptional')}</p>
@@ -605,7 +729,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
       {/* 配置完成 */}
       {phase === 'onboard_done' && (
-        <div className="w-full max-w-md">
+        <div className="fullscreen-step">
           <OnboardingProgress current={5} />
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Check className="w-8 h-8 text-green-600" />
@@ -656,7 +780,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
       {/* 错误 */}
       {phase === 'error' && (
-        <div className="w-full max-w-md text-center">
+        <div className="fullscreen-step text-center">
           <p className="text-red-500 mb-4">{error ?? t('setup.unknownError')}</p>
           <button
             onClick={startDetection}
@@ -733,7 +857,7 @@ function QrLoginPanel({
       )}
       {status === 'scanning' && (
         <>
-          <div className="w-48 h-48 mx-auto mb-3 border-2 border-dashed border-border rounded-lg flex items-center justify-center">
+          <div className="mx-auto mb-3 flex aspect-square w-[min(70vw,16rem)] items-center justify-center rounded-lg border-2 border-dashed border-border">
             <div className="text-center">
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
               <p className="text-xs text-muted-foreground">{t('channel.qr.waiting')}</p>
@@ -762,36 +886,168 @@ function QrLoginPanel({
 
 // ─── 子组件 ───
 
-function CapabilityList({ capabilities }: { capabilities: CapabilityStatus[] }) {
-  const { t } = useTranslation()
+function SummaryMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-card border border-border rounded-lg divide-y divide-border">
-      {capabilities.map((cap) => (
-        <div key={cap.id} className="flex items-center justify-between px-4 py-3">
-          <span className="text-sm">{t(cap.name)}</span>
-          <CapabilityBadge status={cap.status} version={cap.version} />
-        </div>
-      ))}
+    <div>
+      <p className="setup-summary-label">{label}</p>
+      <p className="setup-summary-value">{value}</p>
     </div>
   )
 }
 
-function CapabilityBadge({ status, version }: { status: CapabilityStatus['status']; version?: string }) {
+function CapabilityBadge({
+  status,
+  version,
+  progress,
+}: {
+  status: CapabilityStatus['status']
+  version?: string
+  progress?: InstallProgress
+}) {
   const { t } = useTranslation()
+  if (progress?.status === 'installing' || progress?.status === 'waiting') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <CircleDashed className="h-3.5 w-3.5 animate-spin" />
+        {progress.status === 'installing' ? `${progress.progress ?? 0}%` : t('setup.waiting')}
+      </span>
+    )
+  }
+
+  if (progress?.status === 'error' || status === 'error') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-red-500">
+        <AlertCircle className="h-3.5 w-3.5" />
+        {t('setup.checkFailed')}
+      </span>
+    )
+  }
+
   switch (status) {
     case 'checking':
-      return <span className="text-xs text-muted-foreground animate-pulse">{t('setup.checking')}</span>
+      return (
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <CircleDashed className="h-3.5 w-3.5 animate-spin" />
+          {t('setup.checking')}
+        </span>
+      )
     case 'installed':
       return (
-        <span className="text-xs text-green-600">
+        <span className="inline-flex items-center gap-1 text-xs text-green-600">
+          <CheckCircle2 className="h-3.5 w-3.5" />
           {version ? `v${version}` : t('common.installed')}
         </span>
       )
     case 'not_installed':
-      return <span className="text-xs text-orange-500">{t('common.notInstalled')}</span>
-    case 'error':
-      return <span className="text-xs text-red-500">{t('setup.checkFailed')}</span>
+      return (
+        <span className="inline-flex items-center gap-1 text-xs text-orange-500">
+          <AlertCircle className="h-3.5 w-3.5" />
+          {t('common.notInstalled')}
+        </span>
+      )
   }
+}
+
+function CapabilityDeck({
+  capabilities,
+  progress,
+  phase,
+  onInstall,
+}: {
+  capabilities: CapabilityStatus[]
+  progress: Record<CapabilityId, InstallProgress>
+  phase: SetupPhase
+  onInstall: (ids?: CapabilityId[]) => Promise<void>
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="setup-capability-grid">
+      {capabilities.map((capability) => {
+        const Icon = CAPABILITY_ICONS[capability.id]
+        const installState = progress[capability.id]
+        const isRequired = CAPABILITIES.find((item) => item.id === capability.id)?.required ?? false
+        const installLocked =
+          phase === 'installing' &&
+          !installState &&
+          Object.values(progress).some(
+            (item) => item.status === 'installing' || item.status === 'waiting',
+          )
+
+        return (
+          <div key={capability.id} className="setup-capability-card">
+            <div className="setup-capability-head">
+              <div className="min-w-0">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${CAPABILITY_TONES[capability.id]}`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="setup-capability-title">{t(capability.name)}</p>
+                    <CapabilityBadge
+                      status={capability.status}
+                      version={capability.version}
+                      progress={installState}
+                    />
+                  </div>
+                </div>
+                <p className="setup-capability-desc">{t(CAPABILITY_DESC_KEYS[capability.id])}</p>
+              </div>
+            </div>
+
+            <div className="setup-capability-tags">
+              <span className="setup-capability-tag">
+                {isRequired ? t('setup.requiredCapability') : t('setup.optionalCapability')}
+              </span>
+              {capability.version && <span className="setup-capability-tag">v{capability.version}</span>}
+              {installState?.log && <span className="setup-capability-tag">{installState.log}</span>}
+            </div>
+
+            <div className="setup-capability-action">
+              {capability.status === 'installed' || installState?.status === 'done' ? (
+                <span className="inline-flex items-center gap-2 text-sm font-medium text-green-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {t('setup.stageReady')}
+                </span>
+              ) : installState?.status === 'installing' || installState?.status === 'waiting' ? (
+                <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {installState.status === 'installing'
+                    ? t('capability.installing')
+                    : t('setup.waiting')}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void onInstall([capability.id])}
+                  disabled={capability.status === 'checking' || installLocked}
+                  className="button-secondary"
+                >
+                  {t('setup.installCapability', { name: t(capability.name) })}
+                </button>
+              )}
+            </div>
+
+            {installState?.progress !== undefined &&
+              (installState.status === 'installing' || installState.status === 'done') && (
+                <div className="setup-capability-progress">
+                  <div
+                    className="setup-capability-progress-bar"
+                    style={{ width: `${installState.progress ?? 0}%` }}
+                  />
+                </div>
+              )}
+
+            {installState?.error && (
+              <p className="mt-3 text-xs text-red-500">{installState.error}</p>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 // ─── 提供商选择步骤 ───
@@ -817,7 +1073,7 @@ function ProviderStep({
   const providerCfg = PROVIDERS[onboard.provider]
 
   return (
-    <div className="w-full max-w-md">
+    <div className="fullscreen-step">
       <OnboardingProgress current={1} />
       <p className="text-center font-medium mb-4">{t('setup.configureLLM')}</p>
       <div className="flex gap-2 mb-2 justify-center flex-wrap">
@@ -1145,56 +1401,6 @@ function OnboardingProgress({ current }: { current: number }) {
           )}
         </div>
       ))}
-    </div>
-  )
-}
-
-function InstallList({
-  capabilities,
-  progress,
-}: {
-  capabilities: CapabilityStatus[]
-  progress: Record<CapabilityId, InstallProgress>
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className="bg-card border border-border rounded-lg divide-y divide-border">
-      {capabilities.map((cap) => {
-        const p = progress[cap.id]
-        const isInstalling = p && (p.status === 'installing' || p.status === 'waiting')
-        const isDone = cap.status === 'installed' || p?.status === 'done'
-        const isError = p?.status === 'error'
-
-        return (
-          <div key={cap.id} className="px-4 py-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm">{t(cap.name)}</span>
-              {isDone && <span className="text-xs text-green-600">{t('setup.ready')}</span>}
-              {isError && <span className="text-xs text-red-500">{t('setup.failed')}</span>}
-              {isInstalling && p?.status === 'installing' && (
-                <span className="text-xs text-blue-500">{p.progress ?? 0}%</span>
-              )}
-              {isInstalling && p?.status === 'waiting' && (
-                <span className="text-xs text-muted-foreground">{t('setup.waiting')}</span>
-              )}
-            </div>
-            {p?.status === 'installing' && p.progress !== undefined && (
-              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full transition-all duration-300"
-                  style={{ width: `${p.progress}%` }}
-                />
-              </div>
-            )}
-            {p?.log && (
-              <p className="text-xs text-muted-foreground mt-1 font-mono truncate">{p.log}</p>
-            )}
-            {p?.error && (
-              <p className="text-xs text-red-500 mt-1">{p.error}</p>
-            )}
-          </div>
-        )
-      })}
     </div>
   )
 }

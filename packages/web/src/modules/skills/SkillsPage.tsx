@@ -25,6 +25,7 @@ import {
 import type { SkillInfo } from '@/lib/types'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
+import { LoadingState } from '@/shared/components/LoadingState'
 import {
   SKILL_CATALOG,
   SCENE_BUNDLES,
@@ -52,7 +53,12 @@ export default function Skills() {
 
 function SkillsContent() {
   const { t } = useTranslation()
-  const { data: installedSkills, refetch } = useAdapterCall(getSkillsResult)
+  const {
+    data: installedSkills,
+    loading: installedSkillsLoading,
+    error: installedSkillsError,
+    refetch,
+  } = useAdapterCall(getSkillsResult)
 
   const [searchResults, setSearchResults] = useState<SkillInfo[]>([])
   const [searching, setSearching] = useState(false)
@@ -133,17 +139,17 @@ function SkillsContent() {
   }
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="page-shell page-shell-wide">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">{t('skills.title')}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t('skills.subtitle')}</p>
+      <div className="page-header">
+        <div className="page-header-copy">
+          <h1 className="page-title">{t('skills.title')}</h1>
+          <p className="page-subtitle">{t('skills.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => refetch()}
-            className="p-2 border border-border rounded hover:bg-accent"
+            className="button-secondary p-2"
             title={t('common.refresh') ?? 'Refresh'}
           >
             <RefreshCw className="w-4 h-4" />
@@ -152,7 +158,7 @@ function SkillsContent() {
             href="https://clawhub.ai"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-border rounded hover:bg-accent"
+            className="button-secondary"
           >
             <ExternalLink className="w-4 h-4" />
             {t('skills.visitClawHub')}
@@ -160,8 +166,7 @@ function SkillsContent() {
         </div>
       </div>
 
-      {/* Category filter */}
-      <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit flex-wrap">
+      <div className="pill-group">
         <CategoryPill
           active={selectedCategory === 'all'}
           onClick={() => setSelectedCategory('all')}
@@ -218,7 +223,8 @@ function SkillsContent() {
       </div>
 
       {/* Search bar */}
-      <div className="relative">
+      <div className="toolbar-card">
+        <div className="relative flex-1">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input
           type="text"
@@ -226,33 +232,35 @@ function SkillsContent() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && view === 'market' && handleSearch()}
-          className="w-full pl-10 pr-4 py-2.5 bg-card rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+          className="control-input pl-10 pr-4"
         />
         {view === 'market' && (
           <button
             onClick={handleSearch}
             disabled={searching || !query.trim()}
-            className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:opacity-90 disabled:opacity-50"
+            className="button-primary absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-sm disabled:opacity-50"
           >
             {searching ? t('common.searching') : t('common.search')}
           </button>
         )}
+        </div>
       </div>
 
-      {/* View tabs */}
-      <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit">
+      <div className="pill-group">
         <button
           onClick={() => { setView('installed'); setSearchResults([]) }}
-          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-            view === 'installed' ? 'bg-card shadow-sm' : 'hover:bg-card/50'
+          className={`pill-button ${
+            view === 'installed' ? 'pill-button-active' : 'pill-button-inactive'
           }`}
         >
-          {t('skills.installed', { count: skills.length })}
+          {installedSkillsLoading
+            ? `${t('skills.installed', { count: 0 })} · ${t('common.loading')}`
+            : t('skills.installed', { count: skills.length })}
         </button>
         <button
           onClick={() => setView('market')}
-          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-            view === 'market' ? 'bg-card shadow-sm' : 'hover:bg-card/50'
+          className={`pill-button ${
+            view === 'market' ? 'pill-button-active' : 'pill-button-inactive'
           }`}
         >
           {t('skills.searchMarket')}
@@ -260,10 +268,17 @@ function SkillsContent() {
       </div>
 
       {/* Content */}
+      {installedSkillsError && (
+        <div role="alert" className="surface-card border-red-500/30 bg-red-500/5 text-red-600 dark:text-red-300">
+          {t('common.error')}: {installedSkillsError}
+        </div>
+      )}
+
       {view === 'installed' ? (
         <InstalledView
           skills={filteredSkills}
           totalCount={skills.length}
+          loading={installedSkillsLoading}
           operating={operating}
           onUninstall={handleUninstall}
           t={t}
@@ -288,8 +303,8 @@ function CategoryPill({ active, onClick, label }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-        active ? 'bg-card shadow-sm' : 'hover:bg-card/50'
+      className={`pill-button ${
+        active ? 'pill-button-active' : 'pill-button-inactive'
       }`}
     >
       {label}
@@ -313,7 +328,7 @@ function SceneCard({
   const sceneTask = useInstallTask()
   const Icon = SCENE_ICON_MAP[scene.icon] ?? Package
   return (
-    <div className="bg-card border border-border rounded-lg p-5 flex flex-col hover:border-primary/50 transition-colors">
+    <div className="surface-card flex flex-col transition-colors hover:border-primary/50">
       <div className="flex items-start gap-3 mb-3">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${scene.color}`}>
           <Icon className="w-5 h-5" />
@@ -342,7 +357,7 @@ function SceneCard({
         <button
           onClick={() => sceneTask.run(async () => { await onInstall() })}
           disabled={installing}
-          className="w-full py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-1.5"
+          className="button-primary w-full disabled:opacity-50"
         >
           <Download className="w-3.5 h-3.5" />
           {t('skills.oneClickInstall')}
@@ -370,7 +385,7 @@ function CatalogCard({
   const installTask = useInstallTask()
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4 hover:border-primary/30 transition-colors">
+    <div className="surface-card transition-colors hover:border-primary/30">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -415,7 +430,7 @@ function CatalogCard({
           <button
             onClick={onUninstall}
             disabled={operating}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 disabled:opacity-50"
+            className="button-danger px-3 py-1.5 text-xs disabled:opacity-50"
           >
             <Trash2 className="w-3 h-3" />
             {t('skills.uninstall')}
@@ -424,7 +439,7 @@ function CatalogCard({
           <button
             onClick={() => installTask.run(async () => { await onInstall() })}
             disabled={operating}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50"
+            className="button-primary px-3 py-1.5 text-xs disabled:opacity-50"
           >
             <Download className="w-3 h-3" />
             {t('skills.install')}
@@ -438,19 +453,29 @@ function CatalogCard({
 function InstalledView({
   skills,
   totalCount,
+  loading,
   operating,
   onUninstall,
   t,
 }: {
   skills: SkillInfo[]
   totalCount: number
+  loading: boolean
   operating: string | null
   onUninstall: (slug: string) => void
   t: (key: string) => string
 }) {
+  if (loading && totalCount === 0) {
+    return (
+      <div className="surface-card py-12">
+        <LoadingState message={t('common.loading')} fullPage={false} />
+      </div>
+    )
+  }
+
   if (totalCount === 0) {
     return (
-      <div className="bg-card border border-border rounded-lg p-12 text-center">
+      <div className="surface-card py-12 text-center">
         <Package className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-40" />
         <p className="text-muted-foreground">{t('skills.noInstalled')}</p>
       </div>
@@ -459,7 +484,7 @@ function InstalledView({
 
   if (skills.length === 0) {
     return (
-      <div className="bg-card border border-border rounded-lg p-8 text-center">
+      <div className="state-panel min-h-0 py-8">
         <p className="text-muted-foreground">{t('skills.noMatch')}</p>
       </div>
     )
@@ -476,7 +501,7 @@ function InstalledView({
             <button
               onClick={() => onUninstall(skill.slug)}
               disabled={operating === skill.slug}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 disabled:opacity-50"
+              className="button-danger px-3 py-1.5 text-sm disabled:opacity-50"
             >
               <Trash2 className="w-3.5 h-3.5" />
               {operating === skill.slug ? t('skills.processing') : t('skills.uninstall')}
@@ -514,7 +539,7 @@ function MarketView({
 
   if (results.length === 0) {
     return (
-      <div className="bg-card border border-border rounded-lg p-12 text-center">
+      <div className="surface-card py-12 text-center">
         <Search className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-40" />
         <p className="text-muted-foreground">{t('skills.searchHint')}</p>
       </div>
@@ -540,7 +565,7 @@ function MarketView({
                 <button
                   onClick={() => onInstall(skill.slug)}
                   disabled={operating === skill.slug}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50"
+                  className="button-primary px-3 py-1.5 text-sm disabled:opacity-50"
                 >
                   <Download className="w-3.5 h-3.5" />
                   {operating === skill.slug ? t('skills.installing') : t('skills.install')}
@@ -564,7 +589,7 @@ function SkillCard({
   action: React.ReactNode
 }) {
   return (
-    <div className={`bg-card border rounded-lg p-4 flex items-start justify-between gap-3 transition-colors ${
+    <div className={`list-card flex items-start justify-between gap-3 transition-colors ${
       operating ? 'border-primary/30 opacity-70' : 'border-border hover:border-primary/50'
     }`}>
       <div className="min-w-0 flex-1 space-y-1">

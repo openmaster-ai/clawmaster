@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { platform } from '@/adapters'
+import { platformResults } from '@/shared/adapters/platformResults'
+import { LoadingState } from '@/shared/components/LoadingState'
 import type { GatewayStatus, OpenClawConfig } from '@/lib/types'
 import { buildGatewayUrl } from '@/shared/gatewayUrl'
 
@@ -9,38 +11,43 @@ export default function Gateway() {
   const [status, setStatus] = useState<GatewayStatus | null>(null)
   const [config, setConfig] = useState<OpenClawConfig | null>(null)
   const [loading, setLoading] = useState(true)
+  const [statusLoading, setStatusLoading] = useState(true)
   const [operating, setOperating] = useState<string | null>(null)
 
   useEffect(() => {
-    loadData()
+    void loadData()
   }, [])
 
   async function loadData() {
-    try {
-      setLoading(true)
-      const [gw, cfg] = await Promise.all([
-        platform.getGatewayStatus(),
-        platform.getConfig(),
-      ])
-      setStatus(gw)
-      setConfig(cfg)
-    } catch (err) {
-      console.error('Failed to load gateway data:', err)
-    } finally {
-      setLoading(false)
+    setLoading(true)
+    setStatusLoading(true)
+
+    const cfgRes = await platformResults.getConfig()
+    if (cfgRes.success && cfgRes.data) {
+      setConfig(cfgRes.data)
+    } else if (!cfgRes.success) {
+      console.error('Failed to load gateway config:', cfgRes.error)
     }
+    setLoading(false)
+
+    const gwRes = await platformResults.getGatewayStatus()
+    if (gwRes.success && gwRes.data) {
+      setStatus(gwRes.data)
+    } else if (!gwRes.success) {
+      console.error('Failed to load gateway status:', gwRes.error)
+      setStatus((prev) => prev ?? { running: false, port: cfgRes.data?.gateway?.port ?? 18789 })
+    }
+    setStatusLoading(false)
   }
 
   /** 轮询等待网关状态变化 */
   async function pollStatus(expectRunning: boolean, maxRetries = 10): Promise<boolean> {
     for (let i = 0; i < maxRetries; i++) {
       await new Promise((r) => setTimeout(r, 1000))
-      try {
-        const gw = await platform.getGatewayStatus()
-        setStatus(gw)
-        if (gw.running === expectRunning) return true
-      } catch {
-        // 继续轮询
+      const gwRes = await platformResults.getGatewayStatus()
+      if (gwRes.success && gwRes.data) {
+        setStatus(gwRes.data)
+        if (gwRes.data.running === expectRunning) return true
       }
     }
     return false
@@ -75,88 +82,146 @@ export default function Gateway() {
     }
   }
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-64">{t('common.loading')}</div>
-  }
-
   const gatewayUrl = buildGatewayUrl(config, { protocol: 'ws' })
+  const gatewayPort = config?.gateway?.port || status?.port || 18789
+  const gatewayBind = config?.gateway?.bind || 'loopback'
+  const gatewayAuthMode = config?.gateway?.auth?.mode || 'token'
+  const gatewayToken = config?.gateway?.auth?.token
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <h1 className="text-2xl font-bold">{t('gateway.title')}</h1>
-      
-      {/* 状态指示 */}
-      <div className="bg-card border border-border rounded-lg p-8 text-center">
-        <div className="flex items-center justify-center gap-3 mb-2">
-          <span className={`w-4 h-4 rounded-full ${status?.running ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-          <span className={`text-2xl font-bold ${status?.running ? 'text-green-600' : 'text-red-600'}`}>
-            {status?.running ? t('dashboard.running') : t('dashboard.stopped')}
-          </span>
-        </div>
-        <p className="text-muted-foreground font-mono">{gatewayUrl}</p>
-        <div className="mt-4 flex justify-center gap-3">
-          {operating ? (
-            <span className="px-4 py-2 text-muted-foreground animate-pulse">{operating}</span>
-          ) : status?.running ? (
-            <>
-              <button
-                onClick={() => handleGatewayAction('stop')}
-                className="px-4 py-2 bg-red-500 text-primary-foreground rounded-lg hover:bg-red-600"
-              >
-                {t('gateway.stop')}
-              </button>
-              <button
-                onClick={() => handleGatewayAction('restart')}
-                className="px-4 py-2 border border-border rounded-lg hover:bg-accent"
-              >
-                {t('gateway.restart')}
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => handleGatewayAction('start')}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90"
-            >
-              {t('gateway.start')}
-            </button>
-          )}
-          <a 
-            href={buildGatewayUrl(config)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-2 border border-border rounded-lg hover:bg-accent"
-          >
-            {t('gateway.openInBrowser')}
-          </a>
+    <div className="page-shell page-shell-medium">
+      <div className="page-header">
+        <div className="page-header-copy">
+          <div className="page-header-meta">
+            <span>{status?.running ? t('dashboard.running') : t('dashboard.stopped')}</span>
+            <span>{t('gateway.port')}: {gatewayPort}</span>
+            <span>{t('gateway.auth')}: {gatewayAuthMode}</span>
+          </div>
+          <h1 className="page-title">{t('gateway.title')}</h1>
+          <p className="page-subtitle">{t('gateway.editConfigHint')}</p>
         </div>
       </div>
 
-      {/* 配置概览 */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-medium mb-3">{t('gateway.config')}</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div>
-            <p className="text-muted-foreground">{t('gateway.port')}</p>
-            <p className="font-mono font-medium">{config?.gateway?.port || 18789}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">{t('gateway.bind')}</p>
-            <p className="font-medium">{config?.gateway?.bind || 'loopback'}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">{t('gateway.auth')}</p>
-            <p className="font-medium">{config?.gateway?.auth?.mode || 'token'}</p>
-          </div>
-          {config?.gateway?.auth?.token && (
-            <div>
-              <p className="text-muted-foreground">Token</p>
-              <button onClick={copyToken} className="text-xs text-primary hover:underline">{t('gateway.copyToken')}</button>
-            </div>
-          )}
+      <div className="metric-grid">
+        <div className="metric-card">
+          <p className="metric-label">{t('dashboard.gatewayStatus')}</p>
+          <p className={`metric-value ${status?.running ? 'text-green-600' : 'text-red-600'}`}>
+            {status?.running ? t('dashboard.running') : t('dashboard.stopped')}
+          </p>
+          <p className="metric-meta">{gatewayUrl}</p>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          {t('gateway.editConfigHint')}
-        </p>
+        <div className="metric-card">
+          <p className="metric-label">{t('gateway.port')}</p>
+          <p className="metric-value">{gatewayPort}</p>
+          <p className="metric-meta">{t('gateway.bind')}: {gatewayBind}</p>
+        </div>
+        <div className="metric-card">
+          <p className="metric-label">{t('gateway.auth')}</p>
+          <p className="metric-value">{gatewayAuthMode}</p>
+          <p className="metric-meta">
+            {gatewayToken ? (
+              <button onClick={copyToken} className="text-primary hover:underline">
+                {t('gateway.copyToken')}
+              </button>
+            ) : 'Token -'}
+          </p>
+        </div>
+      </div>
+
+      <div className="surface-card">
+        {loading ? (
+          <LoadingState message={t('common.loading')} fullPage={false} />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+            <div className="space-y-3">
+              <div className="section-heading">
+                <div>
+                  <h3 className="section-title">{t('dashboard.manage')}</h3>
+                  <p className="section-subtitle">{gatewayUrl}</p>
+                </div>
+              </div>
+              <div className="inline-note">
+                {status?.running
+                  ? t('gateway.openInBrowser')
+                  : t('gateway.editConfigHint')}
+              </div>
+              <p className="mono-note max-w-full overflow-auto">{gatewayUrl}</p>
+            </div>
+
+            <div className="flex flex-wrap gap-3 lg:justify-end">
+              {operating ? (
+                <span className="px-4 py-2 text-muted-foreground animate-pulse">{operating}</span>
+              ) : statusLoading ? (
+                <span className="px-4 py-2 text-muted-foreground animate-pulse">{t('common.loading')}</span>
+              ) : status?.running ? (
+                <>
+                  <button
+                    onClick={() => handleGatewayAction('stop')}
+                    className="button-danger"
+                  >
+                    {t('gateway.stop')}
+                  </button>
+                  <button
+                    onClick={() => handleGatewayAction('restart')}
+                    className="button-secondary"
+                  >
+                    {t('gateway.restart')}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => handleGatewayAction('start')}
+                  className="button-primary"
+                >
+                  {t('gateway.start')}
+                </button>
+              )}
+              <a 
+                href={buildGatewayUrl(config)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="button-secondary"
+              >
+                {t('gateway.openInBrowser')}
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="surface-card">
+        <div className="section-heading">
+          <h3 className="section-title">{t('gateway.config')}</h3>
+        </div>
+        {loading ? (
+          <LoadingState message={t('gateway.config')} fullPage={false} />
+        ) : (
+          <>
+            <div className="grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <p className="text-muted-foreground">{t('gateway.port')}</p>
+                <p className="font-mono font-medium">{gatewayPort}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">{t('gateway.bind')}</p>
+                <p className="font-medium">{gatewayBind}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">{t('gateway.auth')}</p>
+                <p className="font-medium">{gatewayAuthMode}</p>
+              </div>
+              {gatewayToken && (
+                <div>
+                  <p className="text-muted-foreground">Token</p>
+                  <button onClick={copyToken} className="text-xs text-primary hover:underline">{t('gateway.copyToken')}</button>
+                </div>
+              )}
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              {t('gateway.editConfigHint')}
+            </p>
+          </>
+        )}
       </div>
     </div>
   )

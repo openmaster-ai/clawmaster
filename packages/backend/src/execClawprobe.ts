@@ -6,6 +6,15 @@ import { promisify } from 'node:util'
 const require = createRequire(import.meta.url)
 const execFileAsync = promisify(execFile)
 
+export class ClawprobeUnavailableError extends Error {
+  code = 'CLAWPROBE_UNAVAILABLE'
+
+  constructor(message = 'ClawProbe is not installed or not available in PATH') {
+    super(message)
+    this.name = 'ClawprobeUnavailableError'
+  }
+}
+
 export interface ClawprobeCommandOutput {
   ok: boolean
   code: number
@@ -24,6 +33,33 @@ function resolveClawprobeEntry(): string {
   }
 }
 
+function resolveClawprobeCommand() {
+  const entry = resolveClawprobeEntry()
+  const isGlobalBin = !entry.endsWith('.js')
+  return {
+    cmd: isGlobalBin ? entry : process.execPath,
+    argsPrefix: isGlobalBin ? [] : [entry],
+  }
+}
+
+function isClawprobeUnavailableFailure(
+  error: NodeJS.ErrnoException & { stdout?: Buffer; stderr?: Buffer; code?: string | number }
+): boolean {
+  if (error.code === 'ENOENT') {
+    return true
+  }
+  const combined = [
+    error.message,
+    error.stdout ? String(error.stdout) : '',
+    error.stderr ? String(error.stderr) : '',
+  ]
+    .join('\n')
+    .trim()
+  return /command not found|cannot find module|not recognized as an internal or external command|spawn .* ENOENT/i.test(
+    combined
+  )
+}
+
 function isClawprobeJsonError(v: unknown): v is { ok: false; error?: string; message?: string } {
   return (
     typeof v === 'object' &&
@@ -34,10 +70,8 @@ function isClawprobeJsonError(v: unknown): v is { ok: false; error?: string; mes
 }
 
 export async function runClawprobeJson(args: string[]): Promise<unknown> {
-  const entry = resolveClawprobeEntry()
-  const isGlobalBin = !entry.endsWith('.js')
-  const cmd = isGlobalBin ? entry : process.execPath
-  const cmdArgs = isGlobalBin ? args : [entry, ...args]
+  const { cmd, argsPrefix } = resolveClawprobeCommand()
+  const cmdArgs = [...argsPrefix, ...args]
 
   let stdout = ''
   let stderr = ''
@@ -51,6 +85,9 @@ export async function runClawprobeJson(args: string[]): Promise<unknown> {
     stderr = String(out.stderr ?? '').trim()
   } catch (e: unknown) {
     const err = e as NodeJS.ErrnoException & { stdout?: Buffer; stderr?: Buffer; code?: string | number }
+    if (isClawprobeUnavailableFailure(err)) {
+      throw new ClawprobeUnavailableError()
+    }
     stdout = err.stdout ? String(err.stdout).trim() : ''
     stderr = err.stderr ? String(err.stderr).trim() : ''
     exitCode = typeof err.code === 'number' ? err.code : 1
@@ -81,10 +118,9 @@ export async function runClawprobeJson(args: string[]): Promise<unknown> {
 }
 
 export async function runClawprobeCommand(args: string[]): Promise<ClawprobeCommandOutput> {
-  const entry = resolveClawprobeEntry()
-  const node = process.execPath
+  const { cmd, argsPrefix } = resolveClawprobeCommand()
   try {
-    const out = await execFileAsync(node, [entry, ...args], {
+    const out = await execFileAsync(cmd, [...argsPrefix, ...args], {
       maxBuffer: 20 * 1024 * 1024,
       env: process.env,
     })
@@ -96,6 +132,14 @@ export async function runClawprobeCommand(args: string[]): Promise<ClawprobeComm
     }
   } catch (e: unknown) {
     const err = e as NodeJS.ErrnoException & { stdout?: Buffer; stderr?: Buffer; code?: string | number }
+    if (isClawprobeUnavailableFailure(err)) {
+      return {
+        ok: false,
+        code: 127,
+        stdout: '',
+        stderr: 'ClawProbe is not installed or not available in PATH',
+      }
+    }
     return {
       ok: false,
       code: typeof err.code === 'number' ? err.code : 1,

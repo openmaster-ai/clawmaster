@@ -40,7 +40,7 @@ function PluginDescriptionCell({ text }: { text: string | undefined }) {
   }
   const collapsible = rawText.length > DESCRIPTION_COLLAPSE_CHARS
   return (
-    <div className="min-w-0 max-w-md">
+    <div className="min-w-0">
       <p
         className={`text-muted-foreground break-words ${!open && collapsible ? 'line-clamp-2' : ''}`}
       >
@@ -172,11 +172,50 @@ export default function PluginsPage() {
     return list
   }, [plugins, filter, statusFilter, sortLocale])
 
-  if (loading) {
-    return <LoadingState message={t('plugins.loading')} />
-  }
-
   if (error || !data) {
+    if (loading && !data && !error) {
+      return (
+        <div className="page-shell page-shell-wide">
+          <div className="page-header">
+            <div className="page-header-copy">
+              <h1 className="page-title">{t('plugins.title')}</h1>
+              <p className="page-subtitle">{t('plugins.intro')}</p>
+            </div>
+            <button
+              type="button"
+              disabled
+              className="button-secondary shrink-0 opacity-60"
+            >
+              {t('plugins.refresh')}
+            </button>
+          </div>
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <input
+              type="search"
+              placeholder={t('plugins.filterPlaceholder')}
+              disabled
+              className="w-full xl:flex-[1_1_18rem] px-3 py-2 rounded border border-border bg-background text-sm opacity-60"
+            />
+            <label className="flex flex-wrap items-center gap-2 text-sm shrink-0 opacity-60">
+              <span className="text-muted-foreground whitespace-nowrap">{t('plugins.statusLabel')}</span>
+              <select
+                disabled
+                className="w-full sm:w-auto px-3 py-2 rounded border border-border bg-background text-sm"
+              >
+                {statusFilterOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="state-panel">
+            <LoadingState message={t('plugins.loading')} fullPage={false} />
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="space-y-4">
         <p className="text-sm text-red-500">
@@ -195,37 +234,37 @@ export default function PluginsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">{t('plugins.title')}</h1>
-          <p className="text-muted-foreground text-sm mt-1">
+    <div className="page-shell page-shell-wide">
+      <div className="page-header">
+        <div className="page-header-copy">
+          <h1 className="page-title">{t('plugins.title')}</h1>
+          <p className="page-subtitle">
             {t('plugins.intro')}
           </p>
         </div>
         <button
           type="button"
           onClick={() => void refetch()}
-          className="px-3 py-1.5 text-sm border border-border rounded hover:bg-accent shrink-0"
+          className="button-secondary shrink-0"
         >
           {t('plugins.refresh')}
         </button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+      <div className="toolbar-card xl:items-start xl:justify-between">
         <input
           type="search"
           placeholder={t('plugins.filterPlaceholder')}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-full sm:max-w-md px-3 py-2 rounded border border-border bg-background text-sm"
+          className="control-input w-full xl:flex-[1_1_18rem]"
         />
-        <label className="flex items-center gap-2 text-sm shrink-0">
+        <label className="flex flex-wrap items-center gap-2 text-sm shrink-0">
           <span className="text-muted-foreground whitespace-nowrap">{t('plugins.statusLabel')}</span>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilterMode)}
-            className="px-3 py-2 rounded border border-border bg-background text-sm min-w-[7.5rem]"
+            className="control-select w-full sm:w-auto"
             aria-label={t('plugins.statusFilterAria')}
           >
             {statusFilterOptions.map((opt) => (
@@ -235,20 +274,20 @@ export default function PluginsPage() {
             ))}
           </select>
         </label>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:flex-[1_1_24rem] xl:justify-end">
+          <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
             <input
               type="text"
               value={installId}
               onChange={(e) => setInstallId(e.target.value)}
               placeholder={t('plugins.installPlaceholder')}
-              className="px-3 py-2 rounded border border-border bg-background text-sm min-w-[16rem]"
+              className="control-input w-full min-w-0"
             />
             <button
               type="button"
               disabled={busy !== null}
               onClick={() => void runInstall()}
-              className="px-3 py-2 text-sm border border-border rounded hover:bg-accent disabled:opacity-50"
+              className="button-secondary disabled:opacity-50"
             >
               {busy?.kind === 'install' && busy.id === installId.trim()
                 ? t('plugins.installBusy')
@@ -274,13 +313,13 @@ export default function PluginsPage() {
       )}
 
       {plugins.length > 0 && (
-        <div className="border border-border rounded-lg overflow-x-auto">
-          <table className="w-full text-sm table-fixed min-w-[640px]">
+        <div className="table-frame overflow-x-auto">
+          <table className="min-w-full table-auto text-sm">
             <thead className="bg-muted/50 text-left">
               <tr>
-                <th className="px-4 py-2 font-medium w-[20%]">{t('plugins.thNameId')}</th>
-                <th className="px-4 py-2 font-medium w-[22%] min-w-[11rem]">{t('plugins.thStatus')}</th>
-                <th className="px-4 py-2 font-medium w-[10%]">{t('plugins.thVersion')}</th>
+                <th className="px-4 py-2 font-medium">{t('plugins.thNameId')}</th>
+                <th className="px-4 py-2 font-medium">{t('plugins.thStatus')}</th>
+                <th className="px-4 py-2 font-medium whitespace-nowrap">{t('plugins.thVersion')}</th>
                 <th className="px-4 py-2 font-medium">{t('plugins.thDescription')}</th>
               </tr>
             </thead>
@@ -311,7 +350,7 @@ export default function PluginsPage() {
                           type="button"
                           disabled={busy !== null || isPluginEnabled(p.status)}
                           onClick={() => void runSetEnabled(p.id, true)}
-                          className="px-2 py-0.5 text-xs rounded border border-border bg-background hover:bg-accent disabled:opacity-50 disabled:pointer-events-none"
+                          className="button-secondary px-2 py-0.5 text-xs disabled:pointer-events-none disabled:opacity-50"
                         >
                           {busy?.kind === 'enable' && busy.id === p.id ? '…' : t('plugins.enable')}
                         </button>
@@ -319,7 +358,7 @@ export default function PluginsPage() {
                           type="button"
                           disabled={busy !== null || isPluginDisabledStatus(p.status)}
                           onClick={() => void runSetEnabled(p.id, false)}
-                          className="px-2 py-0.5 text-xs rounded border border-border bg-background hover:bg-accent disabled:opacity-50 disabled:pointer-events-none"
+                          className="button-secondary px-2 py-0.5 text-xs disabled:pointer-events-none disabled:opacity-50"
                         >
                           {busy?.kind === 'disable' && busy.id === p.id ? '…' : t('plugins.disable')}
                         </button>
@@ -327,7 +366,7 @@ export default function PluginsPage() {
                           type="button"
                           disabled={busy !== null}
                           onClick={() => void runUninstall(p)}
-                          className="px-2 py-0.5 text-xs rounded border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 bg-background hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50 disabled:pointer-events-none"
+                          className="button-danger px-2 py-0.5 text-xs disabled:pointer-events-none disabled:opacity-50"
                         >
                           {busy?.kind === 'uninstall' && busy.id === p.id
                             ? t('plugins.uninstallBusy')

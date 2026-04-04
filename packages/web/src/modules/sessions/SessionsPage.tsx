@@ -111,14 +111,19 @@ function SessionsContent() {
   }
 
   return (
-    <div className="max-w-4xl space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">{t('sessions.title')}</h1>
+    <div className="page-shell page-shell-medium">
+      <div className="page-header">
+        <div className="page-header-copy">
+          <div className="page-header-meta">
+            <span>{filteredSessions.length} / {data?.count ?? 0}</span>
+            <span>{t('sessions.allAgents')}</span>
+          </div>
+          <h1 className="page-title">{t('sessions.title')}</h1>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => refetch()}
-            className="p-2 border border-border rounded hover:bg-accent"
+            className="button-secondary p-2"
             title={t('common.refresh') ?? 'Refresh'}
           >
             <RefreshCw className="w-4 h-4" />
@@ -126,7 +131,7 @@ function SessionsContent() {
           <button
             onClick={handleCleanup}
             disabled={cleaning}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-border rounded hover:bg-accent disabled:opacity-50"
+            className="button-secondary disabled:opacity-50"
           >
             <Trash2 className="w-4 h-4" />
             {cleaning ? t('sessions.cleaning') : t('sessions.cleanup')}
@@ -134,14 +139,13 @@ function SessionsContent() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
+      <div className="toolbar-card">
+        <div className="toolbar-group">
           <Filter className="w-4 h-4 text-muted-foreground" />
           <select
             value={selectedAgent}
             onChange={(e) => setSelectedAgent(e.target.value)}
-            className="px-3 py-2 bg-background border border-border rounded text-sm"
+            className="control-select sm:w-auto"
           >
             <option value="">{t('sessions.allAgents')}</option>
             {agentIds.map((id) => (
@@ -156,7 +160,7 @@ function SessionsContent() {
 
       {/* Error state */}
       {error && !data && (
-        <div className="bg-card border border-border rounded-lg p-8 text-center">
+        <div className="state-panel">
           <p className="text-muted-foreground mb-4">{error}</p>
           <button
             onClick={() => refetch()}
@@ -169,13 +173,12 @@ function SessionsContent() {
 
       {/* Empty state */}
       {data && filteredSessions.length === 0 && (
-        <div className="bg-card border border-border rounded-lg p-8 text-center">
+        <div className="state-panel">
           <MessageCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-40" />
           <p className="text-muted-foreground">{t('sessions.noSessions')}</p>
         </div>
       )}
 
-      {/* Session list */}
       {filteredSessions.length > 0 && (
         <div className="space-y-4">
           {filteredSessions.map((session) => (
@@ -206,9 +209,8 @@ function SessionCard({
   const pct = tokenPercentage(session.totalTokens, session.contextTokens)
 
   return (
-    <div className={`bg-card border rounded-lg transition-colors ${expanded ? 'border-primary/40' : 'border-border'}`}>
-      {/* Card header — clickable */}
-      <div className="p-4 cursor-pointer hover:bg-accent/30 rounded-t-lg" onClick={onToggle}>
+    <div className={`list-card transition-colors ${expanded ? 'border-primary/40' : 'border-border'}`}>
+      <div className="cursor-pointer rounded-t-[1rem] p-4 hover:bg-accent/20" onClick={onToggle}>
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -227,14 +229,14 @@ function SessionCard({
         </div>
 
         {/* Agent + Model row */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-          <span className="flex items-center gap-1.5" title={t('sessions.agent')}>
+        <div className="mb-3 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+          <span className="flex min-w-0 items-center gap-1.5" title={t('sessions.agent')}>
             <Zap className="w-3.5 h-3.5" />
-            <span className="truncate max-w-[120px]">{session.agentId || '-'}</span>
+            <span className="truncate">{session.agentId || '-'}</span>
           </span>
-          <span className="flex items-center gap-1.5" title={t('sessions.model')}>
+          <span className="flex min-w-0 flex-1 items-center gap-1.5" title={t('sessions.model')}>
             <Cpu className="w-3.5 h-3.5" />
-            <span className="truncate max-w-[200px]">{session.model || '-'}</span>
+            <span className="truncate">{session.model || '-'}</span>
           </span>
           {session.modelProvider && (
             <span className="text-xs">{session.modelProvider}</span>

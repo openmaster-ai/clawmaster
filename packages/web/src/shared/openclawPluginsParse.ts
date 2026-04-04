@@ -82,6 +82,16 @@ function looksLikeFilesystemPath(s: string): boolean {
   return x.startsWith('/') || /^[A-Za-z]:[\\/]/.test(x) || x.includes('node_modules')
 }
 
+function isDividerCell(value: string, allowEquals: boolean): boolean {
+  if (!value) return false
+  for (const ch of value) {
+    if (ch === '-' || ch === ':' || (allowEquals && ch === '=')) continue
+    if (/\s/.test(ch)) continue
+    return false
+  }
+  return true
+}
+
 function looksLikePluginId(s: string): boolean {
   const x = s.trim()
   if (x.length < 1 || x.length > 80) return false
@@ -242,7 +252,7 @@ function cellsFromPipeLineCompact(line: string): string[] | null {
   const cells = line
     .split(TABLE_PIPE_SPLIT)
     .map((c) => c.replace(BOX_CHARS, '').trim())
-    .filter((c) => c.length > 0 && !/^[-:=\s]+$/.test(c))
+    .filter((c) => c.length > 0 && !isDividerCell(c, true))
   if (cells.length < 2) return null
   return cells
 }
@@ -283,7 +293,7 @@ export function parsePluginsPlainText(stdout: string): OpenClawPluginInfo[] {
     const pipeCells = cellsFromPipeLineCompact(line)
     if (pipeCells) {
       if (isTableHeaderRowCompact(pipeCells)) continue
-      if (pipeCells.every((c) => /^[\s\-:]+$/.test(c))) continue
+      if (pipeCells.every((c) => isDividerCell(c, false))) continue
 
       let name: string
       let id: string
