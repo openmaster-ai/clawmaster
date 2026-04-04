@@ -1,10 +1,8 @@
 import type { TFunction } from 'i18next'
 import type { ChannelFieldDef, ChannelRegistryEntry, GuideStep } from './registryTypes'
 
-const NS = 'channelsReg' as const
-
 function tr(t: TFunction, key: string): string {
-  return t(`${NS}.${key}`)
+  return t(key)
 }
 
 type GuideSpec =

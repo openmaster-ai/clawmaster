@@ -627,6 +627,61 @@
   .dashboard-inline-stack {
     @apply space-y-3;
   }
+
+  .channel-page-hero {
+    @apply grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)];
+  }
+
+  .channel-page-step-grid {
+    @apply grid gap-3 sm:grid-cols-3 xl:grid-cols-1;
+  }
+
+  .channel-page-step-card {
+    @apply flex items-start gap-3 rounded-[1.2rem] border border-border/70 bg-background/75 p-4;
+  }
+
+  .channel-page-focus-grid {
+    @apply grid gap-4 xl:grid-cols-2;
+  }
+
+  .channel-page-focus-panel {
+    @apply relative overflow-hidden rounded-[1.55rem] border border-border/80 bg-card/90 p-4 backdrop-blur-sm sm:p-5;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .channel-page-focus-panel::before {
+    content: '';
+    @apply pointer-events-none absolute inset-0 opacity-90;
+    background:
+      radial-gradient(circle at top right, rgba(233, 98, 36, 0.12) 0%, rgba(233, 98, 36, 0) 34%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0) 48%);
+  }
+
+  .dark .channel-page-focus-panel::before {
+    background:
+      radial-gradient(circle at top right, rgba(233, 98, 36, 0.16) 0%, rgba(233, 98, 36, 0) 34%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 48%);
+  }
+
+  .channel-page-focus-card {
+    @apply relative rounded-[1.25rem] border border-border/70 bg-background/80 p-4;
+  }
+
+  .channel-page-card-meta {
+    @apply flex flex-wrap gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground;
+  }
+
+  .channel-page-config-grid {
+    @apply grid gap-4 xl:grid-cols-2;
+  }
+
+  .channel-page-account-card {
+    @apply rounded-[1.15rem] border border-border/70 bg-background/70 px-3 py-3;
+  }
+
+  .channel-page-catalog-grid {
+    @apply grid gap-4 md:grid-cols-2 xl:grid-cols-3;
+  }
 }
 
 @layer base {

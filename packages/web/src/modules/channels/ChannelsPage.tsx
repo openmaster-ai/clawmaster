@@ -2,8 +2,11 @@ import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { LucideIcon } from 'lucide-react'
 import {
+  ArrowRight,
   Briefcase,
+  CheckCircle2,
   Circle,
+  Layers3,
   MessageCircle,
   MessageSquare,
   Paperclip,
@@ -12,8 +15,10 @@ import {
   Radio,
   Send,
   Shield,
+  Sparkles,
   Smartphone,
   Users,
+  Workflow,
 } from 'lucide-react'
 import { platformResults } from '@/adapters'
 import type { OpenClawChannelEntry } from '@/lib/types'
@@ -80,6 +85,37 @@ const CHANNEL_ICONS: Record<(typeof CHANNEL_TYPE_ORDER)[number], LucideIcon> = {
   slack: Briefcase,
 }
 
+type ChannelTypeId = (typeof CHANNEL_TYPE_ORDER)[number]
+
+const CHANNEL_SPOTLIGHT_GROUPS: Array<{
+  id: 'china' | 'workspace'
+  titleKey: string
+  descriptionKey: string
+  channelIds: ChannelTypeId[]
+}> = [
+  {
+    id: 'china',
+    titleKey: 'channelsPage.group.chinaTitle',
+    descriptionKey: 'channelsPage.group.chinaDesc',
+    channelIds: ['feishu', 'wechat'],
+  },
+  {
+    id: 'workspace',
+    titleKey: 'channelsPage.group.workspaceTitle',
+    descriptionKey: 'channelsPage.group.workspaceDesc',
+    channelIds: ['discord', 'slack'],
+  },
+]
+
+const CHANNEL_SPOTLIGHT_SET = new Set<ChannelTypeId>(['feishu', 'wechat', 'discord', 'slack'])
+
+const CHANNEL_HINT_KEYS: Partial<Record<ChannelTypeId, string>> = {
+  feishu: 'channelsPage.hint.feishu',
+  wechat: 'channelsPage.hint.wechat',
+  discord: 'channelsPage.hint.discord',
+  slack: 'channelsPage.hint.slack',
+}
+
 type ChannelTypeRow = {
   id: (typeof CHANNEL_TYPE_ORDER)[number]
   name: string
@@ -104,8 +140,6 @@ export default function Channels() {
   const fetcher = useCallback(async () => platformResults.getConfig(), [])
   const { data: config, loading, error, refetch } = useAdapterCall(fetcher)
 
-  const [modalOpen, setModalOpen] = useState(false)
-  const [pendingTypeId, setPendingTypeId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editorTypeId, setEditorTypeId] = useState<string | null>(null)
@@ -126,6 +160,10 @@ export default function Channels() {
     [registry, editorTypeId]
   )
   const editorFields: ChannelFieldDef[] = editorRegistry?.fields ?? []
+  const channelTypesById = useMemo(
+    () => new Map(channelTypes.map((type) => [type.id, type])),
+    [channelTypes],
+  )
 
   function setEditorField(key: string, value: string) {
     setEditorValues((s) => {
@@ -166,16 +204,6 @@ export default function Channels() {
 
   const configuredChannels = getConfiguredChannels()
   const missingTypes = channelTypes.filter((type) => !channels[type.id])
-
-  function openAddModal(initialTypeId?: string) {
-    const list = channelTypes.filter((row) => !channels[row.id])
-    if (list.length === 0) {
-      window.alert(t('channelsPage.allTypesPresent'))
-      return
-    }
-    setPendingTypeId(initialTypeId ?? list[0].id)
-    setModalOpen(true)
-  }
 
   function openChannelEditor(typeId: string, accountId?: string) {
     const current = channels[typeId]
@@ -317,12 +345,6 @@ export default function Channels() {
     }
   }
 
-  async function submitAddChannel() {
-    if (!pendingTypeId) return
-    setModalOpen(false)
-    openChannelEditor(pendingTypeId)
-  }
-
   async function removeChannelType(typeId: string, label: string) {
     if (!window.confirm(t('channelsPage.removeConfirm', { label }))) {
       return
@@ -354,6 +376,38 @@ export default function Channels() {
     }
   }
 
+  async function removeChannelAccount(typeId: string, accountId: string) {
+    if (!config) return
+    if (!window.confirm(t('channelsPage.deleteAccountConfirm', { id: accountId }))) return
+    const current = channels[typeId]
+    if (!current || !isRecord(current) || !isRecord(current.accounts)) return
+
+    const nextAccounts = { ...(current.accounts as Record<string, unknown>) }
+    delete nextAccounts[accountId]
+
+    setBusy(true)
+    try {
+      const next = {
+        ...config,
+        channels: {
+          ...(config.channels || {}),
+          [typeId]: {
+            ...current,
+            accounts: nextAccounts,
+          } as OpenClawChannelEntry,
+        },
+      }
+      const r = await platformResults.saveFullConfig(next)
+      if (!r.success) {
+        window.alert(r.error ?? t('channelsPage.deleteAccountFailed'))
+        return
+      }
+      await refetch()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading) {
     return <LoadingState message={t('channelsPage.loading')} />
   }
@@ -366,7 +420,32 @@ export default function Channels() {
     )
   }
 
-  const pendingMeta = pendingTypeId ? channelTypes.find((row) => row.id === pendingTypeId) : null
+  const configuredByType = new Map(configuredChannels.map((row) => [row.type, row]))
+  const enabledChannelsCount = configuredChannels.filter((row) => row.enabled).length
+  const spotlightGroups = CHANNEL_SPOTLIGHT_GROUPS.map((group) => ({
+    ...group,
+    items: group.channelIds
+      .map((id) => {
+        const meta = channelTypesById.get(id)
+        if (!meta) return null
+        const configured = configuredByType.get(id)
+        const steps = registry[id]?.guideSteps.length ?? 0
+        const fields = registry[id]?.fields.length ?? 0
+        return {
+          ...meta,
+          configured,
+          steps,
+          fields,
+          hint: CHANNEL_HINT_KEYS[id] ? t(CHANNEL_HINT_KEYS[id]!) : meta.description,
+        }
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item)),
+  }))
+  const remainingTypes = missingTypes.filter((type) => !CHANNEL_SPOTLIGHT_SET.has(type.id))
+
+  function focusCatalog() {
+    document.getElementById('channel-catalog')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   return (
     <div className="page-shell page-shell-wide">
@@ -374,219 +453,284 @@ export default function Channels() {
         <div className="page-header-copy">
           <div className="page-header-meta">
             <span>{t('config.countUnit', { count: configuredChannels.length })} {t('channelsPage.configured')}</span>
-            <span>{t('config.countUnit', { count: missingTypes.length })} {t('channelsPage.addNewSection')}</span>
+            <span>{t('config.countUnit', { count: enabledChannelsCount })} {t('channelsPage.enable')}</span>
+            <span>{t('config.countUnit', { count: missingTypes.length })} {t('channelsPage.availableNow')}</span>
           </div>
           <h1 className="page-title">{t('channelsPage.title')}</h1>
-          <p className="page-subtitle">{t('channelsPage.footerNote')}</p>
+          <p className="page-subtitle">{t('channelsPage.subtitle')}</p>
         </div>
-        <button
-          type="button"
-          disabled={busy || missingTypes.length === 0}
-          onClick={() => openAddModal()}
-          className="button-primary disabled:opacity-50"
-        >
-          {t('channelsPage.add')}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={focusCatalog} className="button-secondary">
+            <Layers3 className="h-4 w-4" />
+            {t('channelsPage.jumpToCatalog')}
+          </button>
+          <button
+            type="button"
+            disabled={busy || missingTypes.length === 0}
+            onClick={() => {
+              if (missingTypes.length === 0) {
+                window.alert(t('channelsPage.allTypesPresent'))
+                return
+              }
+              openChannelEditor(missingTypes[0].id)
+            }}
+            className="button-primary disabled:opacity-50"
+          >
+            {t('channelsPage.add')}
+          </button>
+        </div>
       </div>
 
-      {configuredChannels.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-medium">{t('channelsPage.configured')}</h3>
-          {configuredChannels.map((ch) => (
-            <div key={ch.type} className="surface-card">
-              <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <ch.icon className="w-5 h-5 text-muted-foreground" />
-                  <span className="font-medium">{ch.typeName}</span>
-                  <span
-                    className={`w-2 h-2 rounded-full ${ch.enabled ? 'bg-green-500' : 'bg-gray-400'}`}
-                  />
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void toggleChannelEnabled(ch.type, !ch.enabled)}
-                    className="button-secondary px-3 py-1.5 text-sm disabled:opacity-50"
-                  >
-                    {ch.enabled ? t('channelsPage.disable') : t('channelsPage.enable')}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => openChannelEditor(ch.type)}
-                    className="button-secondary px-3 py-1.5 text-sm"
-                  >
-                    {t('channelsPage.settings')}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void removeChannelType(ch.type, ch.typeName)}
-                    className="button-danger px-3 py-1.5 text-sm disabled:opacity-50"
-                  >
-                    {t('channelsPage.removeChannel')}
-                  </button>
-                </div>
+      <section className="surface-card">
+        <div className="channel-page-hero">
+          <div className="min-w-0 space-y-3">
+            <p className="dashboard-section-meta">{t('channelsPage.recommendedTitle')}</p>
+            <h2 className="section-title">{t('channelsPage.recommendedHeadline')}</h2>
+            <p className="section-subtitle max-w-3xl">{t('channelsPage.recommendedDesc')}</p>
+          </div>
+          <div className="channel-page-step-grid">
+            <div className="channel-page-step-card">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <div>
+                <p className="text-sm font-medium">{t('channelsPage.quickStepChoose')}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{t('channelsPage.quickStepChooseDesc')}</p>
+              </div>
+            </div>
+            <div className="channel-page-step-card">
+              <CheckCircle2 className="h-4 w-4 text-primary" />
+              <div>
+                <p className="text-sm font-medium">{t('channelsPage.quickStepVerify')}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{t('channelsPage.quickStepVerifyDesc')}</p>
+              </div>
+            </div>
+            <div className="channel-page-step-card">
+              <Workflow className="h-4 w-4 text-primary" />
+              <div>
+                <p className="text-sm font-medium">{t('channelsPage.quickStepBind')}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{t('channelsPage.quickStepBindDesc')}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="surface-card">
+        <div className="section-heading">
+          <div>
+            <h3 className="section-title">{t('channelsPage.focusTitle')}</h3>
+            <p className="section-subtitle">{t('channelsPage.focusDesc')}</p>
+          </div>
+        </div>
+
+        <div className="channel-page-focus-grid">
+          {spotlightGroups.map((group) => (
+            <div key={group.id} className="channel-page-focus-panel">
+              <div className="mb-4">
+                <p className="dashboard-section-meta">{t('channelsPage.cardRecommended')}</p>
+                <h4 className="section-title text-[1.35rem]">{t(group.titleKey)}</h4>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{t(group.descriptionKey)}</p>
               </div>
 
-              <div className="space-y-2">
-                {ch.accounts.map((acc) => (
-                  <div
-                    key={acc.id}
-                    className="flex items-center justify-between pl-6 py-1.5 border-l-2 border-border gap-2 flex-wrap"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`w-2 h-2 rounded-full ${acc.enabled !== false ? 'bg-green-500' : 'bg-gray-400'}`}
-                      />
-                      <span className="text-sm font-medium">{acc.name || acc.id}</span>
-                      {acc.groupPolicy === 'disabled' && (
-                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                          {t('channelsPage.groupChatDisabled')}
+              <div className="grid gap-3">
+                {group.items.map((item) => {
+                  const configured = item.configured
+                  const statusLabel = configured
+                    ? configured.enabled
+                      ? t('channelsPage.cardReady')
+                      : t('channelsPage.cardDisabled')
+                    : t('channelsPage.cardMissing')
+
+                  return (
+                    <div key={item.id} className="channel-page-focus-card">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/80">
+                            <item.icon className="h-5 w-5 text-foreground" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h5 className="text-base font-semibold">{item.name}</h5>
+                              <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                {statusLabel}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.hint}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => openChannelEditor(item.id)}
+                          className="button-primary shrink-0 px-3 py-1.5 text-xs disabled:opacity-50"
+                        >
+                          {configured ? t('channelsPage.continueSetup') : t('channelsPage.startSetup')}
+                        </button>
+                      </div>
+
+                      <div className="channel-page-card-meta mt-4">
+                        <span>{t('channelsPage.cardSteps', { count: item.steps })}</span>
+                        <span>{t('channelsPage.cardFields', { count: item.fields })}</span>
+                        <span>
+                          {t('channelsPage.cardAccounts', {
+                            count: configured?.accounts.length ?? 0,
+                          })}
                         </span>
-                      )}
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openChannelEditor(ch.type, acc.id)}
-                        className="button-secondary px-2 py-1 text-xs"
-                      >
-                        {t('channelsPage.edit')}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={async () => {
-                          if (!config) return
-                          if (!window.confirm(t('channelsPage.deleteAccountConfirm', { id: acc.id }))) return
-                          const current = channels[ch.type]
-                          if (!current || !isRecord(current) || !isRecord(current.accounts)) return
-                          const nextAccounts = { ...(current.accounts as Record<string, unknown>) }
-                          delete nextAccounts[acc.id]
-                          setBusy(true)
-                          try {
-                            const next = {
-                              ...config,
-                              channels: {
-                                ...(config.channels || {}),
-                                [ch.type]: {
-                                  ...current,
-                                  accounts: nextAccounts,
-                                } as OpenClawChannelEntry,
-                              },
-                            }
-                            const r = await platformResults.saveFullConfig(next)
-                            if (!r.success) {
-                              window.alert(r.error ?? t('channelsPage.deleteAccountFailed'))
-                              return
-                            }
-                            await refetch()
-                          } finally {
-                            setBusy(false)
-                          }
-                        }}
-                        className="button-secondary px-2 py-1 text-xs text-muted-foreground"
-                      >
-                        {t('channelsPage.removeAccount')}
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           ))}
         </div>
+      </section>
+
+      {configuredChannels.length > 0 && (
+        <section className="surface-card">
+          <div className="section-heading">
+            <div>
+              <h3 className="section-title">{t('channelsPage.configured')}</h3>
+              <p className="section-subtitle">{t('channelsPage.configuredSectionDesc')}</p>
+            </div>
+          </div>
+
+          <div className="channel-page-config-grid">
+            {configuredChannels.map((ch) => (
+              <div key={ch.type} className="list-card space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/80">
+                      <ch.icon className="h-5 w-5 text-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-base font-semibold">{ch.typeName}</h4>
+                        <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          {ch.enabled ? t('channelsPage.cardReady') : t('channelsPage.cardDisabled')}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {t('channelsPage.accountCountLabel', { count: ch.accounts.length })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void toggleChannelEnabled(ch.type, !ch.enabled)}
+                      className="button-secondary px-3 py-1.5 text-sm disabled:opacity-50"
+                    >
+                      {ch.enabled ? t('channelsPage.disable') : t('channelsPage.enable')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => openChannelEditor(ch.type)}
+                      className="button-primary px-3 py-1.5 text-sm disabled:opacity-50"
+                    >
+                      {t('channelsPage.manageChannel')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void removeChannelType(ch.type, ch.typeName)}
+                      className="button-danger px-3 py-1.5 text-sm disabled:opacity-50"
+                    >
+                      {t('channelsPage.removeChannel')}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  {ch.accounts.length > 0 ? (
+                    ch.accounts.map((acc) => (
+                      <div key={acc.id} className="channel-page-account-card">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`h-2 w-2 rounded-full ${acc.enabled !== false ? 'bg-green-500' : 'bg-gray-400'}`} />
+                              <span className="text-sm font-medium">{acc.name || acc.id}</span>
+                              {acc.groupPolicy === 'disabled' && (
+                                <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                  {t('channelsPage.groupChatDisabled')}
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">{acc.id}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openChannelEditor(ch.type, acc.id)}
+                              className="button-secondary px-2.5 py-1.5 text-xs"
+                            >
+                              {t('channelsPage.edit')}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void removeChannelAccount(ch.type, acc.id)}
+                              className="button-secondary px-2.5 py-1.5 text-xs text-muted-foreground"
+                            >
+                              {t('channelsPage.removeAccount')}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="inline-note text-sm">{t('channelsPage.noAccounts')}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
-      <div id="add-channel-list" className="space-y-3">
-        <h3 className="font-medium">{t('channelsPage.addNewSection')}</h3>
-        {missingTypes.map((type) => (
-          <div
-            key={type.id}
-            className="surface-card flex items-center justify-between gap-4 flex-wrap"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <type.icon className="w-6 h-6 shrink-0 text-muted-foreground" />
-              <div>
-                <span className="font-medium">{type.name}</span>
-                <p className="text-sm text-muted-foreground">{type.description}</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => openChannelEditor(type.id)}
-              className="button-primary shrink-0 disabled:opacity-50"
-            >
-              {t('channelsPage.settings')}
-            </button>
-          </div>
-        ))}
-
-        {missingTypes.length === 0 && (
-          <p className="text-sm text-muted-foreground">{t('channelsPage.allConfigured')}</p>
-        )}
-      </div>
-
-      <div className="inline-note text-xs leading-relaxed">{t('channelsPage.footerNote')}</div>
-
-      {modalOpen && pendingMeta && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="channel-modal-title"
-          onClick={() => !busy && setModalOpen(false)}
-        >
-          <div
-            className="w-[min(100%,28rem)] rounded-[1.5rem] border border-border bg-card p-6 shadow-lg space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="channel-modal-title" className="text-lg font-semibold">
-              {t('channelsPage.modalAddTitle', { name: pendingMeta.name })}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {t('channelsPage.modalAddBody', { id: pendingMeta.id })}
-            </p>
-            {missingTypes.length > 1 && (
-              <div>
-                <label className="text-sm font-medium block mb-1">{t('channelsPage.typeLabel')}</label>
-                <select
-                  className="control-select"
-                  value={pendingTypeId ?? ''}
-                  onChange={(e) => setPendingTypeId(e.target.value)}
-                >
-                  {missingTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                className="button-secondary px-3 py-1.5 text-sm"
-                onClick={() => setModalOpen(false)}
-                disabled={busy}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="button-primary px-3 py-1.5 text-sm disabled:opacity-50"
-                disabled={busy}
-                onClick={() => void submitAddChannel()}
-              >
-                {busy ? t('channelsPage.saving') : t('common.save')}
-              </button>
-            </div>
+      <section id="channel-catalog" className="surface-card">
+        <div className="section-heading">
+          <div>
+            <h3 className="section-title">{t('channelsPage.secondaryTitle')}</h3>
+            <p className="section-subtitle">{t('channelsPage.secondaryDesc')}</p>
           </div>
         </div>
-      )}
+
+        {remainingTypes.length > 0 ? (
+          <div className="channel-page-catalog-grid">
+            {remainingTypes.map((type) => (
+              <div key={type.id} className="list-card flex flex-col gap-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/80">
+                    <type.icon className="h-5 w-5 text-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-base font-semibold">{type.name}</h4>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{type.description}</p>
+                  </div>
+                </div>
+                <div className="mt-auto flex items-center justify-between gap-3">
+                  <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    {t('channelsPage.cardMissing')}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => openChannelEditor(type.id)}
+                    className="button-secondary px-3 py-1.5 text-sm disabled:opacity-50"
+                  >
+                    {t('channelsPage.startSetup')}
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="inline-note text-sm">{t('channelsPage.allConfigured')}</div>
+        )}
+      </section>
 
       {editorOpen && editorTypeId && (
         <div
