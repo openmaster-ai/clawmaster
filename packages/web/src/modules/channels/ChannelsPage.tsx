@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { LucideIcon } from 'lucide-react'
 import {
+  CircleDashed,
   ArrowRight,
   Briefcase,
   CheckCircle2,
@@ -23,7 +24,7 @@ import {
 import { platformResults } from '@/adapters'
 import type { OpenClawChannelEntry } from '@/lib/types'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
-import { isTauri } from '@/shared/adapters/platform'
+import { execCommand, isTauri } from '@/shared/adapters/platform'
 import { LoadingState } from '@/shared/components/LoadingState'
 import { buildChannelRegistry } from '@/modules/channels/channelRegistry'
 import type { ChannelFieldDef } from '@/modules/channels/channelRegistry'
@@ -123,6 +124,18 @@ type ChannelTypeRow = {
   description: string
 }
 
+type WechatSetupStage =
+  | 'idle'
+  | 'checking'
+  | 'missing'
+  | 'installing'
+  | 'ready'
+  | 'scanning'
+  | 'connected'
+  | 'error'
+
+const WECHAT_PLUGIN_PACKAGE = '@tencent-weixin/openclaw-weixin'
+
 export default function Channels() {
   const { t, i18n } = useTranslation()
   const registry = useMemo(() => buildChannelRegistry(t), [t, i18n.language])
@@ -152,6 +165,10 @@ export default function Channels() {
   const [verifyBusy, setVerifyBusy] = useState(false)
   const [verifyResult, setVerifyResult] = useState<{ ok: boolean; message: string; detail?: string } | null>(null)
   const [editorAgentId, setEditorAgentId] = useState('')
+  const [wechatSetupOpen, setWechatSetupOpen] = useState(false)
+  const [wechatSetupStage, setWechatSetupStage] = useState<WechatSetupStage>('idle')
+  const [wechatSetupError, setWechatSetupError] = useState<string | null>(null)
+  const [wechatPluginInstalled, setWechatPluginInstalled] = useState(false)
 
   const channels: Record<string, OpenClawChannelEntry> = config?.channels || {}
   const allAgents = config?.agents?.list ?? []
@@ -184,11 +201,10 @@ export default function Channels() {
       const typeName = known?.name ?? type
       const icon = known?.icon ?? Radio
       const accountsMap = ch.accounts
-      if (!accountsMap) continue
 
-      const accounts: ConfiguredAccountRow[] = Object.entries(accountsMap).map(([id, acc]) =>
-        parseAccount(id, acc)
-      )
+      const accounts: ConfiguredAccountRow[] = accountsMap
+        ? Object.entries(accountsMap).map(([id, acc]) => parseAccount(id, acc))
+        : []
 
       result.push({
         type,
@@ -204,6 +220,66 @@ export default function Channels() {
 
   const configuredChannels = getConfiguredChannels()
   const missingTypes = channelTypes.filter((type) => !channels[type.id])
+
+  async function detectWechatPluginInstalled() {
+    try {
+      await execCommand('npm', ['list', '-g', WECHAT_PLUGIN_PACKAGE, '--depth=0'])
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function openWechatSetup() {
+    setWechatSetupOpen(true)
+    setWechatSetupError(null)
+    setWechatSetupStage('checking')
+    const installed = await detectWechatPluginInstalled()
+    setWechatPluginInstalled(installed)
+    setWechatSetupStage(installed ? 'ready' : 'missing')
+  }
+
+  function openChannelSetup(typeId: string, accountId?: string) {
+    if (typeId === 'wechat') {
+      void openWechatSetup()
+      return
+    }
+    openChannelEditor(typeId, accountId)
+  }
+
+  async function installWechatPlugin() {
+    setWechatSetupError(null)
+    setWechatSetupStage('installing')
+    try {
+      await execCommand('npm', ['install', '-g', WECHAT_PLUGIN_PACKAGE])
+      setWechatPluginInstalled(true)
+      setWechatSetupStage('ready')
+    } catch (err) {
+      setWechatSetupError(err instanceof Error ? err.message : String(err))
+      setWechatSetupStage('error')
+    }
+  }
+
+  async function startWechatQrLogin() {
+    setWechatSetupError(null)
+    setWechatSetupStage('scanning')
+    execCommand('openclaw', ['channels', 'login', '--channel', 'wechat']).catch(() => {})
+    for (let i = 0; i < 60; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+      try {
+        const out = await execCommand('openclaw', ['channels', 'status', '--channel', 'wechat'])
+        if (out.includes('connected') || out.includes('ready') || out.includes('online')) {
+          setWechatSetupStage('connected')
+          await refetch()
+          return
+        }
+      } catch {
+        // Keep polling while the login session is initializing.
+      }
+    }
+    setWechatSetupError(t('channel.qr.timeout'))
+    setWechatSetupStage('error')
+  }
 
   function openChannelEditor(typeId: string, accountId?: string) {
     const current = channels[typeId]
@@ -472,7 +548,7 @@ export default function Channels() {
                 window.alert(t('channelsPage.allTypesPresent'))
                 return
               }
-              openChannelEditor(missingTypes[0].id)
+              openChannelSetup(missingTypes[0].id)
             }}
             className="button-primary disabled:opacity-50"
           >
@@ -560,7 +636,7 @@ export default function Channels() {
                         <button
                           type="button"
                           disabled={busy}
-                          onClick={() => openChannelEditor(item.id)}
+                          onClick={() => openChannelSetup(item.id)}
                           className="button-primary shrink-0 px-3 py-1.5 text-xs disabled:opacity-50"
                         >
                           {configured ? t('channelsPage.continueSetup') : t('channelsPage.startSetup')}
@@ -626,7 +702,7 @@ export default function Channels() {
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => openChannelEditor(ch.type)}
+                      onClick={() => openChannelSetup(ch.type)}
                       className="button-primary px-3 py-1.5 text-sm disabled:opacity-50"
                     >
                       {t('channelsPage.manageChannel')}
@@ -662,7 +738,7 @@ export default function Channels() {
                           <div className="flex gap-2">
                             <button
                               type="button"
-                              onClick={() => openChannelEditor(ch.type, acc.id)}
+                              onClick={() => openChannelSetup(ch.type, acc.id)}
                               className="button-secondary px-2.5 py-1.5 text-xs"
                             >
                               {t('channelsPage.edit')}
@@ -717,7 +793,7 @@ export default function Channels() {
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => openChannelEditor(type.id)}
+                    onClick={() => openChannelSetup(type.id)}
                     className="button-secondary px-3 py-1.5 text-sm disabled:opacity-50"
                   >
                     {t('channelsPage.startSetup')}
@@ -731,6 +807,148 @@ export default function Channels() {
           <div className="inline-note text-sm">{t('channelsPage.allConfigured')}</div>
         )}
       </section>
+
+      {wechatSetupOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="wechat-setup-title"
+          onClick={() => wechatSetupStage !== 'installing' && wechatSetupStage !== 'scanning' && setWechatSetupOpen(false)}
+        >
+          <div
+            className="w-[min(100%,36rem)] rounded-[1.5rem] border border-border bg-card p-6 shadow-lg space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="space-y-2">
+              <h2 id="wechat-setup-title" className="text-lg font-semibold">
+                {t('channel.wechat.name')}
+              </h2>
+              <p className="text-sm leading-6 text-muted-foreground">{t('channel.qr.desc')}</p>
+            </div>
+
+            <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
+              <ol className="space-y-3 text-sm">
+                {[1, 2, 3].map((step) => (
+                  <li key={step} className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background/80 text-xs font-semibold">
+                      {step}
+                    </span>
+                    <div>
+                      <p className="font-medium text-foreground">{t(`channel.wechat.step${step}`)}</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {t(`channel.wechat.step${step}.highlight`)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="channel-page-wechat-state">
+              {wechatSetupStage === 'checking' ? (
+                <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                  <CircleDashed className="h-4 w-4 animate-spin" />
+                  {t('common.loading')}
+                </div>
+              ) : null}
+
+              {wechatSetupStage === 'missing' ? (
+                <div className="space-y-3">
+                  <div className="inline-note text-sm">{t('channel.wechat.step1.highlight')}</div>
+                  <div className="mono-note">{WECHAT_PLUGIN_PACKAGE}</div>
+                </div>
+              ) : null}
+
+              {wechatSetupStage === 'installing' ? (
+                <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                  <CircleDashed className="h-4 w-4 animate-spin" />
+                  {t('channel.qr.installing', { name: t('channel.wechat.name') })}
+                </div>
+              ) : null}
+
+              {wechatSetupStage === 'ready' ? (
+                <div className="space-y-3">
+                  <div className="inline-flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {t('common.installed')}
+                  </div>
+                  <div className="inline-note text-sm">{t('channel.qr.scanHint')}</div>
+                </div>
+              ) : null}
+
+              {wechatSetupStage === 'scanning' ? (
+                <div className="space-y-3">
+                  <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                    <CircleDashed className="h-4 w-4 animate-spin" />
+                    {t('channel.qr.waiting')}
+                  </div>
+                  <div className="inline-note text-sm">{t('channel.qr.scanHint')}</div>
+                </div>
+              ) : null}
+
+              {wechatSetupStage === 'connected' ? (
+                <div className="inline-flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {t('channel.qr.connected')}
+                </div>
+              ) : null}
+
+              {wechatSetupError ? (
+                <p className="text-sm text-red-500">{wechatSetupError}</p>
+              ) : null}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                className="button-secondary px-3 py-1.5 text-sm"
+                onClick={() => setWechatSetupOpen(false)}
+                disabled={wechatSetupStage === 'installing' || wechatSetupStage === 'scanning'}
+              >
+                {t('common.cancel')}
+              </button>
+              {(wechatSetupStage === 'missing' || (wechatSetupStage === 'error' && !wechatPluginInstalled)) && (
+                <button
+                  type="button"
+                  className="button-primary px-3 py-1.5 text-sm"
+                  onClick={() => void installWechatPlugin()}
+                  disabled={false}
+                >
+                  {t('channel.wechat.step1')}
+                </button>
+              )}
+              {wechatSetupStage === 'ready' && (
+                <button
+                  type="button"
+                  className="button-primary px-3 py-1.5 text-sm"
+                  onClick={() => void startWechatQrLogin()}
+                >
+                  {t('channel.qr.start')}
+                </button>
+              )}
+              {wechatSetupStage === 'error' && wechatPluginInstalled && (
+                <button
+                  type="button"
+                  className="button-primary px-3 py-1.5 text-sm"
+                  onClick={() => void startWechatQrLogin()}
+                >
+                  {t('common.retry')}
+                </button>
+              )}
+              {wechatSetupStage === 'connected' && (
+                <button
+                  type="button"
+                  className="button-primary px-3 py-1.5 text-sm"
+                  onClick={() => setWechatSetupOpen(false)}
+                >
+                  {t('common.close')}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {editorOpen && editorTypeId && (
         <div

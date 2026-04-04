@@ -682,6 +682,10 @@
   .channel-page-catalog-grid {
     @apply grid gap-4 md:grid-cols-2 xl:grid-cols-3;
   }
+
+  .channel-page-wechat-state {
+    @apply min-h-24 space-y-3;
+  }
 }
 
 @layer base {

@@ -5,6 +5,7 @@ import { changeLanguage } from '@/i18n'
 import ChannelsPage from '../ChannelsPage'
 
 const mockGetConfig = vi.fn()
+const mockExecCommand = vi.fn()
 
 vi.mock('@/adapters', () => ({
   platformResults: {
@@ -20,6 +21,7 @@ vi.mock('@/adapters', () => ({
 
 vi.mock('@/shared/adapters/platform', () => ({
   isTauri: () => false,
+  execCommand: (...args: any[]) => mockExecCommand(...args),
 }))
 
 function renderChannels() {
@@ -34,6 +36,7 @@ describe('ChannelsPage', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
     await changeLanguage('zh')
+    mockExecCommand.mockResolvedValue('')
     mockGetConfig.mockResolvedValue({
       success: true,
       data: {
@@ -62,5 +65,35 @@ describe('ChannelsPage', () => {
     expect(await screen.findByRole('heading', { name: '通道设置: 飞书' })).toBeInTheDocument()
     expect(screen.getByText('配置步骤')).toBeInTheDocument()
     expect(screen.getByText('前往飞书开放平台创建企业自建应用')).toBeInTheDocument()
+  })
+
+  it('uses an install-first QR flow for wechat instead of the generic credential editor', async () => {
+    mockExecCommand.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'npm' && args[0] === 'list') {
+        throw new Error('not installed')
+      }
+      if (cmd === 'npm' && args[0] === 'install') {
+        return 'installed'
+      }
+      return ''
+    })
+
+    renderChannels()
+
+    expect(await screen.findByText('推荐入口')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: '开始配置' })[1])
+
+    expect(await screen.findAllByRole('heading', { name: '微信' })).toHaveLength(2)
+    expect(screen.getAllByText('点击开始后自动安装，无需手动操作')).toHaveLength(2)
+    expect(screen.getByText('@tencent-weixin/openclaw-weixin')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '安装微信插件' }))
+
+    await screen.findByText('已安装')
+    expect(mockExecCommand).toHaveBeenCalledWith('npm', [
+      'install',
+      '-g',
+      '@tencent-weixin/openclaw-weixin',
+    ])
   })
 })
