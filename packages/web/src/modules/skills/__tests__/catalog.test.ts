@@ -4,6 +4,7 @@ import {
   SCENE_BUNDLES,
   CATEGORY_ORDER,
   CATEGORY_COLORS,
+  FEATURED_SKILLS,
 } from '../catalog'
 import en from '@/i18n/en.json'
 
@@ -30,6 +31,16 @@ describe('Skills catalog', () => {
     for (const s of SKILL_CATALOG) {
       expect(CATEGORY_COLORS[s.category]).toBeTruthy()
     }
+  })
+
+  it('keeps four featured ClawHub skills for the landing shelf', () => {
+    expect(FEATURED_SKILLS).toHaveLength(4)
+    expect(FEATURED_SKILLS.every((skill) => skill.skillKey)).toBe(true)
+  })
+
+  it('uses installable registry slugs for featured skills', () => {
+    expect(FEATURED_SKILLS.every((skill) => skill.slug)).toBe(true)
+    expect(FEATURED_SKILLS.find((skill) => skill.skillKey === 'find-skills')?.slug).toBe('find-skills-skill')
   })
 
   it('CATEGORY_ORDER covers all used categories', () => {

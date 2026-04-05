@@ -1,4 +1,40 @@
-import { runOpenclawChecked } from './execOpenclaw.js'
+import { execOpenclaw } from './execOpenclaw.js'
+
+function firstJsonPayloadCandidate(text: string): string | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+  const starts = [trimmed.indexOf('{'), trimmed.indexOf('[')]
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right)
+  for (const start of starts) {
+    const candidate = trimmed.slice(start)
+    try {
+      JSON.parse(candidate)
+      return candidate
+    } catch {
+      // Keep scanning; OpenClaw may print warning prefixes before the JSON payload.
+    }
+  }
+  return null
+}
+
+async function runOpenclawSkillsRootChecked(
+  root: (typeof SKILL_CLI_ROOTS)[number],
+  tail: string[],
+): Promise<string> {
+  const { code, stdout, stderr } = await execOpenclaw([root, ...tail])
+  if (code !== 0) {
+    throw new Error(stderr || stdout || `openclaw exited with code ${code}`)
+  }
+
+  const stdoutTrimmed = stdout.trim()
+  if (stdoutTrimmed) return stdoutTrimmed
+
+  const stderrJson = firstJsonPayloadCandidate(stderr)
+  if (stderrJson) return stderrJson
+
+  return stderr.trim()
+}
 
 /**
  * Newer CLI uses `openclaw skills …`; older uses `clawhub`; some builds expose `clawbot`.
@@ -47,7 +83,7 @@ async function runOpenclawWithSkillsRootPick<T>(
 }
 
 export async function runOpenclawSkillsChecked(tail: string[]): Promise<string> {
-  return runOpenclawWithSkillsRootPick((root) => runOpenclawChecked([root, ...tail]))
+  return runOpenclawWithSkillsRootPick((root) => runOpenclawSkillsRootChecked(root, tail))
 }
 
 export async function runOpenclawSkillsUninstall(slug: string): Promise<void> {

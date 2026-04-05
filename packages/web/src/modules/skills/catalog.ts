@@ -3,11 +3,14 @@
 export type SkillCategory = 'ocr' | 'writing' | 'coding' | 'productivity' | 'agent'
 
 export interface CatalogSkill {
-  /** ClawHub slug (e.g. "paddleocr-doc-parsing") or github slug ("author/repo") */
+  /** Installable skill slug accepted by `openclaw skills install` / `/api/skills/install`. */
   slug: string
   name: string
   descriptionKey: string
   category: SkillCategory
+  /** Local OpenClaw `skills.entries.<skillKey>` id when it differs from the install slug. */
+  skillKey?: string
+  featured?: boolean
   /** GitHub repo URL for docs/source link */
   sourceUrl?: string
 }
@@ -32,6 +35,7 @@ export const SKILL_CATALOG: CatalogSkill[] = [
     name: 'PaddleOCR Doc Parsing',
     descriptionKey: 'skills.catalog.paddleocrDoc.desc',
     category: 'ocr',
+    skillKey: 'paddleocr-doc-parsing',
     sourceUrl: 'https://github.com/PaddlePaddle/PaddleOCR',
   },
   {
@@ -39,47 +43,55 @@ export const SKILL_CATALOG: CatalogSkill[] = [
     name: 'PaddleOCR Text Recognition',
     descriptionKey: 'skills.catalog.paddleocrText.desc',
     category: 'ocr',
+    skillKey: 'paddleocr-text-recognition',
     sourceUrl: 'https://github.com/PaddlePaddle/PaddleOCR',
   },
 
   // Writing & Style
   {
-    slug: 'jzOcb/writing-style-skill',
+    slug: 'writing-style-skill',
     name: 'Writing Style',
     descriptionKey: 'skills.catalog.writingStyle.desc',
     category: 'writing',
+    skillKey: 'writing-style-skill',
     sourceUrl: 'https://github.com/jzOcb/writing-style-skill',
   },
 
   // Coding & Engineering
   {
-    slug: 'pskoett/self-improving-agent',
+    slug: 'self-improving-agent',
     name: 'Self-Improving Agent',
     descriptionKey: 'skills.catalog.selfImproving.desc',
     category: 'coding',
+    skillKey: 'self-improving-agent',
+    featured: true,
     sourceUrl: 'https://github.com/peterskoett/self-improving-agent',
   },
   {
-    slug: 'Dev-Dennis-040/openclaw-agency-skills',
+    slug: 'openclaw-agency-skills',
     name: 'Agency Skills Pack',
     descriptionKey: 'skills.catalog.agencyPack.desc',
     category: 'coding',
+    skillKey: 'openclaw-agency-skills',
     sourceUrl: 'https://github.com/Dev-Dennis-040/openclaw-agency-skills',
   },
   {
-    slug: 'mxyhi/ok-skills',
+    slug: 'ok-skills',
     name: 'OK Skills',
     descriptionKey: 'skills.catalog.okSkills.desc',
     category: 'coding',
+    skillKey: 'ok-skills',
     sourceUrl: 'https://github.com/mxyhi/ok-skills',
   },
 
   // Productivity
   {
-    slug: 'FluffyAIcode/openclaw-memory-pro-system',
+    slug: 'openclaw-memory-pro-system',
     name: 'Memory Pro System',
     descriptionKey: 'skills.catalog.memoryPro.desc',
     category: 'productivity',
+    skillKey: 'openclaw-memory-pro-system',
+    featured: true,
     sourceUrl: 'https://github.com/FluffyAIcode/openclaw-memory-pro-system',
   },
   {
@@ -87,32 +99,40 @@ export const SKILL_CATALOG: CatalogSkill[] = [
     name: 'SkillNote',
     descriptionKey: 'skills.catalog.skillnote.desc',
     category: 'productivity',
+    skillKey: 'skillnote',
     sourceUrl: 'https://github.com/luna-prompts/skillnote',
   },
 
   // Agent & Meta
   {
-    slug: 'MohibShaikh/clawvet',
+    slug: 'clawvet',
     name: 'ClawVet',
     descriptionKey: 'skills.catalog.clawvet.desc',
     category: 'agent',
+    skillKey: 'clawvet',
+    featured: true,
     sourceUrl: 'https://github.com/MohibShaikh/clawvet',
   },
   {
-    slug: 'mareasw/ontoskills',
+    slug: 'ontoskills',
     name: 'OntoSkills',
     descriptionKey: 'skills.catalog.ontoskills.desc',
     category: 'agent',
+    skillKey: 'ontoskills',
     sourceUrl: 'https://github.com/mareasw/ontoskills',
   },
   {
-    slug: 'fangkelvin/find-skills-skill',
+    slug: 'find-skills-skill',
     name: 'Find Skills',
     descriptionKey: 'skills.catalog.findSkills.desc',
     category: 'agent',
+    skillKey: 'find-skills',
+    featured: true,
     sourceUrl: 'https://clawhub.ai/fangkelvin/find-skills-skill',
   },
 ]
+
+export const FEATURED_SKILLS = SKILL_CATALOG.filter((skill) => skill.featured)
 
 // ─── Scene Bundles ───
 
@@ -134,18 +154,10 @@ export const SCENE_BUNDLES: SceneBundle[] = [
     color: 'text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40',
   },
   {
-    id: 'mistakes',
-    titleKey: 'skills.mistakes',
-    descKey: 'skills.mistakesDesc',
-    skills: ['paddleocr-text-recognition'],
-    icon: 'book-open',
-    color: 'text-amber-500 bg-amber-100 dark:bg-amber-900/40',
-  },
-  {
     id: 'coding-boost',
     titleKey: 'skills.codingBoost',
     descKey: 'skills.codingBoostDesc',
-    skills: ['pskoett/self-improving-agent', 'mxyhi/ok-skills'],
+    skills: ['self-improving-agent', 'ok-skills'],
     icon: 'code',
     color: 'text-violet-500 bg-violet-100 dark:bg-violet-900/40',
   },

@@ -5,6 +5,7 @@ import {
   setOpenclawPluginEnabled,
   uninstallOpenclawPlugin,
 } from '../services/openclawPlugins.js'
+import { installSkillWithClawhub, searchClawhubSkills } from '../clawhubRegistry.js'
 import { runOpenclawSkillsChecked, runOpenclawSkillsUninstall } from '../skillsCli.js'
 import { mapSkillJson } from '../skillsParse.js'
 import { isRecord, sendOpenclawFailure } from '../serverUtils.js'
@@ -86,8 +87,7 @@ export function registerPluginsRoutes(app: express.Express): void {
       return res.json([])
     }
     try {
-      const out = await runOpenclawSkillsChecked(['search', q, '--json'])
-      res.json(mapSkillJson(out, false))
+      res.json(await searchClawhubSkills(q))
     } catch (error: unknown) {
       sendOpenclawFailure(res, error)
     }
@@ -99,7 +99,11 @@ export function registerPluginsRoutes(app: express.Express): void {
       return res.status(400).type('text').send('Missing slug')
     }
     try {
-      await runOpenclawSkillsChecked(['install', slug])
+      try {
+        await installSkillWithClawhub(slug)
+      } catch {
+        await runOpenclawSkillsChecked(['install', slug])
+      }
       res.status(204).end()
     } catch (error: unknown) {
       sendOpenclawFailure(res, error)

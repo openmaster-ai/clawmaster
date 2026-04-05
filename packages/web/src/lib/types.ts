@@ -184,6 +184,60 @@ export interface SkillInfo {
   description: string
   version: string
   installed?: boolean
+  skillKey?: string
+  source?: string
+  disabled?: boolean
+  eligible?: boolean
+  bundled?: boolean
+}
+
+export interface ClawhubCliStatus {
+  installed: boolean
+  version: string
+  packageName: string
+}
+
+export interface SkillGuardFinding {
+  dimension: string
+  severity: string
+  filePath: string
+  lineNumber?: number | null
+  pattern?: string
+  description: string
+  reference?: string
+  remediationEn?: string
+  remediationZh?: string
+}
+
+export interface SkillGuardTokenEstimate {
+  l1SkillMd: number
+  l2Eager: number
+  l2Lazy: number
+  l3Total: number
+}
+
+export interface SkillGuardReport {
+  skillName: string
+  skillPath: string
+  riskScore: number
+  riskLevel: string
+  findings: SkillGuardFinding[]
+  tokenEstimate: SkillGuardTokenEstimate
+}
+
+export interface SkillGuardScanResult {
+  auditMetadata: {
+    toolVersion: string
+    timestamp: string
+    target: string
+  }
+  summary: {
+    totalSkills: number
+    byLevel: Record<string, number>
+  }
+  report: SkillGuardReport | null
+  severityCounts: Record<string, number>
+  totalFindings: number
 }
 
 /** One row from parsed `openclaw plugins list` */
