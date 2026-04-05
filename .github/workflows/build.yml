@@ -30,7 +30,7 @@ permissions:
   contents: write
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: 'lts/*'
 
 concurrency:
   group: desktop-bundles-${{ github.ref }}
