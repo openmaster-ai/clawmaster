@@ -1,36 +1,53 @@
-name: CI / Release
+name: Desktop Bundles
 
 on:
   push:
-    branches: [main, 'feat/**']
-    tags: ['v*']
-  pull_request:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the built installers to GitHub Releases
+        required: false
+        type: boolean
+        default: false
+      release_tag:
+        description: Release tag to create or update when publishing manually, for example v0.1.0
+        required: false
+        type: string
+      draft_release:
+        description: Create the manual GitHub release as a draft
+        required: false
+        type: boolean
+        default: true
+      prerelease:
+        description: Mark the manual GitHub release as a prerelease
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 env:
   NODE_VERSION: '20'
-  RUST_TOOLCHAIN: 'stable'
 
-# Cancel in-progress runs for the same branch/PR
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: desktop-bundles-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # ─── Lint & Test (runs on every push/PR) ───
-  test:
-    name: Lint & Test
+  verify:
+    name: Verify Release Gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
       - run: npm ci
 
       - name: TypeScript check
@@ -42,30 +59,30 @@ jobs:
       - name: Build web
         run: npm run build
 
-  # ─── Multi-platform Tauri build ───
-  build:
-    name: Build (${{ matrix.label }})
-    needs: test
-    # Only build on tags, main branch, or manual dispatch
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+  bundle:
+    name: Bundle (${{ matrix.label }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             label: Linux x64
-          - os: macos-latest
+            artifact_name: clawmaster-linux-x64
+          - os: macos-13
             target: x86_64-apple-darwin
-            label: macOS x64
-          - os: macos-latest
+            label: macOS Intel
+            artifact_name: clawmaster-macos-intel
+          - os: macos-14
             target: aarch64-apple-darwin
-            label: macOS ARM64
+            label: macOS Apple Silicon
+            artifact_name: clawmaster-macos-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             label: Windows x64
-
-    runs-on: ${{ matrix.os }}
+            artifact_name: clawmaster-windows-x64
 
     steps:
       - uses: actions/checkout@v4
@@ -79,69 +96,154 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # Rust build cache
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
           key: ${{ matrix.target }}
 
-      - name: Install system dependencies (Linux)
+      - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update -qq
+          sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
-            librsvg2-dev patchelf
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
 
       - run: npm ci
 
-      # Tag builds → create GitHub release with draft
-      - name: Build & Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'ClawMaster ${{ github.ref_name }}'
-          releaseBody: |
-            ## What's New
-            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+      - name: Build Tauri desktop bundles
+        run: npx tauri build --target ${{ matrix.target }}
 
-            ## Downloads
-            | Platform | File |
-            |----------|------|
-            | Linux x64 | `.AppImage` / `.deb` / `.rpm` |
-            | macOS Intel | `.dmg` |
-            | macOS Apple Silicon | `.dmg` |
-            | Windows | `.msi` / portable `.exe` |
-
-            ## Checksums
-            SHA-256 checksums are in the `checksums.txt` asset.
-          releaseDraft: true
-          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
-          args: --target ${{ matrix.target }}
-
-      # Non-tag builds → upload as artifacts
-      - name: Build (no release)
-        if: "!startsWith(github.ref, 'refs/tags/v')"
-        run: |
-          npx tauri build --target ${{ matrix.target }}
-
-      - name: Upload artifacts
-        if: "!startsWith(github.ref, 'refs/tags/v')"
+      - name: Upload workflow bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: clawmaster-${{ matrix.target }}
-          path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.rpm
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
-            src-tauri/target/release/bundle/**/*.deb
-            src-tauri/target/release/bundle/**/*.rpm
-            src-tauri/target/release/bundle/**/*.AppImage
-          retention-days: 7
-          if-no-files-found: ignore
+          name: ${{ matrix.artifact_name }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-release:
+    name: Publish Release Assets
+    needs: bundle
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: release-bundles
+
+      - name: Resolve release tag
+        id: release_meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_RELEASE_TAG"
+          else
+            TAG="$REF_NAME"
+          fi
+
+          if [ -z "$TAG" ]; then
+            echo "release_tag is required when publish_release is enabled for workflow_dispatch" >&2
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+
+          find release-bundles -type f \
+            \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.zip' -o -name '*.tar.gz' -o -name '*.sig' -o -name '*.json' \) \
+            -exec cp '{}' release-assets/ \;
+
+          if [ -z "$(find release-assets -maxdepth 1 -type f -print -quit)" ]; then
+            echo "No desktop bundle files were found to publish" >&2
+            find release-bundles -maxdepth 4 -type f | sort
+            exit 1
+          fi
+
+          (
+            cd release-assets
+            sha256sum * > SHA256SUMS.txt
+          )
+
+      - name: Create release notes
+        env:
+          TAG: ${{ steps.release_meta.outputs.tag }}
+        run: |
+          cat <<EOF > RELEASE_NOTES.md
+          ClawMaster desktop installers built by CI.
+
+          Downloads included in this release:
+          - Linux: AppImage, deb, rpm
+          - macOS: dmg
+          - Windows: msi, exe
+
+          Checksums are included in \`SHA256SUMS.txt\`.
+          EOF
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_DRAFT: ${{ inputs.draft_release }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          DRAFT_FLAG=""
+          PRERELEASE_FLAG=""
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$INPUT_DRAFT" = "true" ]; then
+              DRAFT_FLAG="--draft"
+            fi
+            if [ "$INPUT_PRERELEASE" = "true" ]; then
+              PRERELEASE_FLAG="--prerelease"
+            fi
+          else
+            if printf '%s' "$TAG" | grep -Eq -- '-(beta|rc)'; then
+              PRERELEASE_FLAG="--prerelease"
+            fi
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" release-assets/* \
+              --title "ClawMaster $TAG" \
+              --notes-file RELEASE_NOTES.md \
+              $DRAFT_FLAG \
+              $PRERELEASE_FLAG
+          fi
+
+      - name: Add workflow summary
+        env:
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+        run: |
+          {
+            echo "## Desktop Downloads"
+            echo
+            echo "GitHub Release: https://github.com/$REPOSITORY/releases/tag/$TAG"
+            echo
+            echo "Artifacts in this release:"
+            find release-assets -maxdepth 1 -type f -printf -- "- %f\n" | sort
+          } >> "$GITHUB_STEP_SUMMARY"

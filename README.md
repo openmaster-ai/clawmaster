@@ -27,13 +27,18 @@ ClawMaster wraps the OpenClaw CLI in a desktop app (Tauri 2) or web UI (Express 
 - **Dark mode** and color themes (Lobster Orange, Ocean Blue)
 - **Responsive layout** with mobile hamburger menu
 - **Desktop builds** -- Linux (deb, rpm, AppImage), macOS (dmg), Windows (msi)
-- **CI/CD** -- test gate (tsc + vitest) then multi-platform Tauri build with release drafts
+- **CI/CD** -- test gate (tsc + vitest), multi-platform Tauri bundles, workflow artifacts on `main`, and downloadable GitHub Releases on tags
 
 ## Quick Start
 
 ### Download a Release
 
 Grab the latest installer for your platform from [Releases](https://github.com/clawmaster-ai/clawmaster/releases).
+
+Desktop download flow:
+- Tagged builds (`v*`) are published to GitHub Releases with Linux, macOS, and Windows installers plus `SHA256SUMS.txt`.
+- Manual desktop builds can also publish a release from the `Desktop Bundles` workflow.
+- Non-release CI runs on `main` upload per-platform workflow artifacts in the Actions run for internal QA downloads.
 
 ### Build from Source
 
