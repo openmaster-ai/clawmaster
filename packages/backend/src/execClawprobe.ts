@@ -1,10 +1,12 @@
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
 const require = createRequire(import.meta.url)
 const execFileAsync = promisify(execFile)
+let cachedClawprobeCommand: { cmd: string; argsPrefix: string[] } | undefined
 
 export class ClawprobeUnavailableError extends Error {
   code = 'CLAWPROBE_UNAVAILABLE'
@@ -22,24 +24,61 @@ export interface ClawprobeCommandOutput {
   stderr: string
 }
 
-function resolveClawprobeEntry(): string {
+function resolveLocalClawprobeEntry(): string | null {
   try {
     const pkgJson = require.resolve('clawprobe/package.json')
     const root = path.dirname(pkgJson)
     return path.join(root, 'dist', 'index.js')
   } catch {
-    // Fallback: clawprobe installed globally — use the binary directly
-    return 'clawprobe'
+    return null
   }
 }
 
 function resolveClawprobeCommand() {
-  const entry = resolveClawprobeEntry()
-  const isGlobalBin = !entry.endsWith('.js')
-  return {
-    cmd: isGlobalBin ? entry : process.execPath,
-    argsPrefix: isGlobalBin ? [] : [entry],
+  if (cachedClawprobeCommand) {
+    return cachedClawprobeCommand
   }
+
+  const localEntry = resolveLocalClawprobeEntry()
+  if (localEntry) {
+    cachedClawprobeCommand = {
+      cmd: process.execPath,
+      argsPrefix: [localEntry],
+    }
+    return cachedClawprobeCommand
+  }
+
+  try {
+    const prefix = execFileSync('npm', ['config', 'get', 'prefix'], {
+      encoding: 'utf8',
+      env: process.env,
+    }).trim()
+    if (prefix) {
+      const globalBin =
+        process.platform === 'win32'
+          ? path.join(prefix, 'clawprobe.cmd')
+          : path.join(prefix, 'bin', 'clawprobe')
+      if (existsSync(globalBin)) {
+        cachedClawprobeCommand = {
+          cmd: globalBin,
+          argsPrefix: [],
+        }
+        return cachedClawprobeCommand
+      }
+    }
+  } catch {
+    // Fall through to PATH-based resolution.
+  }
+
+  cachedClawprobeCommand = {
+    cmd: 'clawprobe',
+    argsPrefix: [],
+  }
+  return cachedClawprobeCommand
+}
+
+export function resetClawprobeCommandCacheForTests(): void {
+  cachedClawprobeCommand = undefined
 }
 
 function isClawprobeUnavailableFailure(
