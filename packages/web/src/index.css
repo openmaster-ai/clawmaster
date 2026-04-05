@@ -393,6 +393,14 @@
     @apply w-full max-w-3xl;
   }
 
+  .setup-language-switcher {
+    @apply mb-4 flex w-full max-w-3xl justify-end;
+  }
+
+  .setup-language-switcher-control {
+    @apply inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/80 px-1 py-1 text-muted-foreground shadow-sm backdrop-blur-sm;
+  }
+
   .setup-stage {
     @apply grid gap-5;
   }

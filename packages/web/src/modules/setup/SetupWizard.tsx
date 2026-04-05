@@ -407,18 +407,19 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
   return (
     <div className="fullscreen-shell px-6">
-      {/* Language Switcher */}
-      <div className="absolute top-4 right-4 flex items-center gap-1 text-muted-foreground">
-        <Globe className="w-4 h-4" />
-        <select
-          value={i18n.language}
-          onChange={(e) => changeLanguage(e.target.value)}
-          className="text-xs bg-transparent border border-border rounded px-1.5 py-1 cursor-pointer hover:text-foreground"
-        >
-          <option value="zh">中文</option>
-          <option value="en">English</option>
-          <option value="ja">日本語</option>
-        </select>
+      <div className="setup-language-switcher">
+        <div className="setup-language-switcher-control">
+          <Globe className="w-4 h-4" />
+          <select
+            value={i18n.language}
+            onChange={(e) => changeLanguage(e.target.value)}
+            className="text-xs bg-transparent border border-border rounded px-1.5 py-1 cursor-pointer hover:text-foreground"
+          >
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+          </select>
+        </div>
       </div>
 
       {isCapabilityPhase ? (
