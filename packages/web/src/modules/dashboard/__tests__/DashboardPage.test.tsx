@@ -75,6 +75,22 @@ describe('DashboardPage', () => {
       screen.getByText((_, element) => element?.textContent === '• Review Agent'),
     ).toBeInTheDocument()
 
+    expect(screen.getByRole('heading', { name: '推荐任务流' })).toBeInTheDocument()
+    expect(screen.getByText('接入飞书或 Lark')).toBeInTheDocument()
+    expect(screen.getByText('控制成本与用量')).toBeInTheDocument()
+    expect(screen.getByText('运维私有部署')).toBeInTheDocument()
+    expect(screen.getByText('扩展助手能力')).toBeInTheDocument()
+    const flowLinks = screen.getAllByRole('link', { name: '进入流程' })
+    expect(flowLinks).toHaveLength(4)
+    expect(flowLinks.map((link) => link.getAttribute('href'))).toEqual([
+      '/channels',
+      '/observe',
+      '/gateway',
+      '/mcp',
+    ])
+    expect(screen.getByRole('link', { name: '文档' })).toHaveAttribute('href', '/docs')
+    expect(screen.getByRole('link', { name: '插件' })).toHaveAttribute('href', '/plugins')
+
     expect(screen.getByRole('link', { name: '打开控制台' })).toHaveAttribute(
       'href',
       'http://127.0.0.1:3010',

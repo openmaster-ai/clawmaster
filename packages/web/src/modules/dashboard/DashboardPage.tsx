@@ -2,7 +2,20 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { platform } from '@/adapters'
-import { BarChart3, Brain, Zap, ExternalLink, ScrollText, Settings2 } from 'lucide-react'
+import {
+  ArrowRight,
+  BarChart3,
+  Brain,
+  CheckCircle2,
+  ExternalLink,
+  HardDrive,
+  MessageSquare,
+  ScrollText,
+  Settings2,
+  Wrench,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react'
 import type { SystemInfo, GatewayStatus, OpenClawConfig } from '@/lib/types'
 import { buildGatewayUrl } from '@/shared/gatewayUrl'
 
@@ -84,6 +97,81 @@ export default function Dashboard() {
 
   // 计算代理数量
   const agentCount = config?.agents?.list?.length || 0
+
+  const taskCards: TaskCardConfig[] = [
+    {
+      id: 'feishu',
+      icon: MessageSquare,
+      accentClass: 'border-sky-500/30 bg-[linear-gradient(135deg,rgba(14,165,233,0.12),rgba(255,255,255,0)_55%)]',
+      title: t('dashboard.task.feishu.title'),
+      outcome: t('dashboard.task.feishu.outcome'),
+      checklist: [
+        t('dashboard.task.feishu.step1'),
+        t('dashboard.task.feishu.step2'),
+        t('dashboard.task.feishu.step3'),
+        t('dashboard.task.feishu.step4'),
+      ],
+      primaryLink: { to: '/channels', label: t('dashboard.task.openFlow') },
+      secondaryLinks: [
+        { to: '/gateway', label: t('nav.gateway') },
+        { to: '/docs', label: t('nav.docs') },
+      ],
+    },
+    {
+      id: 'cost',
+      icon: BarChart3,
+      accentClass: 'border-emerald-500/30 bg-[linear-gradient(135deg,rgba(16,185,129,0.14),rgba(255,255,255,0)_58%)]',
+      title: t('dashboard.task.cost.title'),
+      outcome: t('dashboard.task.cost.outcome'),
+      checklist: [
+        t('dashboard.task.cost.step1'),
+        t('dashboard.task.cost.step2'),
+        t('dashboard.task.cost.step3'),
+        t('dashboard.task.cost.step4'),
+      ],
+      primaryLink: { to: '/observe', label: t('dashboard.task.openFlow') },
+      secondaryLinks: [
+        { to: '/models', label: t('nav.models') },
+        { to: '/sessions', label: t('nav.sessions') },
+      ],
+    },
+    {
+      id: 'private',
+      icon: HardDrive,
+      accentClass: 'border-amber-500/30 bg-[linear-gradient(135deg,rgba(245,158,11,0.16),rgba(255,255,255,0)_58%)]',
+      title: t('dashboard.task.private.title'),
+      outcome: t('dashboard.task.private.outcome'),
+      checklist: [
+        t('dashboard.task.private.step1'),
+        t('dashboard.task.private.step2'),
+        t('dashboard.task.private.step3'),
+        t('dashboard.task.private.step4'),
+      ],
+      primaryLink: { to: '/gateway', label: t('dashboard.task.openFlow') },
+      secondaryLinks: [
+        { to: '/settings', label: t('nav.settings') },
+        { to: '/config', label: t('nav.config') },
+      ],
+    },
+    {
+      id: 'extend',
+      icon: Wrench,
+      accentClass: 'border-fuchsia-500/25 bg-[linear-gradient(135deg,rgba(217,70,239,0.13),rgba(255,255,255,0)_58%)]',
+      title: t('dashboard.task.extend.title'),
+      outcome: t('dashboard.task.extend.outcome'),
+      checklist: [
+        t('dashboard.task.extend.step1'),
+        t('dashboard.task.extend.step2'),
+        t('dashboard.task.extend.step3'),
+        t('dashboard.task.extend.step4'),
+      ],
+      primaryLink: { to: '/mcp', label: t('dashboard.task.openFlow') },
+      secondaryLinks: [
+        { to: '/plugins', label: t('nav.plugins') },
+        { to: '/skills', label: t('nav.skills') },
+      ],
+    },
+  ]
 
   return (
     <div className="page-shell page-shell-wide">
@@ -217,6 +305,21 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      <section className="surface-card space-y-5">
+        <div className="dashboard-section-head">
+          <div className="dashboard-section-copy">
+            <p className="dashboard-section-meta">{t('dashboard.task.meta')}</p>
+            <h2 className="section-title">{t('dashboard.task.title')}</h2>
+            <p className="section-subtitle">{t('dashboard.task.subtitle')}</p>
+          </div>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-2">
+          {taskCards.map((task) => (
+            <TaskEntryCard key={task.id} task={task} />
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="surface-card">
@@ -413,4 +516,63 @@ function LoadingLine({
   className?: string
 }) {
   return <span className={`block animate-pulse rounded-md bg-primary/10 h-4 ${widthClass} ${className}`.trim()} />
+}
+
+interface TaskCardLink {
+  to: string
+  label: string
+}
+
+interface TaskCardConfig {
+  id: string
+  icon: LucideIcon
+  accentClass: string
+  title: string
+  outcome: string
+  checklist: string[]
+  primaryLink: TaskCardLink
+  secondaryLinks: TaskCardLink[]
+}
+
+function TaskEntryCard({ task }: { task: TaskCardConfig }) {
+  const Icon = task.icon
+
+  return (
+    <div className={`rounded-[1.6rem] border p-5 shadow-sm transition hover:border-primary/40 ${task.accentClass}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/90">
+            <Icon className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-[1.05rem] font-semibold tracking-tight text-foreground">{task.title}</h3>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{task.outcome}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {task.checklist.map((item) => (
+          <div key={item} className="flex items-start gap-2 text-sm text-foreground/90">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <Link to={task.primaryLink.to} className="button-primary">
+          {task.primaryLink.label}
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+        <div className="flex flex-wrap justify-end gap-2">
+          {task.secondaryLinks.map((link) => (
+            <Link key={link.to} to={link.to} className="button-secondary px-3 py-1.5 text-sm">
+              {link.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
