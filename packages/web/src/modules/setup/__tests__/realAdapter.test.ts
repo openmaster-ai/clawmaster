@@ -84,4 +84,28 @@ describe('realSetupAdapter', () => {
       ],
     })
   })
+
+  it('writes baidu ai studio as a custom openai-compatible provider', async () => {
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('baidu-aistudio', 'bce-test-token'),
+    ).resolves.toBeUndefined()
+
+    expect(setConfigResult).toHaveBeenCalledWith('models.providers.baidu-aistudio', {
+      apiKey: 'bce-test-token',
+      api: 'openai-completions',
+      baseUrl: 'https://aistudio.baidu.com/llm/lmapi/v3',
+      models: [
+        { id: 'deepseek-v3', name: 'DeepSeek V3' },
+        { id: 'deepseek-r1', name: 'DeepSeek R1' },
+        { id: 'ernie-4.5-turbo-128k-preview', name: 'ERNIE 4.5 Turbo' },
+        { id: 'ernie-3.5-8k', name: 'ERNIE 3.5 8K' },
+      ],
+    })
+  })
 })

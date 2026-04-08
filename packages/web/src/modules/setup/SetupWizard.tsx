@@ -39,6 +39,8 @@ import {
   CAPABILITIES,
   PROVIDERS,
   PRIMARY_PROVIDERS,
+  PROVIDER_BADGES,
+  getProviderCredentialLabel,
   CHANNEL_TYPES,
   DEFAULT_ONBOARDING_STATE,
 } from './types'
@@ -80,6 +82,35 @@ const CAPABILITY_ICONS: Record<CapabilityId, LucideIcon> = {
   observe: Radar,
   ocr: ScanSearch,
   agent: Bot,
+}
+
+const providerBadgeToneClass = 'border-amber-400/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+
+function isGoldenSponsor(providerId: string) {
+  return PROVIDER_BADGES[providerId as keyof typeof PROVIDER_BADGES] === 'golden-sponsor'
+}
+
+function sortProviderIds(providerIds: string[]) {
+  return [...providerIds].sort((left, right) => {
+    const leftScore = isGoldenSponsor(left) ? 0 : 1
+    const rightScore = isGoldenSponsor(right) ? 0 : 1
+    if (leftScore !== rightScore) return leftScore - rightScore
+    return left.localeCompare(right)
+  })
+}
+
+function ProviderBadge({ providerId }: { providerId: string }) {
+  const { t, i18n } = useTranslation()
+  if (PROVIDER_BADGES[providerId as keyof typeof PROVIDER_BADGES] !== 'golden-sponsor') {
+    return null
+  }
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${providerBadgeToneClass}`}>
+      <Sparkles className="h-3.5 w-3.5" />
+      {t('providers.badgeGoldenSponsor')}
+    </span>
+  )
 }
 
 /**
@@ -1359,33 +1390,56 @@ function ProviderStep({
 }) {
   const { t } = useTranslation()
   const [showMore, setShowMore] = useState(false)
-  const visibleIds = showMore ? allProviderIds : [...primaryIds]
+  const visibleIds = sortProviderIds(showMore ? allProviderIds : [...primaryIds])
+  const sponsorIds = visibleIds.filter((providerId) => isGoldenSponsor(providerId))
+  const otherIds = visibleIds.filter((providerId) => !isGoldenSponsor(providerId))
   const providerCfg = PROVIDERS[onboard.provider]
+  const credentialLabel = getProviderCredentialLabel(onboard.provider, i18n.language)
 
   return (
     <div className="fullscreen-step">
       <OnboardingProgress current={1} />
       <p className="text-center font-medium mb-4">{t('setup.configureLLM')}</p>
-      <div className="flex gap-2 mb-2 justify-center flex-wrap">
-        {visibleIds.map((p) => (
-          <button
-            key={p}
-            onClick={() => updateOnboard({
-              provider: p,
-              apiKey: '',
-              model: '',
-              customBaseUrl: PROVIDERS[p]?.baseUrl ?? '',
-            })}
-            className={`px-3 py-1.5 rounded-lg text-sm border transition ${
-              onboard.provider === p
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'border-border hover:bg-accent'
-            }`}
-          >
-            {PROVIDERS[p].label}
-          </button>
-        ))}
-      </div>
+      {sponsorIds.length > 0 && (
+        <div className="mb-3 space-y-2">
+          <p className="text-center text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('providers.badgeGoldenSponsor')}</p>
+          <div className="flex gap-2 justify-center flex-wrap">
+            {sponsorIds.map((p) => (
+              <ProviderStepButton
+                key={p}
+                providerId={p}
+                selected={onboard.provider === p}
+                onSelect={() => updateOnboard({
+                  provider: p,
+                  apiKey: '',
+                  model: '',
+                  customBaseUrl: PROVIDERS[p]?.baseUrl ?? '',
+                })}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      {otherIds.length > 0 && (
+        <div className="mb-2 space-y-2">
+          <p className="text-center text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('models.recommendedProviders')}</p>
+          <div className="flex gap-2 justify-center flex-wrap">
+            {otherIds.map((p) => (
+              <ProviderStepButton
+                key={p}
+                providerId={p}
+                selected={onboard.provider === p}
+                onSelect={() => updateOnboard({
+                  provider: p,
+                  apiKey: '',
+                  model: '',
+                  customBaseUrl: PROVIDERS[p]?.baseUrl ?? '',
+                })}
+              />
+            ))}
+          </div>
+        </div>
+      )}
       {secondaryIds.length > 0 && (
         <button
           onClick={() => setShowMore(!showMore)}
@@ -1409,7 +1463,7 @@ function ProviderStep({
               rel="noopener noreferrer"
               className="block mb-3 text-center text-xs text-primary hover:underline"
             >
-              {t('setup.getApiKey', { provider: providerCfg.label })}
+              {t('setup.getApiKey', { provider: providerCfg.label, credential: credentialLabel })}
             </a>
           )}
           {providerCfg?.needsBaseUrl && (
@@ -1423,7 +1477,10 @@ function ProviderStep({
           )}
           <input
             type="password"
-            placeholder={t('setup.apiKeyPlaceholder', { provider: providerCfg?.label ?? onboard.provider })}
+            placeholder={t('setup.apiKeyPlaceholder', {
+              provider: providerCfg?.label ?? onboard.provider,
+              credential: credentialLabel,
+            })}
             value={onboard.apiKey}
             onChange={(e) => updateOnboard({ apiKey: e.target.value })}
             className="w-full px-4 py-3 rounded-lg border border-border bg-card text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
@@ -1445,6 +1502,32 @@ function ProviderStep({
         {t('setup.skipRemaining')}
       </button>
     </div>
+  )
+}
+
+function ProviderStepButton({
+  providerId,
+  selected,
+  onSelect,
+}: {
+  providerId: string
+  selected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className={`px-3 py-1.5 rounded-lg text-sm border transition ${
+        selected
+          ? 'bg-primary text-primary-foreground border-primary'
+          : 'border-border hover:bg-accent'
+      }`}
+    >
+      <span className="inline-flex items-center gap-2">
+        <span>{PROVIDERS[providerId].label}</span>
+        <ProviderBadge providerId={providerId} />
+      </span>
+    </button>
   )
 }
 
