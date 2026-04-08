@@ -224,7 +224,7 @@ export default function ObservePage() {
         </section>
       )}
 
-      <section className="space-y-3">
+      <section id="observe-runtime" className="space-y-3">
         <h2 className="text-lg font-semibold">{t('observe.sectionSession')}</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="surface-card space-y-2">
@@ -301,7 +301,7 @@ export default function ObservePage() {
         </div>
       </section>
 
-      <section className="space-y-3">
+      <section id="observe-cost" className="space-y-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold">{t('observe.costTrend')}</h2>
           <div className="pill-group">

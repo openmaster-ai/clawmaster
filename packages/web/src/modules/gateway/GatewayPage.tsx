@@ -140,7 +140,7 @@ export default function Gateway() {
         </div>
       </div>
 
-      <div className="surface-card">
+      <div id="gateway-runtime" className="surface-card">
         {loading ? (
           <LoadingState message={t('common.loading')} fullPage={false} />
         ) : (
@@ -205,7 +205,7 @@ export default function Gateway() {
         )}
       </div>
 
-      <div className="surface-card">
+      <div id="gateway-config" className="surface-card">
         <div className="section-heading">
           <h3 className="section-title">{t('gateway.config')}</h3>
         </div>

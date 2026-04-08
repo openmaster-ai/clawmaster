@@ -622,7 +622,7 @@ export default function PluginsPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]">
-        <section className="surface-card">
+        <section id="plugins-inventory" className="surface-card">
           <div className="dashboard-section-head">
             <div className="dashboard-section-copy">
               <p className="dashboard-section-meta">{t('plugins.liveInventoryTitle')}</p>
@@ -647,7 +647,7 @@ export default function PluginsPage() {
           )}
         </section>
 
-        <section className="surface-card space-y-4">
+        <section id="plugins-install" className="surface-card space-y-4">
           <div className="dashboard-section-copy">
             <p className="dashboard-section-meta">{t('plugins.managePanelTitle')}</p>
             <h2 className="text-xl font-semibold text-foreground">{t('plugins.install')}</h2>
@@ -714,7 +714,7 @@ export default function PluginsPage() {
         </section>
       </div>
 
-      <section className="surface-card space-y-4">
+      <section id="plugins-groups" className="surface-card space-y-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div className="toolbar-group">
             <label className="flex-1 min-w-[14rem]">

@@ -340,6 +340,7 @@ function SkillsContent() {
 
       {(!clawhubReady || clawhubCliLoading || clawhubInstallTask.status !== 'idle') && (
         <ClawhubSetupCard
+          id="skills-clawhub"
           status={clawhubCli}
           loading={clawhubCliLoading}
           installStatus={clawhubInstallTask.status}
@@ -374,7 +375,7 @@ function SkillsContent() {
         />
       </div>
 
-      <section className="surface-card space-y-4">
+      <section id="skills-featured" className="surface-card space-y-4">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="section-heading">{t('skills.featuredTitle')}</h2>
@@ -413,7 +414,7 @@ function SkillsContent() {
         ))}
       </div>
 
-      <section className="surface-card space-y-4">
+      <section id="skills-installed" className="surface-card space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="section-heading">{t('skills.installedTitle')}</h2>
@@ -469,6 +470,7 @@ function MetricCard({ label, value, meta }: { label: string; value: string; meta
 }
 
 function ClawhubSetupCard({
+  id,
   status,
   loading,
   installStatus,
@@ -478,6 +480,7 @@ function ClawhubSetupCard({
   onRefresh,
   t,
 }: {
+  id?: string
   status: { installed: boolean; version: string; packageName: string } | null
   loading: boolean
   installStatus: 'idle' | 'running' | 'done' | 'error'
@@ -490,7 +493,7 @@ function ClawhubSetupCard({
   const ready = status?.installed === true
 
   return (
-    <section className={`surface-card space-y-4 ${ready ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-amber-500/25 bg-amber-500/5'}`}>
+    <section id={id} className={`surface-card space-y-4 ${ready ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-amber-500/25 bg-amber-500/5'}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className="flex items-center gap-2">

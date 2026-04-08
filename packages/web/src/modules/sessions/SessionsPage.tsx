@@ -139,7 +139,7 @@ function SessionsContent() {
         </div>
       </div>
 
-      <div className="toolbar-card">
+      <div id="sessions-toolbar" className="toolbar-card">
         <div className="toolbar-group">
           <Filter className="w-4 h-4 text-muted-foreground" />
           <select

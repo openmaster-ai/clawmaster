@@ -232,7 +232,7 @@ export default function Settings() {
         </section>
       )}
 
-      <section className="surface-card">
+      <section id="settings-profile" className="surface-card">
         <div className="section-heading">
           <div>
             <h3 className="section-title">{t('settings.profileTitle')}</h3>
@@ -452,7 +452,7 @@ export default function Settings() {
       </section>
 
       {/* 系统信息 */}
-      <section className="surface-card">
+      <section id="settings-system-info" className="surface-card">
         <div className="section-heading">
           <h3 className="section-title">{t('settings.systemInfo')}</h3>
         </div>
@@ -484,7 +484,7 @@ export default function Settings() {
         )}
       </section>
 
-      <section className="surface-card">
+      <section id="settings-logs" className="surface-card">
         <div className="section-heading">
           <div>
             <h3 className="section-title">{t('logs.settingsTitle')}</h3>

@@ -122,7 +122,7 @@ export default function Config() {
         <SummaryCard label={t('config.channels')} value={t('config.countUnit', { count: channelCount })} page={t('layout.nav.channels')} />
       </div>
 
-      <div className="surface-card">
+      <div id="config-editor" className="surface-card">
         <div className="section-heading mb-4">
           <span className="text-sm font-medium">openclaw.json</span>
           <span className="text-xs text-muted-foreground font-mono">

@@ -61,7 +61,7 @@ export default function Models() {
       </div>
 
       {/* 已配置的提供商 */}
-      <div className="space-y-3">
+      <div id="models-providers" className="space-y-3">
         {Object.entries(providers).map(([providerId, provider]: [string, any]) => (
           <ProviderCard
             key={providerId}
@@ -73,7 +73,7 @@ export default function Models() {
         ))}
 
         {!hasProviders && (
-          <div className="surface-card">
+          <div id="models-first-run" className="surface-card">
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
               <div className="space-y-3">
                 <div className="section-heading">
@@ -271,7 +271,7 @@ function AddProviderPanel({
   }
 
   return (
-    <div className="surface-card-muted space-y-3">
+    <div id="models-add-provider" className="surface-card-muted space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="section-title text-lg">{t('models.addProviderTitle')}</h3>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm">{t('common.cancel')}</button>

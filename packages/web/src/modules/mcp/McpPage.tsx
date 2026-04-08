@@ -335,7 +335,7 @@ function McpContent() {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(21rem,0.95fr)]">
         <div className="space-y-5">
-          <section className="surface-card">
+          <section id="mcp-installed" className="surface-card">
             <div className="section-heading">
               <div>
                 <p className="section-subtitle">{t('mcp.installedLead')}</p>
@@ -418,7 +418,7 @@ function McpContent() {
             )}
           </section>
 
-          <section className="surface-card">
+          <section id="mcp-featured" className="surface-card">
             <div className="section-heading">
               <div>
                 <p className="section-subtitle">{t('mcp.featuredLead')}</p>
@@ -656,7 +656,7 @@ function McpContent() {
             </section>
           )}
 
-          <section className="surface-card">
+          <section id="mcp-import" className="surface-card">
             <div className="section-heading">
               <div>
                 <p className="section-subtitle">{t('mcp.importLead')}</p>
@@ -738,7 +738,7 @@ function McpContent() {
             </div>
           </section>
 
-          <section className="surface-card">
+          <section id="mcp-manual" className="surface-card">
             <div className="section-heading">
               <div>
                 <p className="section-subtitle">{t('mcp.manualLead')}</p>

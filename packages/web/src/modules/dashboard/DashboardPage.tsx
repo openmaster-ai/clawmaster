@@ -1,22 +1,34 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { platform } from '@/adapters'
+import { platform, platformResults } from '@/adapters'
 import {
+  AlertCircle,
   ArrowRight,
   BarChart3,
   Brain,
+  CircleDashed,
   CheckCircle2,
   ExternalLink,
   HardDrive,
+  Loader2,
   MessageSquare,
   ScrollText,
   Settings2,
   Wrench,
+  X,
   Zap,
   type LucideIcon,
 } from 'lucide-react'
-import type { SystemInfo, GatewayStatus, OpenClawConfig } from '@/lib/types'
+import type {
+  SystemInfo,
+  GatewayStatus,
+  OpenClawConfig,
+  PluginsListPayload,
+  SkillInfo,
+} from '@/lib/types'
+import type { ClawprobeStatusJson } from '@/types/clawprobe'
+import { getMcpServers, type McpServersMap } from '@/shared/adapters/mcp'
 import { buildGatewayUrl } from '@/shared/gatewayUrl'
 
 export default function Dashboard() {
@@ -28,6 +40,12 @@ export default function Dashboard() {
   const [systemLoading, setSystemLoading] = useState(true)
   const [gatewayLoading, setGatewayLoading] = useState(true)
   const [configLoading, setConfigLoading] = useState(true)
+  const [probeStatus, setProbeStatus] = useState<ClawprobeStatusJson | null>(null)
+  const [pluginsPayload, setPluginsPayload] = useState<PluginsListPayload | null>(null)
+  const [skills, setSkills] = useState<SkillInfo[]>([])
+  const [mcpServers, setMcpServers] = useState<McpServersMap>({})
+  const [taskSignalsLoading, setTaskSignalsLoading] = useState(true)
+  const [activeTaskId, setActiveTaskId] = useState<TaskCardConfig['id'] | null>(null)
 
   const reportError = useCallback((err: unknown) => {
     const message = err instanceof Error ? err.message : String(err)
@@ -41,6 +59,7 @@ export default function Dashboard() {
     setSystemLoading(true)
     setGatewayLoading(true)
     setConfigLoading(true)
+    setTaskSignalsLoading(true)
 
     void platform.detectSystem()
       .then((sys) => {
@@ -87,16 +106,49 @@ export default function Dashboard() {
         setConfigLoading(false)
       })
 
+    void Promise.allSettled([
+      platformResults.clawprobeStatus(),
+      platformResults.listPlugins(),
+      platformResults.getSkills(),
+      getMcpServers(),
+    ])
+      .then(([probeResult, pluginResult, skillsResult, mcpResult]) => {
+        if (!active) return
+
+        if (probeResult.status === 'fulfilled' && probeResult.value.success && probeResult.value.data) {
+          setProbeStatus(probeResult.value.data)
+        }
+
+        if (pluginResult.status === 'fulfilled' && pluginResult.value.success && pluginResult.value.data) {
+          setPluginsPayload(pluginResult.value.data)
+        }
+
+        if (skillsResult.status === 'fulfilled' && skillsResult.value.success && skillsResult.value.data) {
+          setSkills(skillsResult.value.data)
+        }
+
+        if (mcpResult.status === 'fulfilled' && mcpResult.value.success && mcpResult.value.data) {
+          setMcpServers(mcpResult.value.data)
+        }
+      })
+      .finally(() => {
+        if (!active) return
+        setTaskSignalsLoading(false)
+      })
+
     return () => {
       active = false
     }
   }, [reportError])
 
-  // 计算通道数量
   const channelCount = config?.channels ? Object.keys(config.channels).length : 0
-
-  // 计算代理数量
   const agentCount = config?.agents?.list?.length || 0
+  const providerCount = Object.keys(config?.models?.providers || {}).length
+  const defaultModel = config?.agents?.defaults?.model?.primary || ''
+  const feishuAccounts = getChannelAccountCount(config, 'feishu')
+  const enabledPluginCount = getEnabledPluginCount(pluginsPayload)
+  const enabledSkillCount = getEnabledSkillCount(skills)
+  const installedMcpCount = Object.keys(mcpServers).length
 
   const taskCards: TaskCardConfig[] = [
     {
@@ -106,10 +158,42 @@ export default function Dashboard() {
       title: t('dashboard.task.feishu.title'),
       outcome: t('dashboard.task.feishu.outcome'),
       checklist: [
-        t('dashboard.task.feishu.step1'),
-        t('dashboard.task.feishu.step2'),
-        t('dashboard.task.feishu.step3'),
-        t('dashboard.task.feishu.step4'),
+        {
+          id: 'models',
+          label: t('dashboard.task.feishu.step1'),
+          to: '/models#models-providers',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.models'), section: t('models.firstRunTitle') }),
+          status: configLoading
+            ? 'loading'
+            : providerCount > 0 && Boolean(defaultModel)
+              ? 'ready'
+              : 'attention',
+        },
+        {
+          id: 'gateway',
+          label: t('dashboard.task.feishu.step2'),
+          to: '/gateway#gateway-runtime',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.gateway'), section: t('dashboard.gatewayStatus') }),
+          status: gatewayLoading ? 'loading' : gatewayStatus?.running ? 'ready' : 'attention',
+        },
+        {
+          id: 'runtime',
+          label: t('dashboard.task.feishu.step3'),
+          to: '/channels#channel-focus',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.channels'), section: t('channelsPage.focusTitle') }),
+          status: systemLoading
+            ? 'loading'
+            : systemInfo?.openclaw.installed && systemInfo?.nodejs.installed
+              ? 'ready'
+              : 'attention',
+        },
+        {
+          id: 'login',
+          label: t('dashboard.task.feishu.step4'),
+          to: '/channels#channel-configured',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.channels'), section: t('channelsPage.configured') }),
+          status: configLoading ? 'loading' : feishuAccounts > 0 ? 'ready' : 'attention',
+        },
       ],
       primaryLink: { to: '/channels', label: t('dashboard.task.openFlow') },
       secondaryLinks: [
@@ -124,10 +208,44 @@ export default function Dashboard() {
       title: t('dashboard.task.cost.title'),
       outcome: t('dashboard.task.cost.outcome'),
       checklist: [
-        t('dashboard.task.cost.step1'),
-        t('dashboard.task.cost.step2'),
-        t('dashboard.task.cost.step3'),
-        t('dashboard.task.cost.step4'),
+        {
+          id: 'observe',
+          label: t('dashboard.task.cost.step1'),
+          to: '/observe#observe-runtime',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.observe'), section: t('observe.sectionSession') }),
+          status: taskSignalsLoading
+            ? 'loading'
+            : probeStatus?.installRequired || probeStatus?.daemonRunning === false
+              ? 'attention'
+              : probeStatus
+                ? 'ready'
+                : 'unknown',
+        },
+        {
+          id: 'model',
+          label: t('dashboard.task.cost.step2'),
+          to: '/models#models-providers',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.models'), section: t('models.title') }),
+          status: configLoading
+            ? 'loading'
+            : providerCount > 0 && Boolean(defaultModel)
+              ? 'ready'
+              : 'attention',
+        },
+        {
+          id: 'sessions',
+          label: t('dashboard.task.cost.step3'),
+          to: '/sessions#sessions-toolbar',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.sessions'), section: t('sessions.title') }),
+          status: taskSignalsLoading ? 'loading' : probeStatus?.sessionKey ? 'ready' : 'unknown',
+        },
+        {
+          id: 'logs',
+          label: t('dashboard.task.cost.step4'),
+          to: '/settings#settings-logs',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('logs.settingsTitle') }),
+          status: systemLoading ? 'loading' : systemInfo?.openclaw.installed ? 'ready' : 'attention',
+        },
       ],
       primaryLink: { to: '/observe', label: t('dashboard.task.openFlow') },
       secondaryLinks: [
@@ -142,10 +260,38 @@ export default function Dashboard() {
       title: t('dashboard.task.private.title'),
       outcome: t('dashboard.task.private.outcome'),
       checklist: [
-        t('dashboard.task.private.step1'),
-        t('dashboard.task.private.step2'),
-        t('dashboard.task.private.step3'),
-        t('dashboard.task.private.step4'),
+        {
+          id: 'profile',
+          label: t('dashboard.task.private.step1'),
+          to: '/settings#settings-profile',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('settings.profileTitle') }),
+          status: systemLoading ? 'loading' : systemInfo?.openclaw.installed ? 'ready' : 'attention',
+        },
+        {
+          id: 'gateway-config',
+          label: t('dashboard.task.private.step2'),
+          to: '/gateway#gateway-config',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.gateway'), section: t('gateway.config') }),
+          status: configLoading
+            ? 'loading'
+            : isGatewayProtected(config)
+              ? 'ready'
+              : 'attention',
+        },
+        {
+          id: 'raw-config',
+          label: t('dashboard.task.private.step3'),
+          to: '/config#config-editor',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.config'), section: 'openclaw.json' }),
+          status: configLoading ? 'loading' : config ? 'ready' : 'attention',
+        },
+        {
+          id: 'diagnostics',
+          label: t('dashboard.task.private.step4'),
+          to: '/settings#settings-system-info',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('settings.systemInfo') }),
+          status: systemLoading ? 'loading' : systemInfo?.openclaw.installed ? 'ready' : 'attention',
+        },
       ],
       primaryLink: { to: '/gateway', label: t('dashboard.task.openFlow') },
       secondaryLinks: [
@@ -160,10 +306,38 @@ export default function Dashboard() {
       title: t('dashboard.task.extend.title'),
       outcome: t('dashboard.task.extend.outcome'),
       checklist: [
-        t('dashboard.task.extend.step1'),
-        t('dashboard.task.extend.step2'),
-        t('dashboard.task.extend.step3'),
-        t('dashboard.task.extend.step4'),
+        {
+          id: 'mcp',
+          label: t('dashboard.task.extend.step1'),
+          to: '/mcp#mcp-import',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.mcp'), section: t('mcp.importTitle') }),
+          status: taskSignalsLoading ? 'loading' : installedMcpCount > 0 ? 'ready' : 'attention',
+        },
+        {
+          id: 'plugins',
+          label: t('dashboard.task.extend.step2'),
+          to: '/plugins#plugins-groups',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.plugins'), section: t('nav.plugins') }),
+          status: taskSignalsLoading ? 'loading' : enabledPluginCount > 0 ? 'ready' : 'attention',
+        },
+        {
+          id: 'skills',
+          label: t('dashboard.task.extend.step3'),
+          to: '/skills#skills-featured',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.skills'), section: t('skills.featuredTitle') }),
+          status: taskSignalsLoading ? 'loading' : enabledSkillCount > 0 ? 'ready' : 'attention',
+        },
+        {
+          id: 'runtime-verify',
+          label: t('dashboard.task.extend.step4'),
+          to: '/skills#skills-installed',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.skills'), section: t('skills.installedTitle') }),
+          status: taskSignalsLoading
+            ? 'loading'
+            : installedMcpCount + enabledPluginCount + enabledSkillCount > 0
+              ? 'ready'
+              : 'unknown',
+        },
       ],
       primaryLink: { to: '/mcp', label: t('dashboard.task.openFlow') },
       secondaryLinks: [
@@ -172,6 +346,9 @@ export default function Dashboard() {
       ],
     },
   ]
+  const activeTask = activeTaskId
+    ? taskCards.find((task) => task.id === activeTaskId) ?? null
+    : null
 
   return (
     <div className="page-shell page-shell-wide">
@@ -316,10 +493,12 @@ export default function Dashboard() {
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
           {taskCards.map((task) => (
-            <TaskEntryCard key={task.id} task={task} />
+            <TaskEntryCard key={task.id} task={task} onOpen={() => setActiveTaskId(task.id)} />
           ))}
         </div>
       </section>
+
+      <TaskChecklistDrawer task={activeTask} onClose={() => setActiveTaskId(null)} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="surface-card">
@@ -523,19 +702,38 @@ interface TaskCardLink {
   label: string
 }
 
+type TaskChecklistTone = 'ready' | 'attention' | 'unknown' | 'loading'
+
+interface TaskChecklistItem {
+  id: string
+  label: string
+  to: string
+  hint: string
+  status: TaskChecklistTone
+}
+
 interface TaskCardConfig {
   id: string
   icon: LucideIcon
   accentClass: string
   title: string
   outcome: string
-  checklist: string[]
+  checklist: TaskChecklistItem[]
   primaryLink: TaskCardLink
   secondaryLinks: TaskCardLink[]
 }
 
-function TaskEntryCard({ task }: { task: TaskCardConfig }) {
+function TaskEntryCard({
+  task,
+  onOpen,
+}: {
+  task: TaskCardConfig
+  onOpen: () => void
+}) {
+  const { t } = useTranslation()
   const Icon = task.icon
+  const summary = summarizeTaskChecklist(task.checklist)
+  const nextItem = findNextChecklistItem(task.checklist)
 
   return (
     <div className={`rounded-[1.6rem] border p-5 shadow-sm transition hover:border-primary/40 ${task.accentClass}`}>
@@ -549,23 +747,36 @@ function TaskEntryCard({ task }: { task: TaskCardConfig }) {
             <p className="mt-1 text-sm leading-6 text-muted-foreground">{task.outcome}</p>
           </div>
         </div>
+        <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
+          {t('dashboard.task.readyCount', { ready: summary.ready, total: summary.total })}
+        </span>
       </div>
 
       <div className="mt-4 space-y-2">
         {task.checklist.map((item) => (
-          <div key={item} className="flex items-start gap-2 text-sm text-foreground/90">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-            <span>{item}</span>
+          <div key={item.id} className="flex items-start gap-2 text-sm text-foreground/90">
+            <TaskStatusIcon status={item.status} className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{item.label}</span>
           </div>
         ))}
       </div>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <Link to={task.primaryLink.to} className="button-primary">
-          {task.primaryLink.label}
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={t('dashboard.task.openChecklistAria', { task: task.title })}
+          className="button-primary"
+        >
+          {t('dashboard.task.reviewChecklist')}
           <ArrowRight className="h-4 w-4" />
-        </Link>
+        </button>
         <div className="flex flex-wrap justify-end gap-2">
+          {nextItem && (
+            <Link to={nextItem.to} className="button-secondary px-3 py-1.5 text-sm">
+              {t('dashboard.task.jumpToSection')}
+            </Link>
+          )}
           {task.secondaryLinks.map((link) => (
             <Link key={link.to} to={link.to} className="button-secondary px-3 py-1.5 text-sm">
               {link.label}
@@ -575,4 +786,202 @@ function TaskEntryCard({ task }: { task: TaskCardConfig }) {
       </div>
     </div>
   )
+}
+
+function TaskChecklistDrawer({
+  task,
+  onClose,
+}: {
+  task: TaskCardConfig | null
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+
+  if (!task) return null
+
+  const Icon = task.icon
+  const summary = summarizeTaskChecklist(task.checklist)
+  const nextItem = findNextChecklistItem(task.checklist)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-slate-950/55 p-0 backdrop-blur-sm">
+      <div className="absolute inset-0" aria-hidden="true" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dashboard-task-drawer-title"
+        className="relative flex h-full min-h-0 w-full max-w-[42rem] flex-col overflow-hidden border-l border-border/80 bg-background shadow-2xl"
+      >
+        <div className="border-b border-border/70 bg-background/96 px-5 py-5 sm:px-7">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-muted/60">
+                  <Icon className="h-5 w-5 text-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    {t('dashboard.task.drawerTitle')}
+                  </p>
+                  <h3 id="dashboard-task-drawer-title" className="text-[1.35rem] font-semibold tracking-tight text-foreground">
+                    {task.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{task.outcome}</p>
+                </div>
+              </div>
+            </div>
+            <button type="button" onClick={onClose} className="button-secondary px-3">
+              <X className="h-4 w-4" />
+              {t('common.close')}
+            </button>
+          </div>
+        </div>
+
+        <div className="border-b border-border/70 px-5 py-4 sm:px-7">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <DrawerMetric label={t('dashboard.task.statusReady')} value={String(summary.ready)} tone="ready" />
+            <DrawerMetric label={t('dashboard.task.statusAttention')} value={String(summary.attention)} tone="attention" />
+            <DrawerMetric label={t('dashboard.task.statusUnknown')} value={String(summary.unknown)} tone="unknown" />
+          </div>
+          {nextItem && (
+            <div className="mt-4 rounded-[1.4rem] border border-border/70 bg-muted/30 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                {t('dashboard.task.nextAction')}
+              </p>
+              <p className="mt-2 text-sm font-medium text-foreground">{nextItem.label}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{nextItem.hint}</p>
+              <Link to={nextItem.to} onClick={onClose} className="button-primary mt-4">
+                {t('dashboard.task.jumpToSection')}
+              </Link>
+            </div>
+          )}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7">
+          <div className="space-y-3">
+            {task.checklist.map((item) => (
+              <div key={item.id} className="rounded-[1.4rem] border border-border/70 bg-muted/20 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-start gap-3">
+                      <TaskStatusIcon status={item.status} className="mt-0.5 h-4 w-4 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">{item.label}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{item.hint}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${taskStatusToneClass(item.status)}`}>
+                    {taskStatusLabel(t, item.status)}
+                  </span>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <Link to={item.to} onClick={onClose} className="button-secondary px-3 py-1.5 text-sm">
+                    {t('dashboard.task.jumpToSection')}
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DrawerMetric({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: string
+  tone: Exclude<TaskChecklistTone, 'loading'>
+}) {
+  return (
+    <div className={`rounded-[1.25rem] border px-4 py-3 ${taskStatusToneClass(tone)}`}>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] opacity-80">{label}</p>
+      <p className="mt-2 text-2xl font-semibold">{value}</p>
+    </div>
+  )
+}
+
+function TaskStatusIcon({
+  status,
+  className = '',
+}: {
+  status: TaskChecklistTone
+  className?: string
+}) {
+  if (status === 'ready') {
+    return <CheckCircle2 className={`${className} text-emerald-600 dark:text-emerald-300`.trim()} />
+  }
+
+  if (status === 'attention') {
+    return <AlertCircle className={`${className} text-amber-600 dark:text-amber-300`.trim()} />
+  }
+
+  if (status === 'loading') {
+    return <Loader2 className={`${className} animate-spin text-muted-foreground`.trim()} />
+  }
+
+  return <CircleDashed className={`${className} text-muted-foreground`.trim()} />
+}
+
+function summarizeTaskChecklist(checklist: TaskChecklistItem[]) {
+  return checklist.reduce(
+    (summary, item) => {
+      if (item.status === 'ready') summary.ready += 1
+      if (item.status === 'attention') summary.attention += 1
+      if (item.status === 'unknown') summary.unknown += 1
+      return summary
+    },
+    { total: checklist.length, ready: 0, attention: 0, unknown: 0 },
+  )
+}
+
+function findNextChecklistItem(checklist: TaskChecklistItem[]) {
+  return checklist.find((item) => item.status === 'attention')
+    ?? checklist.find((item) => item.status === 'unknown')
+    ?? checklist.find((item) => item.status === 'loading')
+    ?? checklist[0]
+}
+
+function getChannelAccountCount(config: OpenClawConfig | null, channelId: string): number {
+  const accounts = config?.channels?.[channelId]?.accounts
+  return accounts ? Object.keys(accounts).length : 0
+}
+
+function isGatewayProtected(config: OpenClawConfig | null): boolean {
+  const authMode = config?.gateway?.auth?.mode
+  return Boolean(config?.gateway?.bind) && Boolean(authMode) && authMode !== 'none'
+}
+
+function getEnabledPluginCount(pluginsPayload: PluginsListPayload | null): number {
+  return (pluginsPayload?.plugins ?? []).filter((plugin) => {
+    const status = plugin.status?.trim().toLowerCase() ?? ''
+    if (!status) return false
+    if (/\bdisabled\b/.test(status) || /\boff\b/.test(status)) return false
+    return /\benabled\b/.test(status) || /\bactive\b/.test(status) || /\bloaded\b/.test(status)
+  }).length
+}
+
+function getEnabledSkillCount(skills: SkillInfo[]): number {
+  return skills.filter((skill) => skill.disabled !== true).length
+}
+
+function taskStatusToneClass(status: Exclude<TaskChecklistTone, 'loading'> | TaskChecklistTone): string {
+  if (status === 'ready') return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+  if (status === 'attention') return 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+  return 'border-border/70 bg-background/80 text-muted-foreground'
+}
+
+function taskStatusLabel(
+  t: ReturnType<typeof useTranslation>['t'],
+  status: TaskChecklistTone,
+): string {
+  if (status === 'ready') return t('dashboard.task.statusReady')
+  if (status === 'attention') return t('dashboard.task.statusAttention')
+  if (status === 'loading') return t('dashboard.task.statusLoading')
+  return t('dashboard.task.statusUnknown')
 }

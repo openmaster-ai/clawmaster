@@ -139,3 +139,45 @@ cases:
       - 每个页面的 footer 都显示相同的网关翻译状态
       - footer 不出现 i18n raw key
       - footer 不显示硬编码版本号
+
+  - id: dash-09
+    name: 推荐任务流卡片显示实时就绪状态
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/"
+      - action: wait
+        duration: 2500ms
+      - action: observe
+        target: 推荐任务流区域
+      - action: screenshot
+        name: dashboard-task-flow
+    assertions:
+      - 显示"推荐任务流"标题
+      - 至少显示 4 张任务卡片
+      - 每张任务卡片显示已就绪步骤计数（如"3 / 4 已就绪"）
+      - 每张任务卡片显示状态标签（已就绪 / 需关注 / 待确认 / 检查中）
+      - 每张任务卡片显示"查看清单"按钮
+      - 卡片包含模块入口链接（如"文档""插件"）
+
+  - id: dash-10
+    name: 任务清单抽屉可打开并跳转到精确区块
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/"
+      - action: wait
+        duration: 2500ms
+      - action: click
+        target: 接入飞书或 Lark 卡片的"查看清单"按钮
+      - action: wait
+        duration: 800ms
+      - action: screenshot
+        name: dashboard-task-drawer
+    assertions:
+      - 打开右侧抽屉或弹层
+      - 抽屉显示"任务清单"标题
+      - 抽屉显示当前任务名称
+      - 抽屉显示"建议下一步"
+      - 抽屉内每一步都显示状态标签
+      - 抽屉内包含"前往对应区块"链接
+      - 至少一个链接包含 hash 锚点（如 /channels#channel-focus）
+      - 点击关闭后抽屉消失

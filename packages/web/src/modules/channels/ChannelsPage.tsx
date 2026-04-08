@@ -582,7 +582,7 @@ export default function Channels() {
         </div>
       </div>
 
-      <section className="surface-card">
+      <section id="channel-focus" className="surface-card">
         <div className="channel-page-hero">
           <div className="min-w-0 space-y-3">
             <p className="dashboard-section-meta">{t('channelsPage.recommendedTitle')}</p>
@@ -687,7 +687,7 @@ export default function Channels() {
       </section>
 
       {configuredChannels.length > 0 && (
-        <section className="surface-card">
+        <section id="channel-configured" className="surface-card">
           <div className="section-heading">
             <div>
               <h3 className="section-title">{t('channelsPage.configured')}</h3>
