@@ -216,6 +216,21 @@ describe('Layout', () => {
     expect(screen.queryByRole('dialog', { name: '命令面板' })).not.toBeInTheDocument()
   })
 
+  it('prevents the browser shortcut when the palette search input is focused', async () => {
+    renderLayout('/settings')
+
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true })
+
+    const dialog = await screen.findByRole('dialog', { name: '命令面板' })
+    const input = within(dialog).getByPlaceholderText('搜索页面、区块和快捷操作...')
+    const event = new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, bubbles: true, cancelable: true })
+
+    input.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(screen.getByRole('dialog', { name: '命令面板' })).toBeInTheDocument()
+  })
+
   it('does not open the command palette while another modal dialog is active', async () => {
     renderLayout('/settings', (
       <div role="dialog" aria-modal="true" aria-label="Open modal">

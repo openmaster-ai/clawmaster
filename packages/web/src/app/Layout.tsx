@@ -80,6 +80,10 @@ function hasActiveModalDialog(): boolean {
   return Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'))
 }
 
+function isCommandPaletteTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && Boolean(target.closest('.command-palette-panel'))
+}
+
 function isCommandPaletteShortcutKey(event: KeyboardEvent): boolean {
   if (event.code) {
     return event.code === 'KeyK'
@@ -295,7 +299,11 @@ export default function Layout({ children }: LayoutProps) {
     function handleKeyDown(event: KeyboardEvent) {
       if (!isCommandPaletteShortcutKey(event)) return
       if (isAppleClientPlatform(clientPlatform) ? !event.metaKey : !event.ctrlKey) return
-      if (isEditableEventTarget(event.target)) return
+      if (isEditableEventTarget(event.target)) {
+        if (!isCommandPaletteTarget(event.target)) return
+        event.preventDefault()
+        return
+      }
       event.preventDefault()
       if (hasActiveModalDialog()) return
       openCommandPalette()
