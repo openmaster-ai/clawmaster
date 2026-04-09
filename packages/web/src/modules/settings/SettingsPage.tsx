@@ -9,14 +9,15 @@ import { ActionBanner } from '@/shared/components/ActionBanner'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { InstallTask } from '@/shared/components/InstallTask'
 import { RecentLogsSheet } from '@/shared/components/RecentLogsSheet'
-import { CheckCircle2, AlertCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, FileText, Copy, FolderInput, Sparkles } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, FileText, Copy, FolderInput, Sparkles, Laptop, MonitorCog } from 'lucide-react'
 import type { SystemInfo } from '@/lib/types'
 import type { OpenclawNpmVersions } from '@/shared/adapters/npmOpenclaw'
-import type { OpenclawProfileInput, OpenclawProfileSeedInput } from '@/shared/adapters/system'
+import type { ClawmasterRuntimeInput, OpenclawProfileInput, OpenclawProfileSeedInput } from '@/shared/adapters/system'
 
 type ThemeMode = 'system' | 'light' | 'dark'
 type ProfileMode = OpenclawProfileInput['kind']
 type ProfileSeedMode = OpenclawProfileSeedInput['mode']
+type RuntimeMode = ClawmasterRuntimeInput['mode']
 
 function getStoredTheme(): ThemeMode {
   return (localStorage.getItem('clawmaster-theme') as ThemeMode) || 'system'
@@ -46,6 +47,11 @@ export default function Settings() {
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
   const [profileMessage, setProfileMessage] = useState<string | null>(null)
+  const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>('native')
+  const [runtimeDistro, setRuntimeDistro] = useState('')
+  const [runtimeSaving, setRuntimeSaving] = useState(false)
+  const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null)
   const [logsOpen, setLogsOpen] = useState(false)
   const [feedback, setFeedback] = useState<{ tone: 'info' | 'success' | 'error'; message: string } | null>(null)
   const [confirmAction, setConfirmAction] = useState<'reset' | 'uninstall' | null>(null)
@@ -65,6 +71,9 @@ export default function Settings() {
       setProfileSeedMode('empty')
       setProfileSeedPath('')
       setProfileError(null)
+      setRuntimeMode(info.runtime?.mode ?? 'native')
+      setRuntimeDistro(info.runtime?.selectedDistro ?? '')
+      setRuntimeError(null)
     } catch (err) {
       console.error('Failed to load system info:', err)
     } finally {
@@ -117,11 +126,48 @@ export default function Settings() {
     setProfileMessage(null)
   }
 
+  async function saveRuntime() {
+    setRuntimeError(null)
+    setRuntimeMessage(null)
+    if (runtimeMode === 'wsl2' && !runtimeDistro.trim()) {
+      setRuntimeError(t('settings.runtimeDistroRequired'))
+      return
+    }
+
+    setRuntimeSaving(true)
+    const result = await platformResults.saveClawmasterRuntime({
+      mode: runtimeMode,
+      wslDistro: runtimeMode === 'wsl2' ? runtimeDistro.trim() : undefined,
+    })
+    setRuntimeSaving(false)
+
+    if (!result.success) {
+      setRuntimeError(result.error ?? t('common.unknownError'))
+      return
+    }
+
+    setRuntimeMessage(t('settings.runtimeSaved'))
+    await loadSystemInfo()
+  }
+
+  function resetRuntimeDraft() {
+    setRuntimeMode(systemInfo?.runtime?.mode ?? 'native')
+    setRuntimeDistro(systemInfo?.runtime?.selectedDistro ?? '')
+    setRuntimeError(null)
+    setRuntimeMessage(null)
+  }
+
   const resolvedProfileMode = systemInfo?.openclaw.profileMode ?? 'default'
   const resolvedProfileName = systemInfo?.openclaw.profileName ?? ''
   const resolvedDataDir = systemInfo?.openclaw.dataDir ?? ''
   const defaultCandidates = systemInfo?.openclaw.configPathCandidates ?? []
   const existingConfigPaths = systemInfo?.openclaw.existingConfigPaths ?? []
+  const resolvedRuntimeMode = systemInfo?.runtime?.mode ?? 'native'
+  const resolvedRuntimeDistro = systemInfo?.runtime?.selectedDistro ?? ''
+  const isWindowsHost = systemInfo?.runtime?.hostPlatform === 'win32'
+  const runtimeDirty =
+    runtimeMode !== resolvedRuntimeMode ||
+    (runtimeMode === 'wsl2' && runtimeDistro.trim() !== resolvedRuntimeDistro)
   const profileDirty =
     profileMode !== resolvedProfileMode ||
     (profileMode === 'named' && profileName.trim() !== resolvedProfileName) ||
@@ -229,6 +275,151 @@ export default function Settings() {
             </label>
           </div>
           <p className="text-xs text-muted-foreground mt-2">{t('common.comingSoon')}</p>
+        </section>
+      )}
+
+      {isWindowsHost && (
+        <section id="settings-runtime" className="surface-card">
+          <div className="section-heading">
+            <div>
+              <h3 className="section-title">{t('settings.runtimeTitle')}</h3>
+              <p className="text-sm text-muted-foreground">{t('settings.runtimeDesc')}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(16rem,0.8fr)]">
+            <div className="space-y-4">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {([
+                  { id: 'native' as const, icon: Laptop, label: t('settings.runtimeNative'), desc: t('settings.runtimeNativeDesc') },
+                  { id: 'wsl2' as const, icon: MonitorCog, label: t('settings.runtimeWsl2'), desc: t('settings.runtimeWsl2Desc') },
+                ]).map((option) => {
+                  const Icon = option.icon
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => {
+                        setRuntimeMode(option.id)
+                        setRuntimeError(null)
+                        setRuntimeMessage(null)
+                      }}
+                      className={`rounded-2xl border px-4 py-3 text-left transition ${
+                        runtimeMode === option.id
+                          ? 'border-foreground bg-foreground text-background'
+                          : 'border-border bg-background hover:bg-accent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Icon className="h-4 w-4" />
+                        <span>{option.label}</span>
+                      </div>
+                      <p className={`mt-2 text-xs ${runtimeMode === option.id ? 'text-background/80' : 'text-muted-foreground'}`}>
+                        {option.desc}
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {runtimeMode === 'wsl2' && (
+                <div className="grid gap-2">
+                  <label
+                    htmlFor="settings-runtime-distro"
+                    className="text-sm text-muted-foreground"
+                  >
+                    {t('settings.runtimeDistro')}
+                  </label>
+                  <select
+                    id="settings-runtime-distro"
+                    value={runtimeDistro}
+                    onChange={(e) => {
+                      setRuntimeDistro(e.target.value)
+                      setRuntimeError(null)
+                      setRuntimeMessage(null)
+                    }}
+                    className="control-select"
+                  >
+                    <option value="">{t('settings.runtimeDistroPlaceholder')}</option>
+                    {(systemInfo?.runtime?.distros ?? []).map((distro) => (
+                      <option key={distro.name} value={distro.name}>
+                        {distro.name}{distro.isDefault ? ` · ${t('settings.runtimeDefaultTag')}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">{t('settings.runtimeDistroHint')}</p>
+                </div>
+              )}
+
+              {runtimeError && (
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+                  {runtimeError}
+                </div>
+              )}
+
+              {runtimeMessage && !runtimeError && (
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+                  {runtimeMessage}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void saveRuntime()}
+                  disabled={runtimeSaving || !runtimeDirty}
+                  className="button-primary"
+                >
+                  {runtimeSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {runtimeSaving ? t('common.saving') : t('common.save')}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetRuntimeDraft}
+                  disabled={runtimeSaving || !runtimeDirty}
+                  className="button-secondary"
+                >
+                  {t('common.refresh')}
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-[1.75rem] border border-border/80 bg-muted/40 p-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                {t('settings.runtimeResolved')}
+              </p>
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-muted-foreground">{t('settings.runtimeCurrent')}</span>
+                  <span className="text-right font-medium">
+                    {resolvedRuntimeMode === 'wsl2' ? t('settings.runtimeWsl2') : t('settings.runtimeNative')}
+                  </span>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-muted-foreground">{t('settings.runtimeWslAvailability')}</span>
+                  <span className="text-right font-medium">
+                    {systemInfo?.runtime?.wslAvailable ? t('common.installed') : t('common.notInstalled')}
+                  </span>
+                </div>
+                {resolvedRuntimeMode === 'wsl2' && (
+                  <>
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-muted-foreground">{t('settings.runtimeDistro')}</span>
+                      <span className="text-right font-medium">{resolvedRuntimeDistro || t('common.notSet')}</span>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-muted-foreground">{t('settings.runtimeOpenclawInDistro')}</span>
+                      <span className={systemInfo?.openclaw.installed ? 'text-green-600' : 'text-red-500'}>
+                        {systemInfo?.openclaw.installed
+                          ? `v${systemInfo?.openclaw.version}`
+                          : t('settings.runtimeOpenclawMissing')}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         </section>
       )}
 

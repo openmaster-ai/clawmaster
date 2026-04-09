@@ -40,6 +40,23 @@ export interface SystemInfo {
     configPathCandidates?: string[]
     existingConfigPaths?: string[]
   }
+  runtime?: {
+    mode: 'native' | 'wsl2'
+    hostPlatform?: string
+    wslAvailable?: boolean
+    selectedDistro?: string | null
+    selectedDistroExists?: boolean | null
+    backendPort?: number | null
+    autoStartBackend?: boolean | null
+    distros?: Array<{
+      name: string
+      state: string
+      version: number | null
+      isDefault: boolean
+      hasOpenclaw?: boolean
+      openclawVersion?: string
+    }>
+  }
 }
 
 export interface GatewayStatus {

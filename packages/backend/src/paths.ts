@@ -1,12 +1,19 @@
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { getClawmasterRuntimeSelection } from './clawmasterSettings.js'
 import {
   getOpenclawDataDirForProfile,
   getOpenclawProfileSelection,
   type OpenclawProfileSelection,
   type OpenclawProfileContext,
 } from './openclawProfile.js'
+import {
+  getWslHomeDirSync,
+  getWslOpenclawProbeSync,
+  resolveSelectedWslDistroSync,
+  shouldUseWslRuntime,
+} from './wslRuntime.js'
 
 type OpenclawConfigPathOptions = {
   platform?: string
@@ -99,6 +106,11 @@ export function getOpenclawConfigResolution({
   profileSelection,
   existsSync = fs.existsSync,
 }: OpenclawConfigPathOptions = {}): OpenclawConfigResolution {
+  const runtimeSelection = getClawmasterRuntimeSelection({
+    homeDir,
+    settingsPath,
+    platform,
+  })
   const resolvedProfileSelection =
     profileSelection ??
     getOpenclawProfileSelection({
@@ -106,6 +118,34 @@ export function getOpenclawConfigResolution({
       settingsPath,
       platform,
     } satisfies OpenclawProfileContext)
+  if (platform === 'win32' && shouldUseWslRuntime(runtimeSelection)) {
+    const distro = resolveSelectedWslDistroSync(runtimeSelection)
+    const wslHome = distro ? getWslHomeDirSync(distro) : '/home'
+    const dataDir =
+      getOpenclawDataDirForProfile(resolvedProfileSelection, {
+        homeDir: wslHome,
+        platform: 'linux',
+      }) ?? path.posix.join(wslHome, '.openclaw')
+    const configPath = path.posix.join(dataDir, 'openclaw.json')
+    const probe = distro ? getWslOpenclawProbeSync(distro, resolvedProfileSelection) : null
+    return {
+      configPath,
+      dataDir,
+      source:
+        resolvedProfileSelection.kind === 'dev'
+          ? 'profile-dev'
+          : resolvedProfileSelection.kind === 'named'
+            ? 'profile-named'
+            : probe?.configExists
+              ? 'existing-default-home'
+              : 'default-home',
+      profileSelection: resolvedProfileSelection,
+      overrideActive: resolvedProfileSelection.kind !== 'default',
+      configPathCandidates: [configPath],
+      existingConfigPaths: probe?.configExists ? [configPath] : [],
+    }
+  }
+
   const defaultCandidates = getOpenclawConfigPathCandidatesFor({
     platform,
     homeDir,

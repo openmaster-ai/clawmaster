@@ -5,7 +5,8 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { getOpenclawProfileSelection } from '../openclawProfile.js'
-import { saveOpenclawProfile } from './settingsService.js'
+import { getClawmasterRuntimeSelection } from '../clawmasterSettings.js'
+import { saveClawmasterRuntime, saveOpenclawProfile } from './settingsService.js'
 
 function makeTempHome(label: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `clawmaster-${label}-`))
@@ -84,4 +85,26 @@ test('saveOpenclawProfile rejects seeding into an existing named profile config'
       ),
     /already has an OpenClaw config/
   )
+})
+
+test('saveClawmasterRuntime persists WSL2 runtime selection', () => {
+  const homeDir = makeTempHome('runtime-wsl')
+  const context = {
+    homeDir,
+    settingsPath: path.join(homeDir, '.clawmaster', 'settings.json'),
+  }
+
+  saveClawmasterRuntime({
+    mode: 'wsl2',
+    wslDistro: 'Ubuntu-24.04',
+    backendPort: 3101,
+    autoStartBackend: true,
+  }, context)
+
+  assert.deepEqual(getClawmasterRuntimeSelection(context), {
+    mode: 'wsl2',
+    wslDistro: 'Ubuntu-24.04',
+    backendPort: 3101,
+    autoStartBackend: true,
+  })
 })

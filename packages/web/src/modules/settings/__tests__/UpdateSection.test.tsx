@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 
 // Mock window.matchMedia for theme code
 Object.defineProperty(window, 'matchMedia', {
@@ -66,6 +66,23 @@ vi.mock('react-i18next', () => ({
         'settings.profileAutoDetect': 'Default profile detection',
         'settings.profileCandidateIdle': 'Not present',
         'settings.profileApply': 'Apply profile',
+        'settings.runtimeTitle': 'Runtime',
+        'settings.runtimeDesc': 'Choose whether ClawMaster should manage a native Windows install or a WSL2-hosted OpenClaw runtime.',
+        'settings.runtimeNative': 'Native',
+        'settings.runtimeNativeDesc': 'Run commands and manage files in the same Windows environment as ClawMaster.',
+        'settings.runtimeWsl2': 'WSL2',
+        'settings.runtimeWsl2Desc': 'Use a Linux runtime inside WSL2 for OpenClaw and related tooling.',
+        'settings.runtimeDistro': 'WSL distro',
+        'settings.runtimeDistroHint': 'Pick the distro that contains your OpenClaw install.',
+        'settings.runtimeDistroPlaceholder': 'Choose a distro',
+        'settings.runtimeDistroRequired': 'Choose a WSL distro before saving WSL2 mode.',
+        'settings.runtimeSaved': 'Runtime updated.',
+        'settings.runtimeResolved': 'Resolved runtime',
+        'settings.runtimeCurrent': 'Current mode',
+        'settings.runtimeWslAvailability': 'WSL2 available',
+        'settings.runtimeDefaultTag': 'default',
+        'settings.runtimeOpenclawInDistro': 'OpenClaw in distro',
+        'settings.runtimeOpenclawMissing': 'Not found',
         'logs.settingsTitle': 'Diagnostics',
         'logs.settingsDescription': 'Open recent system logs here when you need to troubleshoot runtime issues.',
         'logs.openRecent': 'View Recent Logs',
@@ -102,10 +119,12 @@ const mockInstall = vi.fn()
 const mockBootstrap = vi.fn()
 const mockSaveProfile = vi.fn()
 const mockClearProfile = vi.fn()
+const mockSaveRuntime = vi.fn()
 const mockGetLogsResult = vi.fn()
 
 vi.mock('@/shared/adapters/platformResults', () => ({
   platformResults: {
+    saveClawmasterRuntime: (...args: any[]) => mockSaveRuntime(...args),
     saveOpenclawProfile: (...args: any[]) => mockSaveProfile(...args),
     clearOpenclawProfile: (...args: any[]) => mockClearProfile(...args),
     listOpenclawNpmVersions: (...args: any[]) => mockListVersions(...args),
@@ -135,6 +154,14 @@ vi.mock('@/adapters', () => ({
         configPathCandidates: ['/home/.openclaw/openclaw.json'],
         existingConfigPaths: ['/home/.openclaw/openclaw.json'],
       },
+      runtime: {
+        mode: 'native',
+        hostPlatform: 'darwin',
+        wslAvailable: false,
+        selectedDistro: null,
+        selectedDistroExists: null,
+        distros: [],
+      },
     }),
   },
 }))
@@ -152,6 +179,7 @@ describe('UpdateSection', () => {
     mockBootstrap.mockResolvedValue({ success: true })
     mockSaveProfile.mockResolvedValue({ success: true, data: undefined, error: null })
     mockClearProfile.mockResolvedValue({ success: true, data: undefined, error: null })
+    mockSaveRuntime.mockResolvedValue({ success: true, data: undefined, error: null })
     mockGetLogsResult.mockResolvedValue({
       success: true,
       data: [
@@ -237,6 +265,56 @@ describe('UpdateSection', () => {
     fireEvent.click(screen.getByText('Check for updates'))
     await waitFor(() => {
       expect(screen.getByText('Update to 2026.4.1')).toBeInTheDocument()
+    })
+  })
+
+  it('renders runtime controls for Windows hosts and saves the selected WSL distro', async () => {
+    const { platform } = await import('@/adapters')
+    vi.mocked(platform.detectSystem).mockResolvedValueOnce({
+      nodejs: { installed: true, version: '20.0.0' },
+      npm: { installed: true, version: '10.0.0' },
+      openclaw: {
+        installed: false,
+        version: '',
+        configPath: '/home/dev/.openclaw/openclaw.json',
+        dataDir: '/home/dev/.openclaw',
+        profileMode: 'default',
+        profileName: null,
+        overrideActive: false,
+        configPathCandidates: ['/home/dev/.openclaw/openclaw.json'],
+        existingConfigPaths: [],
+      },
+      runtime: {
+        mode: 'native',
+        hostPlatform: 'win32',
+        wslAvailable: true,
+        selectedDistro: 'Ubuntu-24.04',
+        selectedDistroExists: true,
+        distros: [
+          { name: 'Ubuntu-24.04', state: 'Running', version: 2, isDefault: true, hasOpenclaw: true, openclawVersion: '2026.4.1' },
+        ],
+      },
+    })
+
+    render(<Settings />)
+
+    const runtimeHeading = await screen.findByText('Runtime')
+    expect(runtimeHeading).toBeInTheDocument()
+    const runtimeSection = runtimeHeading.closest('section')
+    expect(runtimeSection).not.toBeNull()
+    const runtime = within(runtimeSection!)
+
+    fireEvent.click(runtime.getByRole('button', { name: /WSL2/ }))
+    fireEvent.change(runtime.getByRole('combobox', { name: 'WSL distro' }), {
+      target: { value: 'Ubuntu-24.04' },
+    })
+    fireEvent.click(runtime.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockSaveRuntime).toHaveBeenCalledWith({
+        mode: 'wsl2',
+        wslDistro: 'Ubuntu-24.04',
+      })
     })
   })
 

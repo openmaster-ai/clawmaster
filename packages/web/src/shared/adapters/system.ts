@@ -15,6 +15,13 @@ export interface OpenclawProfileSeedInput {
   sourcePath?: string
 }
 
+export interface ClawmasterRuntimeInput {
+  mode: 'native' | 'wsl2'
+  wslDistro?: string
+  backendPort?: number
+  autoStartBackend?: boolean
+}
+
 export async function detectSystemResult(): Promise<AdapterResult<SystemInfo>> {
   if (getIsTauri()) {
     return fromPromise(() => tauriInvoke<SystemInfo>('detect_system'))
@@ -53,5 +60,25 @@ export async function clearOpenclawProfileResult(): Promise<AdapterResult<void>>
   }
   return webFetchVoid('/api/settings/openclaw-profile', {
     method: 'DELETE',
+  })
+}
+
+export async function saveClawmasterRuntimeResult(
+  runtime: ClawmasterRuntimeInput
+): Promise<AdapterResult<void>> {
+  if (getIsTauri()) {
+    return fromPromise(() =>
+      tauriInvoke<void>('save_clawmaster_runtime', {
+        mode: runtime.mode,
+        wslDistro: runtime.wslDistro ?? null,
+        backendPort: runtime.backendPort ?? null,
+        autoStartBackend: runtime.autoStartBackend ?? null,
+      })
+    )
+  }
+  return webFetchVoid('/api/settings/runtime', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(runtime),
   })
 }

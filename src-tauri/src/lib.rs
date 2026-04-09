@@ -47,6 +47,7 @@ pub struct SystemInfo {
     pub nodejs: NodejsInfo,
     pub npm: NpmInfo,
     pub openclaw: OpenClawInfo,
+    pub runtime: RuntimeInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +75,34 @@ pub struct OpenClawInfo {
     pub override_active: bool,
     pub config_path_candidates: Vec<String>,
     pub existing_config_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeDistroInfo {
+    pub name: String,
+    pub state: String,
+    pub version: Option<u8>,
+    pub is_default: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_openclaw: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub openclaw_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeInfo {
+    pub mode: String,
+    pub host_platform: String,
+    pub wsl_available: bool,
+    pub selected_distro: Option<String>,
+    pub selected_distro_exists: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backend_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_start_backend: Option<bool>,
+    pub distros: Vec<RuntimeDistroInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,6 +158,20 @@ struct OpenclawProfileSelection {
 struct ClawmasterSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     openclaw_profile: Option<OpenclawProfileSelection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime: Option<ClawmasterRuntimeSelection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ClawmasterRuntimeSelection {
+    mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    wsl_distro: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    backend_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auto_start_backend: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -177,6 +220,65 @@ fn write_clawmaster_settings(settings: &ClawmasterSettings) -> Result<(), String
     fs::write(path, format!("{raw}\n"))
         .map_err(|e| cmd_err_d("CLAWMASTER_SETTINGS_WRITE_FAILED", e))?;
     Ok(())
+}
+
+fn normalize_clawmaster_runtime_selection(
+    mode: Option<String>,
+    wsl_distro: Option<String>,
+    backend_port: Option<u16>,
+    auto_start_backend: Option<bool>,
+) -> ClawmasterRuntimeSelection {
+    let normalized_mode = if matches!(mode.as_deref(), Some("wsl2")) {
+        "wsl2".to_string()
+    } else {
+        "native".to_string()
+    };
+    ClawmasterRuntimeSelection {
+        mode: normalized_mode.clone(),
+        wsl_distro: if normalized_mode == "wsl2" {
+            wsl_distro
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        } else {
+            None
+        },
+        backend_port,
+        auto_start_backend,
+    }
+}
+
+fn get_clawmaster_runtime_selection() -> ClawmasterRuntimeSelection {
+    let settings = read_clawmaster_settings();
+    normalize_clawmaster_runtime_selection(
+        settings.runtime.as_ref().map(|item| item.mode.clone()),
+        settings.runtime.as_ref().and_then(|item| item.wsl_distro.clone()),
+        settings.runtime.as_ref().and_then(|item| item.backend_port),
+        settings.runtime
+            .as_ref()
+            .and_then(|item| item.auto_start_backend),
+    )
+}
+
+fn set_clawmaster_runtime_selection(
+    mode: Option<String>,
+    wsl_distro: Option<String>,
+    backend_port: Option<u16>,
+    auto_start_backend: Option<bool>,
+) -> Result<ClawmasterRuntimeSelection, String> {
+    let normalized =
+        normalize_clawmaster_runtime_selection(mode, wsl_distro, backend_port, auto_start_backend);
+    let mut settings = read_clawmaster_settings();
+    if normalized.mode == "native"
+        && normalized.wsl_distro.is_none()
+        && normalized.backend_port.is_none()
+        && normalized.auto_start_backend.is_none()
+    {
+        settings.runtime = None;
+    } else {
+        settings.runtime = Some(normalized.clone());
+    }
+    write_clawmaster_settings(&settings)?;
+    Ok(normalized)
 }
 
 fn sanitize_profile_name(input: &str) -> Result<String, String> {
@@ -337,6 +439,50 @@ fn seed_named_openclaw_profile_config(
         return Ok(());
     }
 
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let wsl_home = get_wsl_home_dir(&distro);
+        let target_dir = get_openclaw_profile_data_dir_posix(selection, &wsl_home)
+            .ok_or_else(|| "Named OpenClaw profile target could not be resolved".to_string())?;
+        let target_config_path = join_posix(&target_dir, "openclaw.json");
+        if wsl_file_exists(&distro, &target_config_path) {
+            return Err(
+                "Target named profile already has an OpenClaw config. Choose a new profile name or switch directly."
+                    .to_string(),
+            );
+        }
+
+        let raw = match seed_mode {
+            "clone-current" => read_active_openclaw_text_file(&get_config_path())?
+                .ok_or_else(|| {
+                    "Current OpenClaw config does not exist, so there is nothing to clone yet"
+                        .to_string()
+                })?,
+            "import-config" => {
+                let source = seed_path.unwrap_or_default().trim();
+                if source.is_empty() {
+                    return Err("Enter an OpenClaw config path before importing".to_string());
+                }
+                let source_path = expand_home_path(source);
+                if !source_path.exists() {
+                    return Err("Imported OpenClaw config path does not exist".to_string());
+                }
+                if !source_path.is_file() {
+                    return Err("Imported OpenClaw config path must point to a file".to_string());
+                }
+                fs::read_to_string(&source_path)
+                    .map_err(|e| cmd_err_d("PROFILE_SEED_READ_FAILED", e))?
+            }
+            _ => return Err("Unsupported OpenClaw profile seed mode".to_string()),
+        };
+        let parsed: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|_| "Imported OpenClaw config must be valid JSON".to_string())?;
+        let content = serde_json::to_string_pretty(&parsed)
+            .map_err(|e| cmd_err_d("PROFILE_SEED_SERIALIZE_FAILED", e))?;
+        write_text_file_in_wsl(&distro, &target_config_path, &format!("{content}\n"))?;
+        return Ok(());
+    }
+
     let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     let target_dir = get_openclaw_profile_data_dir(selection, &home_dir)
         .ok_or_else(|| "Named OpenClaw profile target could not be resolved".to_string())?;
@@ -363,7 +509,28 @@ fn seed_named_openclaw_profile_config(
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+fn active_wsl_distro() -> Option<String> {
+    let runtime = get_clawmaster_runtime_selection();
+    if should_use_wsl_runtime(&runtime) {
+        resolve_selected_wsl_distro(&runtime)
+    } else {
+        None
+    }
+}
+
 fn openclaw_cmd() -> Command {
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let mut c = Command::new("wsl.exe");
+        c.stdin(Stdio::null());
+        c.args(["-d", &distro, "--", "openclaw"]);
+        for arg in get_openclaw_profile_args(&get_openclaw_profile_selection()) {
+            c.arg(arg);
+        }
+        return c;
+    }
+
     let mut c = Command::new(openclaw_executable_path());
     c.stdin(Stdio::null());
     for arg in get_openclaw_profile_args(&get_openclaw_profile_selection()) {
@@ -381,6 +548,13 @@ fn clawprobe_executable_path() -> PathBuf {
 }
 
 fn clawprobe_cmd() -> Command {
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let mut c = Command::new("wsl.exe");
+        c.args(["-d", &distro, "--", "clawprobe"]);
+        return c;
+    }
+
     Command::new(clawprobe_executable_path())
 }
 
@@ -564,6 +738,274 @@ fn resolve_system_command_path(cmd: &str) -> PathBuf {
     resolved
 }
 
+#[cfg(target_os = "windows")]
+fn join_posix(base: &str, child: &str) -> String {
+    let normalized_base = base.trim_end_matches('/');
+    if normalized_base.is_empty() {
+        format!("/{child}")
+    } else {
+        format!("{normalized_base}/{child}")
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn dirname_posix(path: &str) -> String {
+    let trimmed = path.trim_end_matches('/');
+    match trimmed.rsplit_once('/') {
+        Some((parent, _)) if !parent.is_empty() => parent.to_string(),
+        _ => "/".to_string(),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn get_openclaw_profile_data_dir_posix(
+    selection: &OpenclawProfileSelection,
+    home_dir: &str,
+) -> Option<String> {
+    match selection.kind.as_str() {
+        "dev" => Some(join_posix(home_dir, ".openclaw-dev")),
+        "named" => selection
+            .name
+            .as_ref()
+            .map(|name| join_posix(home_dir, &format!(".openclaw-{name}"))),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone)]
+#[cfg(target_os = "windows")]
+struct WslExecOutput {
+    code: i32,
+    stdout: String,
+    stderr: String,
+}
+
+#[cfg(target_os = "windows")]
+fn shell_escape_posix_arg(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn parse_wsl_list_verbose(stdout: &str) -> Vec<RuntimeDistroInfo> {
+    stdout
+        .lines()
+        .map(|line| line.trim_end_matches('\r').trim_start_matches('\u{feff}'))
+        .filter(|line| !line.trim().is_empty())
+        .filter(|line| !line.trim_start().to_ascii_uppercase().starts_with("NAME"))
+        .filter_map(|line| {
+            let Ok(pattern) =
+                regex_like_parse_wsl_line(line)
+            else {
+                return None;
+            };
+            Some(pattern)
+        })
+        .collect()
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn regex_like_parse_wsl_line(line: &str) -> Result<RuntimeDistroInfo, ()> {
+    let mut chars = line.chars().peekable();
+    let mut is_default = false;
+    while matches!(chars.peek(), Some(ch) if ch.is_whitespace()) {
+        chars.next();
+    }
+    if matches!(chars.peek(), Some('*')) {
+        is_default = true;
+        chars.next();
+    }
+    while matches!(chars.peek(), Some(ch) if ch.is_whitespace()) {
+        chars.next();
+    }
+    let remaining: String = chars.collect();
+    let columns = remaining
+        .split("  ")
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    if columns.len() < 3 {
+        return Err(());
+    }
+    let version = columns
+        .last()
+        .and_then(|value| value.parse::<u8>().ok());
+    let state = columns
+        .get(columns.len().saturating_sub(2))
+        .map(|value| (*value).to_string())
+        .ok_or(())?;
+    let name = columns[..columns.len() - 2].join(" ");
+    if name.is_empty() {
+        return Err(());
+    }
+    Ok(RuntimeDistroInfo {
+        name,
+        state,
+        version,
+        is_default,
+        has_openclaw: None,
+        openclaw_version: None,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn list_wsl_distros() -> Vec<RuntimeDistroInfo> {
+    let output = Command::new("wsl.exe")
+        .args(["--list", "--verbose"])
+        .output();
+    match output {
+        Ok(output) if output.status.success() => {
+            parse_wsl_list_verbose(&String::from_utf8_lossy(&output.stdout))
+        }
+        _ => vec![],
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn list_wsl_distros() -> Vec<RuntimeDistroInfo> {
+    vec![]
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_selected_wsl_distro(selection: &ClawmasterRuntimeSelection) -> Option<String> {
+    let distros = list_wsl_distros();
+    if let Some(name) = selection
+        .wsl_distro
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    {
+        if let Some(found) = distros.iter().find(|item| item.name == name) {
+            return Some(found.name.clone());
+        }
+    }
+    distros
+        .iter()
+        .find(|item| item.is_default)
+        .or_else(|| distros.first())
+        .map(|item| item.name.clone())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn resolve_selected_wsl_distro(_selection: &ClawmasterRuntimeSelection) -> Option<String> {
+    None
+}
+
+fn should_use_wsl_runtime(selection: &ClawmasterRuntimeSelection) -> bool {
+    cfg!(target_os = "windows") && selection.mode == "wsl2"
+}
+
+#[cfg(target_os = "windows")]
+fn exec_wsl_command(distro: &str, cmd: &str, args: &[&str]) -> Result<WslExecOutput, String> {
+    let output = Command::new("wsl.exe")
+        .args(["-d", distro, "--", cmd])
+        .args(args)
+        .output()
+        .map_err(|e| cmd_err_d("WSL_COMMAND_SPAWN_FAILED", e))?;
+    Ok(WslExecOutput {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn run_wsl_shell(
+    distro: &str,
+    script: &str,
+    stdin_payload: Option<&str>,
+) -> Result<WslExecOutput, String> {
+    let mut command = Command::new("wsl.exe");
+    command
+        .args(["-d", distro, "--", "bash", "-lc", script])
+        .stdin(if stdin_payload.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command
+        .spawn()
+        .map_err(|e| cmd_err_d("WSL_COMMAND_SPAWN_FAILED", e))?;
+
+    if let Some(payload) = stdin_payload {
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(payload.as_bytes())
+                .map_err(|e| cmd_err_d("WSL_COMMAND_STDIN_WRITE_FAILED", e))?;
+        }
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| cmd_err_d("WSL_COMMAND_WAIT_FAILED", e))?;
+    Ok(WslExecOutput {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn get_wsl_home_dir(distro: &str) -> String {
+    match run_wsl_shell(distro, "printf %s \"$HOME\"", None) {
+        Ok(output) if output.code == 0 && !output.stdout.trim().is_empty() => {
+            output.stdout.trim().to_string()
+        }
+        _ => "/home".to_string(),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn wsl_file_exists(distro: &str, path: &str) -> bool {
+    run_wsl_shell(
+        distro,
+        &format!("[ -f {} ]", shell_escape_posix_arg(path)),
+        None,
+    )
+    .map(|output| output.code == 0)
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn wsl_is_dir(distro: &str, path: &str) -> bool {
+    run_wsl_shell(
+        distro,
+        &format!("[ -d {} ]", shell_escape_posix_arg(path)),
+        None,
+    )
+    .map(|output| output.code == 0)
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn read_text_file_in_wsl(distro: &str, path: &str) -> Result<Option<String>, String> {
+    let output = run_wsl_shell(distro, &format!("cat {}", shell_escape_posix_arg(path)), None)?;
+    if output.code != 0 {
+        return Ok(None);
+    }
+    Ok(Some(output.stdout))
+}
+
+#[cfg(target_os = "windows")]
+fn write_text_file_in_wsl(distro: &str, path: &str, content: &str) -> Result<(), String> {
+    let parent = dirname_posix(path);
+    let script = format!(
+        "mkdir -p {} && cat > {}",
+        shell_escape_posix_arg(&parent),
+        shell_escape_posix_arg(path)
+    );
+    let output = run_wsl_shell(distro, &script, Some(content))?;
+    if output.code == 0 {
+        Ok(())
+    } else {
+        Err(cmd_err_d(
+            "WSL_FILE_WRITE_FAILED",
+            output.stderr.trim().to_string(),
+        ))
+    }
+}
+
 // OpenClaw config file path
 fn get_config_path_candidates_for(
     is_windows: bool,
@@ -600,6 +1042,7 @@ fn get_config_resolution() -> OpenclawConfigResolution {
     let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
     let profile_selection = get_openclaw_profile_selection();
+    let _runtime_selection = get_clawmaster_runtime_selection();
     let default_candidates =
         get_config_path_candidates_for(cfg!(target_os = "windows"), home_dir.clone(), config_dir);
     let existing_config_paths = default_candidates
@@ -607,6 +1050,38 @@ fn get_config_resolution() -> OpenclawConfigResolution {
         .filter(|candidate| candidate.exists())
         .cloned()
         .collect::<Vec<_>>();
+
+    #[cfg(target_os = "windows")]
+    if should_use_wsl_runtime(&_runtime_selection) {
+        if let Some(distro) = resolve_selected_wsl_distro(&_runtime_selection) {
+            let wsl_home = get_wsl_home_dir(&distro);
+            let data_dir = get_openclaw_profile_data_dir_posix(&profile_selection, &wsl_home)
+                .unwrap_or_else(|| join_posix(&wsl_home, ".openclaw"));
+            let config_path = join_posix(&data_dir, "openclaw.json");
+            let config_exists = wsl_file_exists(&distro, &config_path);
+            return OpenclawConfigResolution {
+                config_path: PathBuf::from(config_path.clone()),
+                data_dir: PathBuf::from(data_dir.clone()),
+                source: if profile_selection.kind == "dev" {
+                    "profile-dev".to_string()
+                } else if profile_selection.kind == "named" {
+                    "profile-named".to_string()
+                } else if config_exists {
+                    "existing-default-home".to_string()
+                } else {
+                    "default-home".to_string()
+                },
+                profile_selection,
+                override_active: profile_selection.kind != "default",
+                config_path_candidates: vec![PathBuf::from(config_path.clone())],
+                existing_config_paths: if config_exists {
+                    vec![PathBuf::from(config_path)]
+                } else {
+                    vec![]
+                },
+            };
+        }
+    }
 
     if let Some(data_dir) = get_openclaw_profile_data_dir(&profile_selection, &home_dir) {
         return OpenclawConfigResolution {
@@ -652,10 +1127,44 @@ fn get_config_path() -> PathBuf {
 }
 
 fn get_openclaw_memory_dir() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    if active_wsl_distro().is_some() {
+        let config_path = get_config_path();
+        return PathBuf::from(join_posix(
+            &dirname_posix(&config_path.to_string_lossy()),
+            "memory",
+        ));
+    }
+
     get_config_path()
         .parent()
         .unwrap_or(&PathBuf::from("."))
         .join("memory")
+}
+
+fn read_active_openclaw_text_file(path: &Path) -> Result<Option<String>, String> {
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        return read_text_file_in_wsl(&distro, &path.to_string_lossy());
+    }
+
+    match fs::read_to_string(path) {
+        Ok(content) => Ok(Some(content)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(cmd_err_d("IO_ERROR", error)),
+    }
+}
+
+fn write_active_openclaw_text_file(path: &Path, content: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        return write_text_file_in_wsl(&distro, &path.to_string_lossy(), content);
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| cmd_err_d("IO_ERROR", e))?;
+    }
+    fs::write(path, content).map_err(|e| cmd_err_d("IO_ERROR", e))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -771,6 +1280,69 @@ fn collect_openclaw_memory_files(
         });
     }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn collect_openclaw_memory_files_wsl(
+    distro: &str,
+    root: &str,
+) -> Result<Vec<OpenclawMemoryFileEntry>, String> {
+    if !wsl_is_dir(distro, root) {
+        return Ok(vec![]);
+    }
+    let script = format!(
+        "find {} -type f -print0 | while IFS= read -r -d '' file; do size=$(stat -c %s \"$file\" 2>/dev/null || echo 0); mtime=$(stat -c %Y \"$file\" 2>/dev/null || echo 0); printf '%s\\t%s\\t%s\\n' \"$file\" \"$size\" \"$mtime\"; done",
+        shell_escape_posix_arg(root)
+    );
+    let output = run_wsl_shell(distro, &script, None)?;
+    if output.code != 0 {
+        return Err(cmd_err_d(
+            "OPENCLAW_MEMORY_FILES_READ_FAILED",
+            output.stderr.trim(),
+        ));
+    }
+    let mut files = Vec::new();
+    for line in output.stdout.lines().filter(|line| !line.trim().is_empty()) {
+        let mut parts = line.splitn(3, '\t');
+        let absolute_path = match parts.next() {
+            Some(value) if !value.is_empty() => value.to_string(),
+            _ => continue,
+        };
+        let size = parts
+            .next()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(0);
+        let modified_at_ms = parts
+            .next()
+            .and_then(|value| value.parse::<u64>().ok())
+            .map(|seconds| seconds.saturating_mul(1000))
+            .unwrap_or(0);
+        let name = absolute_path
+            .rsplit('/')
+            .next()
+            .unwrap_or(absolute_path.as_str())
+            .to_string();
+        let relative_path = absolute_path
+            .strip_prefix(root)
+            .unwrap_or(absolute_path.as_str())
+            .trim_start_matches('/')
+            .to_string();
+        let extension = Path::new(&name)
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .to_string();
+        files.push(OpenclawMemoryFileEntry {
+            name: name.clone(),
+            relative_path,
+            absolute_path,
+            size,
+            modified_at_ms,
+            extension,
+            kind: classify_openclaw_memory_file(&name).to_string(),
+        });
+    }
+    Ok(files)
 }
 
 fn resolve_openclaw_memory_relative_path(relative_path: &str) -> Result<PathBuf, String> {
@@ -1065,6 +1637,7 @@ fn reindex_openclaw_memory() -> Result<OpenclawMemoryReindexPayload, String> {
 mod tests {
     use super::{
         get_config_path_candidates_for, get_openclaw_profile_args, get_openclaw_profile_data_dir,
+        normalize_clawmaster_runtime_selection, parse_wsl_list_verbose,
         resolve_config_path_from_candidates, OpenclawProfileSelection,
     };
     use std::fs;
@@ -1167,10 +1740,59 @@ mod tests {
             PathBuf::from("/home/alice/.openclaw-team-a")
         );
     }
+
+    #[test]
+    fn runtime_selection_defaults_to_native_and_trims_wsl_distro() {
+        let selection = normalize_clawmaster_runtime_selection(
+            Some("wsl2".to_string()),
+            Some(" Ubuntu-24.04 ".to_string()),
+            Some(3001),
+            Some(true),
+        );
+
+        assert_eq!(selection.mode, "wsl2");
+        assert_eq!(selection.wsl_distro.as_deref(), Some("Ubuntu-24.04"));
+        assert_eq!(selection.backend_port, Some(3001));
+        assert_eq!(selection.auto_start_backend, Some(true));
+
+        let native = normalize_clawmaster_runtime_selection(
+            Some("native".to_string()),
+            Some("ignored".to_string()),
+            None,
+            None,
+        );
+        assert_eq!(native.mode, "native");
+        assert_eq!(native.wsl_distro, None);
+    }
+
+    #[test]
+    fn parse_wsl_verbose_output_reads_default_distro() {
+        let parsed = parse_wsl_list_verbose(
+            "  NAME                   STATE           VERSION\r\n* Ubuntu-24.04           Running         2\r\n  Debian                 Stopped         2\r\n",
+        );
+
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].name, "Ubuntu-24.04");
+        assert_eq!(parsed[0].state, "Running");
+        assert_eq!(parsed[0].version, Some(2));
+        assert!(parsed[0].is_default);
+        assert_eq!(parsed[1].name, "Debian");
+        assert_eq!(parsed[1].version, Some(2));
+        assert!(!parsed[1].is_default);
+    }
 }
 
 // Run command with --version-style arg; return stdout if success
 fn check_command(cmd: &str, version_arg: &str) -> Option<String> {
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let output = exec_wsl_command(&distro, cmd, &[version_arg]).ok()?;
+        if output.code == 0 {
+            return Some(output.stdout.trim().to_string());
+        }
+        return None;
+    }
+
     let output = Command::new(cmd).arg(version_arg).output().ok()?;
 
     if output.status.success() {
@@ -1184,6 +1806,16 @@ fn check_command(cmd: &str, version_arg: &str) -> Option<String> {
 // Detect Node / npm / OpenClaw for the UI
 #[tauri::command]
 fn detect_system() -> Result<SystemInfo, String> {
+    let runtime_selection = get_clawmaster_runtime_selection();
+    let distros = list_wsl_distros();
+    #[cfg(target_os = "windows")]
+    let mut distros = distros;
+    let selected_distro = if should_use_wsl_runtime(&runtime_selection) {
+        resolve_selected_wsl_distro(&runtime_selection)
+    } else {
+        None
+    };
+
     // Node.js
     let nodejs_version = check_command("node", "--version");
     let nodejs = NodejsInfo {
@@ -1233,16 +1865,54 @@ fn detect_system() -> Result<SystemInfo, String> {
             .collect(),
     };
 
+    #[cfg(target_os = "windows")]
+    if let Some(selected_name) = selected_distro.as_ref() {
+        for distro in distros.iter_mut() {
+            if distro.name != *selected_name {
+                continue;
+            }
+            let probe = exec_wsl_command(&distro.name, "openclaw", &["--version"]).ok();
+            distro.has_openclaw = Some(probe.as_ref().map(|item| item.code == 0).unwrap_or(false));
+            distro.openclaw_version = probe
+                .filter(|item| item.code == 0)
+                .map(|item| item.stdout.trim().replace("openclaw ", "").replace("v", ""));
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    let _ = &selected_distro;
+
     Ok(SystemInfo {
         nodejs,
         npm,
         openclaw,
+        runtime: RuntimeInfo {
+            mode: runtime_selection.mode.clone(),
+            host_platform: std::env::consts::OS.to_string(),
+            wsl_available: !distros.is_empty(),
+            selected_distro: if runtime_selection.mode == "wsl2" {
+                runtime_selection
+                    .wsl_distro
+                    .clone()
+                    .or_else(|| selected_distro.clone())
+            } else {
+                None
+            },
+            selected_distro_exists: if runtime_selection.mode == "wsl2" {
+                Some(selected_distro.is_some())
+            } else {
+                None
+            },
+            backend_port: runtime_selection.backend_port,
+            auto_start_backend: runtime_selection.auto_start_backend,
+            distros,
+        },
     })
 }
 
 fn default_gateway_port_from_config() -> u16 {
     let p = get_config_path();
-    let Ok(s) = fs::read_to_string(&p) else {
+    let Ok(Some(s)) = read_active_openclaw_text_file(&p) else {
         return 18789;
     };
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else {
@@ -1404,11 +2074,8 @@ fn start_gateway() -> Result<(), String> {
 #[tauri::command]
 fn bootstrap_openclaw_after_install() -> Result<BootstrapAfterInstallDto, String> {
     let config_path = get_config_path();
-    if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| cmd_err_d("IO_ERROR", e))?;
-    }
-    if !config_path.exists() {
-        fs::write(&config_path, "{}\n").map_err(|e| cmd_err_d("IO_ERROR", e))?;
+    if read_active_openclaw_text_file(&config_path)?.is_none() {
+        write_active_openclaw_text_file(&config_path, "{}\n")?;
     }
 
     let doc = openclaw_cmd()
@@ -1463,14 +2130,11 @@ fn restart_gateway() -> Result<(), String> {
 fn get_config() -> Result<OpenClawConfig, String> {
     let config_path = get_config_path();
 
-    if !config_path.exists() {
+    let Some(content) = read_active_openclaw_text_file(&config_path)? else {
         return Ok(OpenClawConfig {
             data: serde_json::json!({}),
         });
-    }
-
-    let content =
-        fs::read_to_string(&config_path).map_err(|e| cmd_err_d("CONFIG_READ_FAILED", e))?;
+    };
 
     let data: serde_json::Value =
         serde_json::from_str(&content).map_err(|e| cmd_err_d("CONFIG_PARSE_FAILED", e))?;
@@ -1482,16 +2146,15 @@ fn get_config() -> Result<OpenClawConfig, String> {
 #[tauri::command]
 fn save_config(config: serde_json::Value) -> Result<(), String> {
     let config_path = get_config_path();
-
-    // Ensure parent directory exists
-    if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| cmd_err_d("CONFIG_MKDIR_FAILED", e))?;
-    }
-
     let content = serde_json::to_string_pretty(&config)
         .map_err(|e| cmd_err_d("CONFIG_SERIALIZE_FAILED", e))?;
-
-    fs::write(&config_path, content).map_err(|e| cmd_err_d("CONFIG_WRITE_FAILED", e))?;
+    write_active_openclaw_text_file(&config_path, &content).map_err(|e| {
+        if e.starts_with(CMD_ERR_PREFIX) {
+            e
+        } else {
+            cmd_err_d("CONFIG_WRITE_FAILED", e)
+        }
+    })?;
 
     Ok(())
 }
@@ -1508,12 +2171,15 @@ pub struct NpmUninstallOutput {
 #[tauri::command]
 fn reset_openclaw_config() -> Result<(), String> {
     let config_path = get_config_path();
-    if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| cmd_err_d("RESET_MKDIR_FAILED", e))?;
-    }
     let content = serde_json::to_string_pretty(&serde_json::json!({}))
         .map_err(|e| cmd_err_d("RESET_SERIALIZE_FAILED", e))?;
-    fs::write(&config_path, content).map_err(|e| cmd_err_d("RESET_WRITE_FAILED", e))?;
+    write_active_openclaw_text_file(&config_path, &content).map_err(|e| {
+        if e.starts_with(CMD_ERR_PREFIX) {
+            e
+        } else {
+            cmd_err_d("RESET_WRITE_FAILED", e)
+        }
+    })?;
     Ok(())
 }
 
@@ -1538,6 +2204,17 @@ fn save_openclaw_profile(
 #[tauri::command]
 fn clear_openclaw_profile() -> Result<(), String> {
     clear_openclaw_profile_selection()
+}
+
+#[tauri::command]
+fn save_clawmaster_runtime(
+    mode: Option<String>,
+    wsl_distro: Option<String>,
+    backend_port: Option<u16>,
+    auto_start_backend: Option<bool>,
+) -> Result<(), String> {
+    set_clawmaster_runtime_selection(mode, wsl_distro, backend_port, auto_start_backend)
+        .map(|_| ())
 }
 
 fn npm_root_g() -> Result<String, String> {
@@ -2235,7 +2912,7 @@ fn expand_log_file_path(f: &str) -> PathBuf {
 fn openclaw_log_read_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
     let config_path = get_config_path();
-    if let Ok(raw) = fs::read_to_string(&config_path) {
+    if let Ok(Some(raw)) = read_active_openclaw_text_file(&config_path) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
             if let Some(file) = v
                 .get("logging")
@@ -2246,6 +2923,18 @@ fn openclaw_log_read_paths() -> Vec<PathBuf> {
             }
         }
     }
+    #[cfg(target_os = "windows")]
+    if active_wsl_distro().is_some() {
+        let logs_dir = join_posix(&dirname_posix(&config_path.to_string_lossy()), "logs");
+        for name in ["gateway.log", "openclaw.log"] {
+            let p = PathBuf::from(join_posix(&logs_dir, name));
+            if !paths.contains(&p) {
+                paths.push(p);
+            }
+        }
+        return paths;
+    }
+
     let logs_dir = config_path
         .parent()
         .unwrap_or(&PathBuf::from("."))
@@ -2263,10 +2952,28 @@ fn openclaw_log_read_paths() -> Vec<PathBuf> {
 #[tauri::command]
 fn get_logs(lines: usize) -> Result<Vec<String>, String> {
     for log_path in openclaw_log_read_paths() {
-        if !log_path.exists() {
-            continue;
-        }
-        let content = fs::read_to_string(&log_path).map_err(|e| cmd_err_d("LOG_READ_FAILED", e))?;
+        let content = {
+            #[cfg(target_os = "windows")]
+            if let Some(distro) = active_wsl_distro() {
+                match read_text_file_in_wsl(&distro, &log_path.to_string_lossy())? {
+                    Some(content) => content,
+                    None => continue,
+                }
+            } else {
+                if !log_path.exists() {
+                    continue;
+                }
+                fs::read_to_string(&log_path).map_err(|e| cmd_err_d("LOG_READ_FAILED", e))?
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                if !log_path.exists() {
+                    continue;
+                }
+                fs::read_to_string(&log_path).map_err(|e| cmd_err_d("LOG_READ_FAILED", e))?
+            }
+        };
         let non_empty: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
         if non_empty.is_empty() {
             continue;
@@ -2323,6 +3030,17 @@ fn run_openclaw_command_captured(args: Vec<String>) -> Result<OpenclawCapturedOu
 #[tauri::command]
 fn list_openclaw_memory_files() -> Result<OpenclawMemoryFilesPayload, String> {
     let root = get_openclaw_memory_dir();
+
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let mut files = collect_openclaw_memory_files_wsl(&distro, &root.to_string_lossy())?;
+        files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+        return Ok(OpenclawMemoryFilesPayload {
+            root: root.to_string_lossy().to_string(),
+            files,
+        });
+    }
+
     if !root.is_dir() {
         return Ok(OpenclawMemoryFilesPayload {
             root: root.to_string_lossy().to_string(),
@@ -2341,6 +3059,23 @@ fn list_openclaw_memory_files() -> Result<OpenclawMemoryFilesPayload, String> {
 #[tauri::command]
 fn delete_openclaw_memory_file(relative_path: String) -> Result<(), String> {
     let target = resolve_openclaw_memory_relative_path(&relative_path)?;
+
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let output = run_wsl_shell(
+            &distro,
+            &format!("rm -f {}", shell_escape_posix_arg(&target.to_string_lossy())),
+            None,
+        )?;
+        if output.code == 0 {
+            return Ok(());
+        }
+        return Err(cmd_err_d(
+            "OPENCLAW_MEMORY_FILE_DELETE_FAILED",
+            output.stderr.trim(),
+        ));
+    }
+
     fs::remove_file(target).map_err(|e| cmd_err_d("OPENCLAW_MEMORY_FILE_DELETE_FAILED", e))
 }
 
@@ -2475,6 +3210,26 @@ fn run_system_command(cmd: String, args: Vec<String>) -> Result<String, String> 
     let program = resolve_system_command_path(trimmed);
     let normalized_args: Vec<String> = args.iter().map(|arg| expand_exec_arg_home(arg)).collect();
 
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let arg_refs = normalized_args
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let output = exec_wsl_command(&distro, trimmed, &arg_refs)?;
+        if output.code == 0 {
+            return Ok(output.stdout);
+        }
+        let msg = if !output.stderr.trim().is_empty() {
+            output.stderr
+        } else if !output.stdout.trim().is_empty() {
+            output.stdout
+        } else {
+            format!("exit {}", output.code)
+        };
+        return Err(cmd_err_d("SYSTEM_CMD_FAILED", msg.trim()));
+    }
+
     let output = Command::new(program)
         .args(&normalized_args)
         .stdin(Stdio::null())
@@ -2513,6 +3268,7 @@ pub fn run() {
             reset_openclaw_config,
             save_openclaw_profile,
             clear_openclaw_profile,
+            save_clawmaster_runtime,
             uninstall_openclaw_cli,
             list_openclaw_npm_versions,
             npm_install_openclaw_global,

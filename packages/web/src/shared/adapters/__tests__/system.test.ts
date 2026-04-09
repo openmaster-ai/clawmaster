@@ -51,4 +51,24 @@ describe('system adapters', () => {
       method: 'DELETE',
     })
   })
+
+  it('posts the selected runtime in web mode', async () => {
+    const { webFetchVoid } = await import('../webHttp')
+    const { saveClawmasterRuntimeResult } = await import('../system')
+    vi.mocked(webFetchVoid).mockResolvedValue({ success: true, data: undefined, error: null })
+
+    await saveClawmasterRuntimeResult({
+      mode: 'wsl2',
+      wslDistro: 'Ubuntu-24.04',
+    })
+
+    expect(webFetchVoid).toHaveBeenCalledWith('/api/settings/runtime', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'wsl2',
+        wslDistro: 'Ubuntu-24.04',
+      }),
+    })
+  })
 })

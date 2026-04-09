@@ -4,8 +4,10 @@ import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { homedir, tmpdir, platform } from 'os'
 import path from 'path'
+import { getClawmasterRuntimeSelection } from '../clawmasterSettings.js'
 import { execOpenclaw } from '../execOpenclaw.js'
 import { runClawprobeCommand } from '../execClawprobe.js'
+import { execWslCommand, resolveSelectedWslDistroSync, shouldUseWslRuntime } from '../wslRuntime.js'
 
 const execFileAsync = promisify(execFile)
 const IS_WINDOWS = platform() === 'win32'
@@ -118,6 +120,29 @@ export function registerExecRoutes(app: Express): void {
           stderr: result.stderr.trim(),
           exitCode: result.code,
           ...(result.ok ? {} : { error: result.stderr.trim() || result.stdout.trim() }),
+        })
+        return
+      }
+      const runtimeSelection = getClawmasterRuntimeSelection()
+      if (shouldUseWslRuntime(runtimeSelection)) {
+        const distro = resolveSelectedWslDistroSync(runtimeSelection)
+        if (!distro) {
+          res.json({
+            ok: false,
+            error: 'WSL2 runtime selected but no distro could be resolved',
+            stdout: '',
+            stderr: '',
+            exitCode: 1,
+          })
+          return
+        }
+        const result = await execWslCommand(distro, normalized.cmd, normalized.args)
+        res.json({
+          ok: result.code === 0,
+          stdout: result.stdout.trim(),
+          stderr: result.stderr.trim(),
+          exitCode: result.code,
+          ...(result.code === 0 ? {} : { error: result.stderr.trim() || result.stdout.trim() }),
         })
         return
       }

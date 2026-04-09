@@ -11,7 +11,14 @@ import {
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { getClawmasterRuntimeSelection } from './clawmasterSettings.js'
 import { getOpenclawProfileArgs } from './openclawProfile.js'
+import {
+  execWslCommand,
+  resolveCommandInWslSync,
+  resolveSelectedWslDistroSync,
+  shouldUseWslRuntime,
+} from './wslRuntime.js'
 
 /** Node supports `stdio` on `execFile`; `@types/node` only lists it on spawn options */
 type ExecOpenclawFileOpts = ExecFileOptions & { stdio?: StdioOptions }
@@ -137,6 +144,19 @@ function resolveDarwinCompatibleNodeBin(): string | null {
 }
 
 function resolveOpenclawCommand(): ResolvedOpenclawCommand {
+  const runtimeSelection = getClawmasterRuntimeSelection()
+  if (shouldUseWslRuntime(runtimeSelection)) {
+    const distro = resolveSelectedWslDistroSync(runtimeSelection)
+    if (distro) {
+      const openclawBin = resolveCommandInWslSync(distro, 'openclaw') ?? 'openclaw'
+      return {
+        bin: 'wsl.exe',
+        argsPrefix: ['-d', distro, '--', openclawBin, ...getOpenclawProfileArgs()],
+        env: process.env,
+      }
+    }
+  }
+
   const openclawBin = resolveOpenclawBin()
   if (process.platform === 'darwin') {
     const nodeBin = resolveDarwinCompatibleNodeBin()
@@ -414,6 +434,23 @@ export function execShellCommand(command: string): Promise<{
   stdout: string
   stderr: string
 }> {
+  const runtimeSelection = getClawmasterRuntimeSelection()
+  if (shouldUseWslRuntime(runtimeSelection)) {
+    const distro = resolveSelectedWslDistroSync(runtimeSelection)
+    if (!distro) {
+      return Promise.resolve({
+        code: 1,
+        stdout: '',
+        stderr: 'WSL2 runtime selected but no distro could be resolved',
+      })
+    }
+    return execWslCommand(distro, 'bash', ['-lc', command]).then((result) => ({
+      code: result.code,
+      stdout: result.stdout.trim(),
+      stderr: result.stderr.trim(),
+    }))
+  }
+
   return new Promise((resolve, reject) => {
     exec(
       command,
@@ -445,6 +482,15 @@ export function execNpmInstallGlobalFile(absolutePath: string): Promise<{
   stdout: string
   stderr: string
 }> {
+  const runtimeSelection = getClawmasterRuntimeSelection()
+  if (shouldUseWslRuntime(runtimeSelection)) {
+    return Promise.resolve({
+      code: 1,
+      stdout: '',
+      stderr: 'Installing a local npm tarball is not supported while the OpenClaw runtime is set to WSL2',
+    })
+  }
+
   return new Promise((resolve, reject) => {
     execFile(
       'npm',

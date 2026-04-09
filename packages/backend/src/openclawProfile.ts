@@ -1,16 +1,16 @@
-import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import {
+  readClawmasterSettings,
+  writeClawmasterSettings,
+  type ClawmasterSettingsContext,
+} from './clawmasterSettings.js'
 
 export type OpenclawProfileKind = 'default' | 'dev' | 'named'
 
 export interface OpenclawProfileSelection {
   kind: OpenclawProfileKind
   name?: string
-}
-
-type ClawmasterSettings = {
-  openclawProfile?: OpenclawProfileSelection
 }
 
 type PlatformPath = Pick<typeof path, 'join' | 'dirname'>
@@ -27,34 +27,6 @@ export function getOpenclawPathModule(platformName: string = process.platform): 
 
 function resolveHomeDir(homeDir?: string): string {
   return homeDir ?? os.homedir()
-}
-
-function getClawmasterSettingsPath(context: OpenclawProfileContext = {}): string {
-  if (context.settingsPath) {
-    return context.settingsPath
-  }
-  const pathModule = getOpenclawPathModule(context.platform)
-  return pathModule.join(resolveHomeDir(context.homeDir), '.clawmaster', 'settings.json')
-}
-
-function readClawmasterSettings(context: OpenclawProfileContext = {}): ClawmasterSettings {
-  try {
-    const raw = fs.readFileSync(getClawmasterSettingsPath(context), 'utf8')
-    const parsed = JSON.parse(raw) as ClawmasterSettings
-    return typeof parsed === 'object' && parsed !== null ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-function writeClawmasterSettings(
-  settings: ClawmasterSettings,
-  context: OpenclawProfileContext = {}
-): void {
-  const file = getClawmasterSettingsPath(context)
-  const pathModule = getOpenclawPathModule(context.platform)
-  fs.mkdirSync(pathModule.dirname(file), { recursive: true })
-  fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`, 'utf8')
 }
 
 function sanitizeProfileName(input: string): string {
@@ -92,7 +64,9 @@ export function normalizeOpenclawProfileSelection(
 export function getOpenclawProfileSelection(
   context: OpenclawProfileContext = {}
 ): OpenclawProfileSelection {
-  return normalizeOpenclawProfileSelection(readClawmasterSettings(context).openclawProfile)
+  return normalizeOpenclawProfileSelection(
+    readClawmasterSettings(context as ClawmasterSettingsContext).openclawProfile
+  )
 }
 
 export function setOpenclawProfileSelection(
@@ -107,16 +81,16 @@ export function setOpenclawProfileSelection(
 
   const next = readClawmasterSettings(context)
   next.openclawProfile = normalized
-  writeClawmasterSettings(next, context)
+  writeClawmasterSettings(next, context as ClawmasterSettingsContext)
   return normalized
 }
 
 export function clearOpenclawProfileSelection(
   context: OpenclawProfileContext = {}
 ): void {
-  const next = readClawmasterSettings(context)
+  const next = readClawmasterSettings(context as ClawmasterSettingsContext)
   delete next.openclawProfile
-  writeClawmasterSettings(next, context)
+  writeClawmasterSettings(next, context as ClawmasterSettingsContext)
 }
 
 export function getOpenclawProfileArgs(

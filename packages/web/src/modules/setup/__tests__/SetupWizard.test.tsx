@@ -64,6 +64,14 @@ describe('SetupWizard', () => {
           configPathCandidates: ['/home/.openclaw/openclaw.json'],
           existingConfigPaths: [],
         },
+        runtime: {
+          mode: 'native',
+          hostPlatform: 'darwin',
+          wslAvailable: false,
+          selectedDistro: null,
+          selectedDistroExists: null,
+          distros: [],
+        },
       },
       error: null,
     })
@@ -170,5 +178,39 @@ describe('SetupWizard', () => {
         },
       )
     })
+  })
+
+  it('shows WSL runtime guidance on Windows when OpenClaw is only available through WSL2', async () => {
+    mockDetectSystem.mockResolvedValueOnce({
+      success: true,
+      data: {
+        nodejs: { installed: true, version: '20.0.0' },
+        npm: { installed: true, version: '10.0.0' },
+        openclaw: {
+          installed: false,
+          version: '',
+          configPath: '/home/.openclaw/openclaw.json',
+          dataDir: '/home/.openclaw',
+          profileMode: 'default',
+          profileName: null,
+          overrideActive: false,
+          configPathCandidates: ['/home/.openclaw/openclaw.json'],
+          existingConfigPaths: [],
+        },
+        runtime: {
+          mode: 'native',
+          hostPlatform: 'win32',
+          wslAvailable: true,
+          selectedDistro: 'Ubuntu-24.04',
+          selectedDistroExists: true,
+          distros: [{ name: 'Ubuntu-24.04', state: 'Running', version: 2, isDefault: true }],
+        },
+      },
+      error: null,
+    })
+
+    render(<SetupWizard onComplete={() => {}} />)
+
+    expect(await screen.findByText(/switch the runtime in Settings/i)).toBeInTheDocument()
   })
 })

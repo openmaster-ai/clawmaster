@@ -1,5 +1,10 @@
 import fs from 'node:fs'
 import {
+  getClawmasterRuntimeSelection,
+  setClawmasterRuntimeSelection,
+  type ClawmasterRuntimeSelection,
+} from '../clawmasterSettings.js'
+import {
   expandUserPath,
   getDefaultDesktopExportDir,
   getOpenclawConfigResolution,
@@ -23,6 +28,8 @@ export interface OpenclawProfileSeedInput {
   mode?: 'empty' | 'clone-current' | 'import-config'
   sourcePath?: string
 }
+
+export type ClawmasterRuntimeInput = Partial<ClawmasterRuntimeSelection>
 
 export function getBackupDefaults() {
   const snapshotsDir = getOpenclawSnapshotsDir()
@@ -161,6 +168,17 @@ export function saveOpenclawProfile(
 
 export function resetOpenclawProfile(context: OpenclawProfileContext = {}) {
   clearOpenclawProfileSelection(context)
+}
+
+export function getClawmasterRuntime() {
+  return getClawmasterRuntimeSelection()
+}
+
+export function saveClawmasterRuntime(
+  runtime?: ClawmasterRuntimeInput | null,
+  context: OpenclawProfileContext = {}
+) {
+  return setClawmasterRuntimeSelection(runtime, context)
 }
 
 export async function uninstallOpenclaw() {

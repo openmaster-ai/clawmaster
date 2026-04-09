@@ -3,7 +3,13 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { getClawmasterRuntimeSelection } from './clawmasterSettings.js'
 import { normalizeLoginShellWhichLine } from './shellWhichNormalize.js'
+import {
+  resolveCommandInWslSync,
+  resolveSelectedWslDistroSync,
+  shouldUseWslRuntime,
+} from './wslRuntime.js'
 
 const require = createRequire(import.meta.url)
 const execFileAsync = promisify(execFile)
@@ -180,6 +186,19 @@ export function resolveClawprobeCommandForTest(options: {
 }
 
 function resolveClawprobeCommand(): ClawprobeCommandResolution {
+  const runtimeSelection = getClawmasterRuntimeSelection()
+  if (shouldUseWslRuntime(runtimeSelection)) {
+    const distro = resolveSelectedWslDistroSync(runtimeSelection)
+    if (distro) {
+      return {
+        cmd: 'wsl.exe',
+        argsPrefix: ['-d', distro, '--', resolveCommandInWslSync(distro, 'clawprobe') ?? 'clawprobe'],
+        source: 'bare',
+        globalInstallDetected: false,
+      }
+    }
+  }
+
   return resolveClawprobeCommandForTest({
     localPackageRoot: getClawprobePackageRoot(),
     globalPackageRoot: getGlobalClawprobePackageRoot(),

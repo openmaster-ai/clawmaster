@@ -1,5 +1,13 @@
 import fs from 'fs'
+import { getClawmasterRuntimeSelection } from './clawmasterSettings.js'
 import { getOpenclawConfigPath, ensureConfigDir } from './paths.js'
+import {
+  getWslOpenclawProbeSync,
+  readTextFileInWslSync,
+  resolveSelectedWslDistroSync,
+  shouldUseWslRuntime,
+  writeTextFileInWslSync,
+} from './wslRuntime.js'
 
 /**
  * Same behavior as web `unwrapDoubleNestedModelsInRoot`: fix when the whole `{"models":{...}}`
@@ -30,6 +38,24 @@ export function unwrapDoubleNestedModelsInRoot(
 }
 
 export function readConfigJson(): Record<string, unknown> | null {
+  const runtimeSelection = getClawmasterRuntimeSelection()
+  if (shouldUseWslRuntime(runtimeSelection)) {
+    const distro = resolveSelectedWslDistroSync(runtimeSelection)
+    if (!distro) return null
+    const configPath = getWslOpenclawProbeSync(distro).configPath
+    const raw = readTextFileInWslSync(distro, configPath)
+    if (!raw) return null
+    try {
+      const data = JSON.parse(raw) as unknown
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        return data as Record<string, unknown>
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
+
   const p = getOpenclawConfigPath()
   if (!fs.existsSync(p)) return null
   try {
@@ -58,6 +84,17 @@ export function readConfigJsonOrEmpty(): Record<string, unknown> {
 
 export function writeConfigJson(config: Record<string, unknown>): void {
   const out = unwrapDoubleNestedModelsInRoot({ ...config })
+  const runtimeSelection = getClawmasterRuntimeSelection()
+  if (shouldUseWslRuntime(runtimeSelection)) {
+    const distro = resolveSelectedWslDistroSync(runtimeSelection)
+    if (!distro) {
+      throw new Error('WSL2 runtime selected but no distro could be resolved')
+    }
+    const configPath = getWslOpenclawProbeSync(distro).configPath
+    writeTextFileInWslSync(distro, configPath, `${JSON.stringify(out, null, 2)}\n`)
+    return
+  }
+
   ensureConfigDir()
   const p = getOpenclawConfigPath()
   fs.writeFileSync(p, JSON.stringify(out, null, 2), 'utf-8')

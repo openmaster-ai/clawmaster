@@ -1,17 +1,38 @@
 import type express from 'express'
 import {
   backupOpenclaw,
+  getClawmasterRuntime,
   getBackupDefaults,
   listOpenclawBackups,
   removeOpenclawData,
   resetConfig,
   resetOpenclawProfile,
   restoreOpenclawBackup,
+  saveClawmasterRuntime,
   saveOpenclawProfile,
   uninstallOpenclaw,
 } from '../services/settingsService.js'
 
 export function registerSettingsRoutes(app: express.Express): void {
+  app.get('/api/settings/runtime', (_req, res) => {
+    res.json(getClawmasterRuntime())
+  })
+
+  app.post('/api/settings/runtime', (req, res) => {
+    try {
+      const body = req.body as {
+        mode?: 'native' | 'wsl2'
+        wslDistro?: string
+        backendPort?: number
+        autoStartBackend?: boolean
+      }
+      res.json(saveClawmasterRuntime(body))
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(400).type('text').send(msg)
+    }
+  })
+
   app.get('/api/settings/backup-defaults', (_req, res) => {
     res.json(getBackupDefaults())
   })

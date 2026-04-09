@@ -1066,6 +1066,14 @@ function SetupProfileCard({
         </div>
       </div>
 
+      {systemInfo.runtime?.hostPlatform === 'win32'
+        && systemInfo.runtime?.wslAvailable
+        && !systemInfo.openclaw.installed && (
+          <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+            {t('setup.runtimeWslHint')}
+          </div>
+        )}
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(14rem,0.8fr)]">
         <div className="space-y-4">
           <div className="grid gap-2 sm:grid-cols-3">
