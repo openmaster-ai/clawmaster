@@ -80,6 +80,14 @@ function hasActiveModalDialog(): boolean {
   return Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'))
 }
 
+function isCommandPaletteShortcutKey(event: KeyboardEvent): boolean {
+  if (event.code) {
+    return event.code === 'KeyK'
+  }
+
+  return event.key.toLowerCase() === 'k'
+}
+
 function decodeHashTargetId(hashValue: string): string | null {
   try {
     const targetId = decodeURIComponent(hashValue.replace(/^#/, ''))
@@ -285,11 +293,11 @@ export default function Layout({ children }: LayoutProps) {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key.toLowerCase() !== 'k') return
+      if (!isCommandPaletteShortcutKey(event)) return
       if (isAppleClientPlatform(clientPlatform) ? !event.metaKey : !event.ctrlKey) return
       if (isEditableEventTarget(event.target)) return
-      if (hasActiveModalDialog()) return
       event.preventDefault()
+      if (hasActiveModalDialog()) return
       openCommandPalette()
     }
 

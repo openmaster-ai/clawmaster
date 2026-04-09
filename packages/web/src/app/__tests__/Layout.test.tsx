@@ -188,7 +188,7 @@ describe('Layout', () => {
   it('opens the command palette with the keyboard and jumps to a page section', async () => {
     renderLayout('/settings')
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true })
 
     const dialog = await screen.findByRole('dialog', { name: '命令面板' })
     expect(dialog).toBeInTheDocument()
@@ -211,7 +211,7 @@ describe('Layout', () => {
     const input = screen.getByRole('textbox', { name: 'Config input' })
     input.focus()
 
-    fireEvent.keyDown(input, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(input, { key: 'k', code: 'KeyK', ctrlKey: true })
 
     expect(screen.queryByRole('dialog', { name: '命令面板' })).not.toBeInTheDocument()
   })
@@ -223,10 +223,20 @@ describe('Layout', () => {
       </div>
     ))
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const event = new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, bubbles: true, cancelable: true })
+    window.dispatchEvent(event)
 
     expect(screen.getByRole('dialog', { name: 'Open modal' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: '命令面板' })).not.toBeInTheDocument()
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('opens the command palette from the physical K key on non-latin layouts', async () => {
+    renderLayout('/settings')
+
+    fireEvent.keyDown(window, { key: 'л', code: 'KeyK', ctrlKey: true })
+
+    expect(await screen.findByRole('dialog', { name: '命令面板' })).toBeInTheDocument()
   })
 
   it('uses cmd+k on apple clients without stealing ctrl+k', async () => {
@@ -237,17 +247,17 @@ describe('Layout', () => {
 
     renderLayout('/settings')
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true })
     expect(screen.queryByRole('dialog', { name: '命令面板' })).not.toBeInTheDocument()
 
-    fireEvent.keyDown(window, { key: 'k', metaKey: true })
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', metaKey: true })
     expect(await screen.findByRole('dialog', { name: '命令面板' })).toBeInTheDocument()
   })
 
   it('shows section commands when the palette first opens', async () => {
     renderLayout('/settings')
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true })
 
     const dialog = await screen.findByRole('dialog', { name: '命令面板' })
 
@@ -279,7 +289,7 @@ describe('Layout', () => {
     mockDetectSystem.mockImplementation(() => new Promise(() => {}))
     renderLayout('/settings')
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true })
 
     const dialog = await screen.findByRole('dialog', { name: '命令面板' })
 
@@ -289,7 +299,7 @@ describe('Layout', () => {
   it('does not execute a command when enter confirms IME composition', async () => {
     renderLayout('/settings')
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true })
 
     const dialog = await screen.findByRole('dialog', { name: '命令面板' })
 
@@ -306,7 +316,7 @@ describe('Layout', () => {
   it('resets the active command to the top match when the query changes', async () => {
     renderLayout('/settings')
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true })
 
     const dialog = await screen.findByRole('dialog', { name: '命令面板' })
 
@@ -330,7 +340,7 @@ describe('Layout', () => {
   it('executes the focused palette option when keyboard users press enter', async () => {
     renderLayout('/settings')
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true })
 
     const dialog = await screen.findByRole('dialog', { name: '命令面板' })
 
