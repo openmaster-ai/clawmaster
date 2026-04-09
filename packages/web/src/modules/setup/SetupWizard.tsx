@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { useInstallTask } from '@/shared/hooks/useInstallTask'
 import { InstallTask } from '@/shared/components/InstallTask'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import {
   getOllamaStatus,
   installOllama,
@@ -48,7 +49,12 @@ import {
   CHANNEL_TYPES,
   DEFAULT_ONBOARDING_STATE,
 } from './types'
-import type { PaddleOcrModuleId, SystemInfo } from '@/lib/types'
+import type {
+  PaddleOcrModuleId,
+  PaddleOcrModuleStatus,
+  PaddleOcrPreviewPayload,
+  SystemInfo,
+} from '@/lib/types'
 import type { OpenclawProfileInput, OpenclawProfileSeedInput } from '@/shared/adapters/system'
 import type { SetupAdapter } from './adapters'
 import type {
@@ -117,10 +123,17 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const [paddleOcrDialogOpen, setPaddleOcrDialogOpen] = useState(false)
   const [paddleOcrDialogModuleId, setPaddleOcrDialogModuleId] =
     useState<PaddleOcrModuleId | null>(null)
+  const [paddleOcrModuleStatus, setPaddleOcrModuleStatus] =
+    useState<PaddleOcrModuleStatus | null>(null)
   const [paddleOcrApiUrl, setPaddleOcrApiUrl] = useState('')
   const [paddleOcrAccessToken, setPaddleOcrAccessToken] = useState('')
-  const [paddleOcrBusy, setPaddleOcrBusy] = useState(false)
+  const [paddleOcrSubmitBusy, setPaddleOcrSubmitBusy] = useState(false)
+  const [paddleOcrPreviewBusy, setPaddleOcrPreviewBusy] = useState(false)
+  const [paddleOcrClearBusy, setPaddleOcrClearBusy] = useState(false)
   const [paddleOcrError, setPaddleOcrError] = useState<string | null>(null)
+  const [paddleOcrPreview, setPaddleOcrPreview] =
+    useState<PaddleOcrPreviewPayload | null>(null)
+  const [paddleOcrClearConfirmOpen, setPaddleOcrClearConfirmOpen] = useState(false)
 
   const [onboard, setOnboard] = useState<OnboardingState>(DEFAULT_ONBOARDING_STATE)
   const updateOnboard = useCallback(
@@ -129,18 +142,40 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   )
 
   const adapter = getSetupAdapter()
+  const paddleOcrBusy = paddleOcrSubmitBusy || paddleOcrPreviewBusy || paddleOcrClearBusy
+
+  const previewPaddleOcrSample = useCallback(async (
+    input: {
+      moduleId: PaddleOcrModuleId
+      apiUrl: string
+      accessToken: string
+    },
+  ) => {
+    setPaddleOcrPreviewBusy(true)
+    try {
+      const preview = await adapter.paddleocr.preview(input)
+      setPaddleOcrPreview(preview)
+      return preview
+    } finally {
+      setPaddleOcrPreviewBusy(false)
+    }
+  }, [adapter])
 
   const openPaddleOcrDialog = useCallback(async (capabilityId: 'ocr_text' | 'ocr_doc') => {
     const moduleId = capabilityToPaddleOcrModuleId(capabilityId)
     setPaddleOcrDialogModuleId(moduleId)
     setPaddleOcrDialogOpen(true)
+    setPaddleOcrModuleStatus(null)
     setPaddleOcrError(null)
+    setPaddleOcrPreview(null)
+    setPaddleOcrClearConfirmOpen(false)
     setPaddleOcrAccessToken('')
     setPaddleOcrApiUrl('')
 
     try {
       const status = await adapter.paddleocr.getStatus()
       const moduleStatus = getPaddleOcrModuleStatus(status, moduleId)
+      setPaddleOcrModuleStatus(moduleStatus)
       if (moduleStatus.apiUrl) {
         setPaddleOcrApiUrl(moduleStatus.apiUrl)
       }
@@ -153,7 +188,12 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     if (paddleOcrBusy) return
     setPaddleOcrDialogOpen(false)
     setPaddleOcrDialogModuleId(null)
+    setPaddleOcrModuleStatus(null)
+    setPaddleOcrApiUrl('')
+    setPaddleOcrAccessToken('')
     setPaddleOcrError(null)
+    setPaddleOcrPreview(null)
+    setPaddleOcrClearConfirmOpen(false)
   }, [paddleOcrBusy])
 
   const loadSystemInfo = useCallback(async () => {
@@ -217,29 +257,99 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     }
   }, [adapter])
 
-  const submitPaddleOcrSetup = useCallback(async () => {
-    if (!paddleOcrDialogModuleId || !paddleOcrApiUrl.trim() || !paddleOcrAccessToken.trim()) {
+  const runPaddleOcrPreview = useCallback(async () => {
+    if (
+      !paddleOcrDialogModuleId ||
+      !paddleOcrApiUrl.trim() ||
+      (!paddleOcrAccessToken.trim() && !paddleOcrModuleStatus?.accessTokenConfigured)
+    ) {
       return
     }
 
-    setPaddleOcrBusy(true)
     setPaddleOcrError(null)
     try {
-      await adapter.paddleocr.setup({
+      await previewPaddleOcrSample({
         moduleId: paddleOcrDialogModuleId,
         apiUrl: paddleOcrApiUrl.trim(),
         accessToken: paddleOcrAccessToken.trim(),
       })
-      setPaddleOcrDialogOpen(false)
-      setPaddleOcrDialogModuleId(null)
+    } catch (err) {
+      setPaddleOcrPreview(null)
+      setPaddleOcrError(err instanceof Error ? err.message : String(err))
+    }
+  }, [
+    paddleOcrAccessToken,
+    paddleOcrApiUrl,
+    paddleOcrDialogModuleId,
+    paddleOcrModuleStatus?.accessTokenConfigured,
+    previewPaddleOcrSample,
+  ])
+
+  const submitPaddleOcrSetup = useCallback(async () => {
+    if (
+      !paddleOcrDialogModuleId ||
+      !paddleOcrApiUrl.trim() ||
+      (!paddleOcrAccessToken.trim() && !paddleOcrModuleStatus?.accessTokenConfigured)
+    ) {
+      return
+    }
+
+    const moduleId = paddleOcrDialogModuleId
+    const apiUrl = paddleOcrApiUrl.trim()
+    const accessToken = paddleOcrAccessToken.trim()
+
+    setPaddleOcrSubmitBusy(true)
+    setPaddleOcrError(null)
+    try {
+      const status = await adapter.paddleocr.setup({
+        moduleId,
+        apiUrl,
+        accessToken,
+      })
+      setPaddleOcrModuleStatus(getPaddleOcrModuleStatus(status, moduleId))
       setPaddleOcrAccessToken('')
+      await previewPaddleOcrSample({
+        moduleId,
+        apiUrl,
+        accessToken,
+      })
       await startDetection()
     } catch (err) {
       setPaddleOcrError(err instanceof Error ? err.message : String(err))
     } finally {
-      setPaddleOcrBusy(false)
+      setPaddleOcrSubmitBusy(false)
     }
-  }, [adapter, paddleOcrAccessToken, paddleOcrApiUrl, paddleOcrDialogModuleId, startDetection])
+  }, [
+    adapter,
+    paddleOcrAccessToken,
+    paddleOcrApiUrl,
+    paddleOcrDialogModuleId,
+    paddleOcrModuleStatus?.accessTokenConfigured,
+    previewPaddleOcrSample,
+    startDetection,
+  ])
+
+  const confirmClearPaddleOcr = useCallback(async () => {
+    if (!paddleOcrDialogModuleId) return
+
+    setPaddleOcrClearBusy(true)
+    setPaddleOcrError(null)
+    try {
+      const status = await adapter.paddleocr.clear({
+        moduleId: paddleOcrDialogModuleId,
+      })
+      setPaddleOcrModuleStatus(getPaddleOcrModuleStatus(status, paddleOcrDialogModuleId))
+      setPaddleOcrApiUrl('')
+      setPaddleOcrAccessToken('')
+      setPaddleOcrPreview(null)
+      setPaddleOcrClearConfirmOpen(false)
+      await startDetection()
+    } catch (err) {
+      setPaddleOcrError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPaddleOcrClearBusy(false)
+    }
+  }, [adapter, paddleOcrDialogModuleId, startDetection])
 
   // 首次挂载自动开始检测
   useEffect(() => {
@@ -980,14 +1090,33 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       <PaddleOcrSetupDialog
         open={paddleOcrDialogOpen}
         busy={paddleOcrBusy}
+        submitBusy={paddleOcrSubmitBusy}
+        previewBusy={paddleOcrPreviewBusy}
+        clearBusy={paddleOcrClearBusy}
         error={paddleOcrError}
         moduleId={paddleOcrDialogModuleId}
+        moduleStatus={paddleOcrModuleStatus}
         apiUrl={paddleOcrApiUrl}
         accessToken={paddleOcrAccessToken}
+        preview={paddleOcrPreview}
         onClose={closePaddleOcrDialog}
         onApiUrlChange={setPaddleOcrApiUrl}
         onAccessTokenChange={setPaddleOcrAccessToken}
+        onPreview={runPaddleOcrPreview}
+        onRequestClear={() => setPaddleOcrClearConfirmOpen(true)}
         onSubmit={submitPaddleOcrSetup}
+      />
+      <ConfirmDialog
+        open={paddleOcrClearConfirmOpen}
+        title={t('setup.paddleocr.clearTitle')}
+        description={t('setup.paddleocr.clearDescription')}
+        confirmLabel={t('setup.paddleocr.clearConfirm')}
+        tone="danger"
+        busy={paddleOcrClearBusy}
+        onCancel={() => {
+          if (!paddleOcrClearBusy) setPaddleOcrClearConfirmOpen(false)
+        }}
+        onConfirm={confirmClearPaddleOcr}
       />
     </div>
   )

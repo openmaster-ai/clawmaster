@@ -244,6 +244,20 @@ export interface PaddleOcrSetupInput {
   accessToken: string
 }
 
+export interface PaddleOcrClearInput {
+  moduleId: PaddleOcrModuleId
+}
+
+export interface PaddleOcrPreviewPayload {
+  moduleId: PaddleOcrModuleId
+  apiUrl: string
+  latencyMs: number
+  pageCount: number
+  textLineCount: number
+  extractedText: string
+  responsePreview: string
+}
+
 export interface ClawhubCliStatus {
   installed: boolean
   version: string

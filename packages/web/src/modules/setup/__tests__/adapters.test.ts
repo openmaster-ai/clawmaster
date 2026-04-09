@@ -169,5 +169,28 @@ describe('demoSetupAdapter', () => {
         PADDLEOCR_DOC_SKILL_ID,
       ])
     })
+
+    it('reuses a saved token for preview and can clear one module independently', async () => {
+      await demoSetupAdapter.paddleocr.setup({
+        moduleId: PADDLEOCR_TEXT_SKILL_ID,
+        apiUrl: 'https://demo.paddleocr.com/ocr',
+        accessToken: 'tok_test',
+      })
+
+      const preview = await demoSetupAdapter.paddleocr.preview({
+        moduleId: PADDLEOCR_TEXT_SKILL_ID,
+        apiUrl: 'https://demo.paddleocr.com/ocr',
+        accessToken: '',
+      })
+      expect(preview.latencyMs).toBeGreaterThan(0)
+      expect(preview.extractedText).toContain('ClawMaster PaddleOCR Preview')
+
+      const status = await demoSetupAdapter.paddleocr.clear({
+        moduleId: PADDLEOCR_TEXT_SKILL_ID,
+      })
+      expect(status.enabledModules).toEqual([])
+      expect(status.textRecognition.configured).toBe(false)
+      expect(status.docParsing.configured).toBe(false)
+    })
   })
 })

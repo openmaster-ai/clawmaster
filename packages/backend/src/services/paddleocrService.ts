@@ -38,6 +38,20 @@ export interface PaddleOcrSetupInput {
   accessToken: string
 }
 
+export interface PaddleOcrClearInput {
+  moduleId: PaddleOcrModuleId
+}
+
+export interface PaddleOcrPreviewPayload {
+  moduleId: PaddleOcrModuleId
+  apiUrl: string
+  latencyMs: number
+  pageCount: number
+  textLineCount: number
+  extractedText: string
+  responsePreview: string
+}
+
 type OpenClawSkillEntry = {
   enabled?: boolean
   apiKey?: unknown
@@ -48,6 +62,8 @@ type OpenClawSkillEntry = {
 type PaddleOcrServiceDeps = {
   assetRoot?: string
   skillsDir?: string
+  fetchImpl?: typeof fetch
+  now?: () => number
   validateCredentials?: (
     moduleId: PaddleOcrModuleId,
     apiUrl: string,
@@ -55,14 +71,18 @@ type PaddleOcrServiceDeps = {
   ) => Promise<void>
 }
 
-const SAMPLE_IMAGE_BASE64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5nLJ8AAAAASUVORK5CYII='
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ASSET_ROOT = path.resolve(
   __dirname,
   '../../../../src-tauri/resources/paddleocr-skills',
 )
+const DEFAULT_SAMPLE_IMAGE_PATH = path.resolve(
+  __dirname,
+  '../../../../src-tauri/resources/paddleocr-preview/sample_image.base64',
+)
+const SAMPLE_IMAGE_BASE64 = fs
+  .readFileSync(DEFAULT_SAMPLE_IMAGE_PATH, 'utf8')
+  .replace(/\s+/g, '')
 
 const MODULE_ENDPOINT_SUFFIX: Record<PaddleOcrModuleId, string> = {
   [PADDLEOCR_TEXT_SKILL_ID]: '/ocr',
@@ -173,17 +193,26 @@ function readModuleApiUrlFromEntry(
   return normalizePaddleOcrApiUrl(moduleId, envUrl)
 }
 
-function hasAccessToken(entry: OpenClawSkillEntry | null): boolean {
-  if (!entry) return false
-  if (typeof entry.apiKey === 'string' && entry.apiKey.trim()) return true
+function readAccessTokenFromEntry(entry: OpenClawSkillEntry | null): string | undefined {
+  if (!entry) return undefined
+  if (typeof entry.apiKey === 'string' && entry.apiKey.trim()) return entry.apiKey.trim()
   const config = isRecord(entry.config) ? entry.config : null
-  if (config && typeof config.accessToken === 'string' && config.accessToken.trim()) return true
+  if (config && typeof config.accessToken === 'string' && config.accessToken.trim()) {
+    return config.accessToken.trim()
+  }
   const env = isRecord(entry.env) ? entry.env : null
-  return Boolean(
+  if (
     env &&
-      typeof env.PADDLEOCR_ACCESS_TOKEN === 'string' &&
-      env.PADDLEOCR_ACCESS_TOKEN.trim(),
-  )
+    typeof env.PADDLEOCR_ACCESS_TOKEN === 'string' &&
+    env.PADDLEOCR_ACCESS_TOKEN.trim()
+  ) {
+    return env.PADDLEOCR_ACCESS_TOKEN.trim()
+  }
+  return undefined
+}
+
+function hasAccessToken(entry: OpenClawSkillEntry | null): boolean {
+  return Boolean(readAccessTokenFromEntry(entry))
 }
 
 function buildModuleStatus(
@@ -295,14 +324,111 @@ function getHttpErrorDetail(payload: unknown, fallbackText: string): string {
   return fallbackText.trim() || 'No response body'
 }
 
-async function validateSingleEndpoint(
+function getApiErrorCode(payload: unknown): number {
+  if (!isRecord(payload)) return 0
+  const errorCode = payload.errorCode
+  if (typeof errorCode === 'number' && Number.isFinite(errorCode)) return errorCode
+  if (typeof errorCode === 'string') {
+    const parsed = Number(errorCode)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+function shortenText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value
+  return `${value.slice(0, maxChars)}…`
+}
+
+function extractStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean)
+}
+
+function countTextLines(text: string): number {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean).length
+}
+
+function extractPreviewText(payload: unknown): { extractedText: string; pageCount: number } {
+  if (!isRecord(payload)) {
+    return { extractedText: '', pageCount: 0 }
+  }
+
+  const result = isRecord(payload.result) ? payload.result : null
+  if (!result) {
+    return {
+      extractedText: typeof payload.text === 'string' ? payload.text.trim() : '',
+      pageCount: 0,
+    }
+  }
+
+  const ocrResults = Array.isArray(result.ocrResults) ? result.ocrResults : null
+  if (ocrResults) {
+    const pageTexts = ocrResults
+      .map((page) => {
+        const prunedResult =
+          isRecord(page) && isRecord(page.prunedResult) ? page.prunedResult : null
+        return extractStringArray(prunedResult?.rec_texts).join('\n').trim()
+      })
+      .filter(Boolean)
+    const dataInfo = isRecord(result.dataInfo) ? result.dataInfo : null
+    const numPages = typeof dataInfo?.numPages === 'number' ? dataInfo.numPages : undefined
+    return {
+      extractedText: pageTexts.join('\n\n'),
+      pageCount: numPages && numPages > 0 ? numPages : ocrResults.length,
+    }
+  }
+
+  const layoutParsingResults = Array.isArray(result.layoutParsingResults)
+    ? result.layoutParsingResults
+    : null
+  if (layoutParsingResults) {
+    const pageTexts = layoutParsingResults
+      .map((page) => {
+        const markdown = isRecord(page) && isRecord(page.markdown) ? page.markdown : null
+        return typeof markdown?.text === 'string' ? markdown.text.trim() : ''
+      })
+      .filter(Boolean)
+    return {
+      extractedText: pageTexts.join('\n\n'),
+      pageCount: layoutParsingResults.length,
+    }
+  }
+
+  return {
+    extractedText: typeof payload.text === 'string' ? payload.text.trim() : '',
+    pageCount: 0,
+  }
+}
+
+function formatResponsePreview(payload: unknown): string {
+  const previewTarget = isRecord(payload) && isRecord(payload.result)
+    ? payload.result
+    : payload
+  try {
+    return shortenText(JSON.stringify(previewTarget, null, 2), 4000)
+  } catch {
+    return shortenText(String(previewTarget ?? ''), 4000)
+  }
+}
+
+async function runPaddleOcrRequest(
   moduleId: PaddleOcrModuleId,
   apiUrl: string,
   accessToken: string,
-): Promise<void> {
+  deps: Pick<PaddleOcrServiceDeps, 'fetchImpl' | 'now'> = {},
+): Promise<{ latencyMs: number; payload: unknown; rawText: string }> {
+  const fetchImpl = deps.fetchImpl ?? fetch
+  const now = deps.now ?? Date.now
+  const startedAt = now()
   let response: Response
   try {
-    response = await fetch(apiUrl, {
+    response = await fetchImpl(apiUrl, {
       method: 'POST',
       headers: {
         Authorization: `token ${accessToken}`,
@@ -323,6 +449,7 @@ async function validateSingleEndpoint(
   }
 
   const rawText = await response.text()
+  const latencyMs = Math.max(0, now() - startedAt)
   let payload: unknown = null
   try {
     payload = rawText ? JSON.parse(rawText) : null
@@ -348,19 +475,46 @@ async function validateSingleEndpoint(
     )
   }
 
-  if (isRecord(payload) && Number(payload.errorCode ?? 0) !== 0) {
+  if (getApiErrorCode(payload) !== 0) {
     const detail =
-      typeof payload.errorMsg === 'string' && payload.errorMsg.trim()
+      isRecord(payload) && typeof payload.errorMsg === 'string' && payload.errorMsg.trim()
         ? payload.errorMsg.trim()
         : 'Unknown API error'
     throw new Error(`${MODULE_VALIDATION_LABEL[moduleId]} verification failed: ${detail}`)
   }
+
+  return {
+    latencyMs,
+    payload,
+    rawText,
+  }
+}
+
+async function validateSingleEndpoint(
+  moduleId: PaddleOcrModuleId,
+  apiUrl: string,
+  accessToken: string,
+  deps: Pick<PaddleOcrServiceDeps, 'fetchImpl' | 'now'> = {},
+): Promise<void> {
+  await runPaddleOcrRequest(moduleId, apiUrl, accessToken, deps)
+}
+
+function resolveAccessToken(
+  inputAccessToken: string,
+  entry: OpenClawSkillEntry | null,
+): string {
+  const accessToken = inputAccessToken.trim() || readAccessTokenFromEntry(entry) || ''
+  if (!accessToken) {
+    throw new Error('Access Token is required.')
+  }
+  return accessToken
 }
 
 export async function validatePaddleOcrCredentials(
   moduleId: PaddleOcrModuleId,
   apiUrl: string,
   accessToken: string,
+  deps: Pick<PaddleOcrServiceDeps, 'fetchImpl' | 'now'> = {},
 ): Promise<void> {
   const token = accessToken.trim()
   if (!token) {
@@ -368,7 +522,7 @@ export async function validatePaddleOcrCredentials(
   }
 
   const normalizedApiUrl = normalizePaddleOcrApiUrl(moduleId, apiUrl)
-  await validateSingleEndpoint(moduleId, normalizedApiUrl, token)
+  await validateSingleEndpoint(moduleId, normalizedApiUrl, token, deps)
 }
 
 export function getPaddleOcrStatus(
@@ -382,14 +536,12 @@ export async function setupPaddleOcr(
   input: PaddleOcrSetupInput,
   deps: PaddleOcrServiceDeps = {},
 ): Promise<PaddleOcrStatusPayload> {
-  const accessToken = input.accessToken.trim()
-  if (!accessToken) {
-    throw new Error('Access Token is required.')
-  }
-
   const apiUrl = normalizePaddleOcrApiUrl(input.moduleId, input.apiUrl)
   const assetRoot = deps.assetRoot ?? DEFAULT_ASSET_ROOT
   const skillsDir = deps.skillsDir ?? getDefaultSkillsDir()
+  const currentConfig = readConfigJsonOrEmpty()
+  const currentEntry = readSkillEntry(currentConfig, input.moduleId)
+  const accessToken = resolveAccessToken(input.accessToken, currentEntry)
   const validateCredentials =
     deps.validateCredentials ?? validatePaddleOcrCredentials
 
@@ -424,4 +576,40 @@ export async function setupPaddleOcr(
 
   const config = readConfigJsonOrEmpty()
   return buildStatusFromConfig(config, skillsDir)
+}
+
+export async function previewPaddleOcr(
+  input: PaddleOcrSetupInput,
+  deps: PaddleOcrServiceDeps = {},
+): Promise<PaddleOcrPreviewPayload> {
+  const config = readConfigJsonOrEmpty()
+  const entry = readSkillEntry(config, input.moduleId)
+  const accessToken = resolveAccessToken(input.accessToken, entry)
+  const apiUrl = normalizePaddleOcrApiUrl(input.moduleId, input.apiUrl)
+  const result = await runPaddleOcrRequest(input.moduleId, apiUrl, accessToken, deps)
+  const { extractedText, pageCount } = extractPreviewText(result.payload)
+
+  return {
+    moduleId: input.moduleId,
+    apiUrl,
+    latencyMs: result.latencyMs,
+    pageCount,
+    textLineCount: countTextLines(extractedText),
+    extractedText,
+    responsePreview: formatResponsePreview(result.payload),
+  }
+}
+
+export async function clearPaddleOcr(
+  input: PaddleOcrClearInput,
+  deps: Pick<PaddleOcrServiceDeps, 'skillsDir'> = {},
+): Promise<PaddleOcrStatusPayload> {
+  await updateConfigJson((config) => {
+    const skills = ensureRecord(config, 'skills')
+    const entries = ensureRecord(skills, 'entries')
+    delete entries[input.moduleId]
+  })
+
+  const config = readConfigJsonOrEmpty()
+  return buildStatusFromConfig(config, deps.skillsDir ?? getDefaultSkillsDir())
 }
