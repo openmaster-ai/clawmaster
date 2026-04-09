@@ -9,6 +9,7 @@ import { ActionBanner } from '@/shared/components/ActionBanner'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { InstallTask } from '@/shared/components/InstallTask'
 import { RecentLogsSheet } from '@/shared/components/RecentLogsSheet'
+import { isWindowsHostPlatform } from '@/shared/hostPlatform'
 import { CheckCircle2, AlertCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, FileText, Copy, FolderInput, Sparkles, Laptop, MonitorCog } from 'lucide-react'
 import type { SystemInfo } from '@/lib/types'
 import type { OpenclawNpmVersions } from '@/shared/adapters/npmOpenclaw'
@@ -164,7 +165,7 @@ export default function Settings() {
   const existingConfigPaths = systemInfo?.openclaw.existingConfigPaths ?? []
   const resolvedRuntimeMode = systemInfo?.runtime?.mode ?? 'native'
   const resolvedRuntimeDistro = systemInfo?.runtime?.selectedDistro ?? ''
-  const isWindowsHost = systemInfo?.runtime?.hostPlatform === 'win32'
+  const isWindowsHost = isWindowsHostPlatform(systemInfo?.runtime?.hostPlatform)
   const runtimeDirty =
     runtimeMode !== resolvedRuntimeMode ||
     (runtimeMode === 'wsl2' && runtimeDistro.trim() !== resolvedRuntimeDistro)

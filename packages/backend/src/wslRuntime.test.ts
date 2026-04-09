@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { parseWslListVerbose } from './wslRuntime.js'
+import { parseWslListVerbose, resolveSelectedWslDistroFromList } from './wslRuntime.js'
 
 test('parseWslListVerbose extracts distro state, version, and default flag', () => {
   const distros = parseWslListVerbose(`
@@ -16,4 +16,30 @@ test('parseWslListVerbose extracts distro state, version, and default flag', () 
     { name: 'Debian', state: 'Stopped', version: 2, isDefault: false },
     { name: 'docker-desktop', state: 'Running', version: 2, isDefault: false },
   ])
+})
+
+test('resolveSelectedWslDistroFromList returns null when a saved distro is missing', () => {
+  const distros = parseWslListVerbose(`
+  NAME                   STATE           VERSION
+* Ubuntu-24.04           Running         2
+  Debian                 Stopped         2
+`)
+
+  assert.equal(
+    resolveSelectedWslDistroFromList(distros, {
+      mode: 'wsl2',
+      wslDistro: 'Renamed-Ubuntu',
+    }),
+    null
+  )
+})
+
+test('resolveSelectedWslDistroFromList falls back only when no distro is selected', () => {
+  const distros = parseWslListVerbose(`
+  NAME                   STATE           VERSION
+* Ubuntu-24.04           Running         2
+  Debian                 Stopped         2
+`)
+
+  assert.equal(resolveSelectedWslDistroFromList(distros, { mode: 'wsl2' }), 'Ubuntu-24.04')
 })

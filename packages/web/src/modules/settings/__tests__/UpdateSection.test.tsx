@@ -286,7 +286,7 @@ describe('UpdateSection', () => {
       },
       runtime: {
         mode: 'native',
-        hostPlatform: 'win32',
+        hostPlatform: 'windows',
         wslAvailable: true,
         selectedDistro: 'Ubuntu-24.04',
         selectedDistroExists: true,

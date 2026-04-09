@@ -86,10 +86,18 @@ export function detectWslAvailabilitySync(): boolean {
 export function resolveSelectedWslDistroSync(
   selection: ClawmasterRuntimeSelection = getClawmasterRuntimeSelection()
 ): string | null {
-  const distros = listWslDistrosSync()
-  if (selection.wslDistro) {
-    const match = distros.find((item) => item.name === selection.wslDistro)
+  return resolveSelectedWslDistroFromList(listWslDistrosSync(), selection)
+}
+
+export function resolveSelectedWslDistroFromList(
+  distros: WslDistroInfo[],
+  selection: ClawmasterRuntimeSelection
+): string | null {
+  const requestedDistro = selection.wslDistro?.trim()
+  if (requestedDistro) {
+    const match = distros.find((item) => item.name === requestedDistro)
     if (match) return match.name
+    return null
   }
   return distros.find((item) => item.isDefault)?.name ?? distros[0]?.name ?? null
 }

@@ -51,7 +51,11 @@ function expandHomeToken(token: string): string {
   return token
 }
 
-function normalizeExecRequest(cmd: string, args: unknown): { cmd: string; args: string[] } {
+export function normalizeExecRequest(
+  cmd: string,
+  args: unknown,
+  options: { useWslRuntime?: boolean } = {}
+): { cmd: string; args: string[] } {
   const trimmedCmd = cmd.trim()
   if (!trimmedCmd) {
     throw new Error('Missing cmd parameter')
@@ -65,8 +69,8 @@ function normalizeExecRequest(cmd: string, args: unknown): { cmd: string; args: 
   if (args !== undefined && !isStringArray(args)) {
     throw new Error('Args must be an array of strings')
   }
-  const normalizedArgs = (args ?? []).map((arg) => expandHomeToken(arg))
-  const normalizedCmd = trimmedCmd === 'bash' && IS_WINDOWS ? RESOLVED_SHELL : trimmedCmd
+  const normalizedArgs = options.useWslRuntime ? (args ?? []) : (args ?? []).map((arg) => expandHomeToken(arg))
+  const normalizedCmd = trimmedCmd === 'bash' && IS_WINDOWS && !options.useWslRuntime ? RESOLVED_SHELL : trimmedCmd
   return {
     cmd: normalizedCmd,
     args: normalizedArgs,
@@ -100,7 +104,9 @@ export function registerExecRoutes(app: Express): void {
       return
     }
     try {
-      const normalized = normalizeExecRequest(cmd, args)
+      const runtimeSelection = getClawmasterRuntimeSelection()
+      const useWslRuntime = shouldUseWslRuntime(runtimeSelection)
+      const normalized = normalizeExecRequest(cmd, args, { useWslRuntime })
       if (normalized.cmd === 'openclaw') {
         const result = await execOpenclaw(normalized.args)
         res.json({
@@ -123,8 +129,7 @@ export function registerExecRoutes(app: Express): void {
         })
         return
       }
-      const runtimeSelection = getClawmasterRuntimeSelection()
-      if (shouldUseWslRuntime(runtimeSelection)) {
+      if (useWslRuntime) {
         const distro = resolveSelectedWslDistroSync(runtimeSelection)
         if (!distro) {
           res.json({

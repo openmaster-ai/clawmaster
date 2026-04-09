@@ -34,6 +34,7 @@ import {
 } from '@/shared/adapters/ollama'
 import { changeLanguage } from '@/i18n'
 import { buildGatewayUrl } from '@/shared/gatewayUrl'
+import { isWindowsHostPlatform } from '@/shared/hostPlatform'
 import { getSetupAdapter } from './adapters'
 import {
   CAPABILITIES,
@@ -1066,7 +1067,7 @@ function SetupProfileCard({
         </div>
       </div>
 
-      {systemInfo.runtime?.hostPlatform === 'win32'
+      {isWindowsHostPlatform(systemInfo.runtime?.hostPlatform)
         && systemInfo.runtime?.wslAvailable
         && !systemInfo.openclaw.installed && (
           <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
