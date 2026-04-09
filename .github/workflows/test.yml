@@ -163,12 +163,14 @@ jobs:
         shell: pwsh
         run: |
           $statusOutput = & wsl.exe --status 2>&1 | Out-String
-          if ($LASTEXITCODE -ne 0 -or $statusOutput -match 'not installed') {
+          $statusExitCode = $LASTEXITCODE
+          if ($statusExitCode -ne 0 -or $statusOutput -match 'not installed') {
             Write-Host 'Enabling WSL Windows features on runner before distribution bootstrap'
             Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux, VirtualMachinePlatform -NoRestart
           } else {
             Write-Host 'WSL already available on runner'
           }
+          $global:LASTEXITCODE = 0
 
       - name: Install Ubuntu WSL2
         uses: Vampire/setup-wsl@v6
