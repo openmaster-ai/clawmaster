@@ -1,0 +1,136 @@
+name: Windows WSL2 Runtime Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Windows runner label with WSL2 distro registration support
+        required: true
+        default: windows-2022
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  backend-windows-wsl2:
+    name: Backend WSL2 Smoke
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Prepare isolated Windows profile
+        shell: pwsh
+        run: |
+          $targetHome = Join-Path $env:RUNNER_TEMP 'clawmaster-home'
+          $appData = Join-Path $env:RUNNER_TEMP 'clawmaster-appdata'
+          New-Item -ItemType Directory -Force -Path $targetHome | Out-Null
+          New-Item -ItemType Directory -Force -Path $appData | Out-Null
+          "USERPROFILE=$targetHome" >> $env:GITHUB_ENV
+          "HOME=$targetHome" >> $env:GITHUB_ENV
+          "APPDATA=$appData" >> $env:GITHUB_ENV
+          "BACKEND_PORT=3311" >> $env:GITHUB_ENV
+          "DISTRO_NAME=Ubuntu-24.04" >> $env:GITHUB_ENV
+          "WSL_SMOKE_MARKER=WSL-SMOKE-MARKER" >> $env:GITHUB_ENV
+
+      - name: Ensure WSL is enabled on runner
+        shell: pwsh
+        run: |
+          $statusOutput = & wsl.exe --status 2>&1 | Out-String
+          $statusExitCode = $LASTEXITCODE
+          if ($statusExitCode -ne 0 -or $statusOutput -match 'not installed') {
+            Write-Host 'Enabling WSL Windows features on runner before distribution bootstrap'
+            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux, VirtualMachinePlatform -NoRestart
+          } else {
+            Write-Host 'WSL already available on runner'
+          }
+          $global:LASTEXITCODE = 0
+
+      - name: Install Ubuntu WSL2
+        uses: Vampire/setup-wsl@v6
+        with:
+          distribution: Ubuntu-24.04
+          set-as-default: true
+          use-cache: true
+          wsl-version: 2
+
+      - name: Provision WSL runtime
+        shell: wsl-bash {0}
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y curl ca-certificates xz-utils
+          curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          apt-get install -y nodejs
+          npm install -g openclaw
+
+          mkdir -p ~/.openclaw/logs
+          cat > ~/.openclaw/openclaw.json <<'JSON'
+          {
+            "gateway": {
+              "port": 18789
+            },
+            "models": {
+              "providers": {}
+            }
+          }
+          JSON
+          printf '%s\n' '2026-04-09T09:00:00.000+00:00 [gateway] WSL-SMOKE-MARKER initial gateway log' > ~/.openclaw/logs/gateway.log
+
+          node --version
+          npm --version
+          openclaw --version
+
+      - run: npm ci
+
+      - name: Build backend
+        run: npm run build --workspace=@openclaw-manager/backend
+
+      - name: Start backend
+        shell: pwsh
+        run: |
+          $backendLog = Join-Path $env:RUNNER_TEMP 'clawmaster-backend.log'
+          $backendErr = Join-Path $env:RUNNER_TEMP 'clawmaster-backend.err.log'
+          $proc = Start-Process node `
+            -ArgumentList 'packages/backend/dist/index.js' `
+            -RedirectStandardOutput $backendLog `
+            -RedirectStandardError $backendErr `
+            -PassThru
+          "BACKEND_PID=$($proc.Id)" >> $env:GITHUB_ENV
+          "BACKEND_LOG=$backendLog" >> $env:GITHUB_ENV
+          "BACKEND_ERR_LOG=$backendErr" >> $env:GITHUB_ENV
+          Start-Sleep -Seconds 5
+
+      - name: Run WSL smoke assertions
+        run: node .github/scripts/wsl-runtime-smoke.mjs
+
+      - name: Print backend log on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          if ($env:BACKEND_LOG -and (Test-Path $env:BACKEND_LOG)) {
+            Write-Host '--- backend stdout ---'
+            Get-Content $env:BACKEND_LOG
+          }
+          if ($env:BACKEND_ERR_LOG -and (Test-Path $env:BACKEND_ERR_LOG)) {
+            Write-Host '--- backend stderr ---'
+            Get-Content $env:BACKEND_ERR_LOG
+          }
+
+      - name: Stop backend
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:BACKEND_PID) {
+            Stop-Process -Id $env:BACKEND_PID -Force -ErrorAction SilentlyContinue
+          }
