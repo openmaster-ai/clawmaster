@@ -11,6 +11,7 @@ import {
   ExternalLink,
   FileText,
   FolderOpen,
+  Loader2,
   Package,
   RefreshCw,
   Search,
@@ -21,7 +22,14 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import type { SkillGuardScanResult, SkillInfo } from '@/lib/types'
+import type {
+  PaddleOcrModuleId,
+  PaddleOcrStatusPayload,
+  SkillGuardScanResult,
+  SkillInfo,
+} from '@/lib/types'
+import PaddleOcrSetupDialog from '@/modules/setup/PaddleOcrSetupDialog'
+import { getPaddleOcrStatusResult, setupPaddleOcrResult } from '@/shared/adapters/paddleocr'
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
 import { InstallTask } from '@/shared/components/InstallTask'
 import { LoadingState } from '@/shared/components/LoadingState'
@@ -35,6 +43,13 @@ import {
 } from '@/shared/adapters/clawhub'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
 import { useInstallTask } from '@/shared/hooks/useInstallTask'
+import {
+  getPaddleOcrModuleDescriptionKey,
+  getPaddleOcrModuleStatus,
+  getPaddleOcrModuleTitleKey,
+  PADDLEOCR_DOC_SKILL_ID,
+  PADDLEOCR_TEXT_SKILL_ID,
+} from '@/shared/paddleocr'
 import {
   CATEGORY_COLORS,
   CATEGORY_ORDER,
@@ -57,6 +72,23 @@ const FEATURED_TONES: Record<string, string> = {
   'openclaw-memory-pro-system': 'border-emerald-500/20 bg-emerald-500/5',
   'clawvet': 'border-violet-500/20 bg-violet-500/5',
 }
+
+const PADDLEOCR_MARKETPLACE_CARDS: Array<{
+  moduleId: PaddleOcrModuleId
+  icon: LucideIcon
+  tone: string
+}> = [
+  {
+    moduleId: PADDLEOCR_TEXT_SKILL_ID,
+    icon: Search,
+    tone: 'border-sky-500/20 bg-sky-500/5',
+  },
+  {
+    moduleId: PADDLEOCR_DOC_SKILL_ID,
+    icon: FileText,
+    tone: 'border-cyan-500/20 bg-cyan-500/5',
+  },
+]
 
 function normalizeSkillToken(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase()
@@ -90,6 +122,16 @@ function installedAliases(skill: SkillInfo): string[] {
   tokens.add(normalizeSkillToken(skill.name))
   tokens.add(normalizeSkillToken(trailingSlugToken(skill.slug)))
   return [...tokens].filter(Boolean)
+}
+
+const hiddenMarketplaceSkillAliases = new Set(
+  SKILL_CATALOG
+    .filter((skill) => skill.hiddenFromMarketplace)
+    .flatMap((skill) => catalogAliases(skill)),
+)
+
+function isHiddenMarketplaceSkill(skill: SkillInfo): boolean {
+  return installedAliases(skill).some((alias) => hiddenMarketplaceSkillAliases.has(alias))
 }
 
 function skillConfigKey(skill: SkillInfo): string {
@@ -140,6 +182,12 @@ function SkillsContent() {
     error: installedSkillsError,
     refetch,
   } = useAdapterCall(getSkillsResult)
+  const {
+    data: paddleOcrStatus,
+    loading: paddleOcrStatusLoading,
+    error: paddleOcrStatusError,
+    refetch: refetchPaddleOcrStatus,
+  } = useAdapterCall(getPaddleOcrStatusResult)
 
   const [installedQuery, setInstalledQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<SkillCategory | 'all'>('all')
@@ -148,21 +196,38 @@ function SkillsContent() {
   const [scanResults, setScanResults] = useState<Record<string, SkillGuardScanResult>>({})
   const [scanErrors, setScanErrors] = useState<Record<string, string>>({})
   const [activeScanDetailsKey, setActiveScanDetailsKey] = useState<string | null>(null)
+  const [paddleOcrDialogOpen, setPaddleOcrDialogOpen] = useState(false)
+  const [paddleOcrDialogModuleId, setPaddleOcrDialogModuleId] = useState<PaddleOcrModuleId | null>(null)
+  const [paddleOcrApiUrl, setPaddleOcrApiUrl] = useState('')
+  const [paddleOcrAccessToken, setPaddleOcrAccessToken] = useState('')
+  const [paddleOcrBusy, setPaddleOcrBusy] = useState(false)
+  const [paddleOcrError, setPaddleOcrError] = useState<string | null>(null)
   const clawhubInstallTask = useInstallTask()
 
-  const skills = installedSkills ?? []
+  const visibleCatalog = useMemo(
+    () => SKILL_CATALOG.filter((skill) => !skill.hiddenFromMarketplace),
+    [],
+  )
+  const visibleFeaturedSkills = useMemo(
+    () => FEATURED_SKILLS.filter((skill) => !skill.hiddenFromMarketplace),
+    [],
+  )
+  const skills = useMemo(
+    () => (installedSkills ?? []).filter((skill) => !isHiddenMarketplaceSkill(skill)),
+    [installedSkills],
+  )
   const clawhubReady = clawhubCli?.installed === true
   const installLockedReason = clawhubReady ? null : t('skills.clawhub.installFirstAction')
 
   const catalogAliasMap = useMemo(() => {
     const map = new Map<string, CatalogSkill>()
-    for (const catalog of SKILL_CATALOG) {
+    for (const catalog of visibleCatalog) {
       for (const alias of catalogAliases(catalog)) {
         if (!map.has(alias)) map.set(alias, catalog)
       }
     }
     return map
-  }, [])
+  }, [visibleCatalog])
 
   const installedAliasMap = useMemo(() => {
     const map = new Map<string, SkillInfo>()
@@ -176,7 +241,7 @@ function SkillsContent() {
 
   const catalogCollisionMap = useMemo(() => {
     const map = new Map<string, SkillInfo[]>()
-    for (const catalog of SKILL_CATALOG) {
+    for (const catalog of visibleCatalog) {
       const exactAliases = new Set(catalogInstallAliases(catalog))
       const genericAliases = new Set(catalogAliases(catalog))
       const collisions = skills.filter((skill) => {
@@ -188,7 +253,7 @@ function SkillsContent() {
       if (collisions.length > 0) map.set(catalog.slug, collisions)
     }
     return map
-  }, [skills])
+  }, [skills, visibleCatalog])
 
   const resolveInstalledSkill = useCallback(
     (catalog: CatalogSkill): SkillInfo | undefined => {
@@ -234,8 +299,11 @@ function SkillsContent() {
   }, [catalogAliasMap, installedQuery, selectedCategory, skills])
 
   const sortedFeaturedSkills = useMemo(
-    () => [...FEATURED_SKILLS].sort((left, right) => compareById(catalogDisplayId(left), catalogDisplayId(right))),
-    [],
+    () =>
+      [...visibleFeaturedSkills].sort((left, right) =>
+        compareById(catalogDisplayId(left), catalogDisplayId(right)),
+      ),
+    [visibleFeaturedSkills],
   )
 
   const installedCount = skills.length
@@ -295,6 +363,58 @@ function SkillsContent() {
     })
   }
 
+  const openPaddleOcrDialog = useCallback((moduleId: PaddleOcrModuleId) => {
+    setPaddleOcrDialogModuleId(moduleId)
+    setPaddleOcrDialogOpen(true)
+    setPaddleOcrError(null)
+    setPaddleOcrAccessToken('')
+    setPaddleOcrApiUrl(
+      paddleOcrStatus ? getPaddleOcrModuleStatus(paddleOcrStatus, moduleId).apiUrl ?? '' : '',
+    )
+  }, [paddleOcrStatus])
+
+  const closePaddleOcrDialog = useCallback(() => {
+    if (paddleOcrBusy) return
+    setPaddleOcrDialogOpen(false)
+    setPaddleOcrDialogModuleId(null)
+    setPaddleOcrError(null)
+  }, [paddleOcrBusy])
+
+  const submitPaddleOcrSetup = useCallback(async () => {
+    if (!paddleOcrDialogModuleId || !paddleOcrApiUrl.trim() || !paddleOcrAccessToken.trim()) {
+      return
+    }
+
+    setPaddleOcrBusy(true)
+    setPaddleOcrError(null)
+    try {
+      const result = await setupPaddleOcrResult({
+        moduleId: paddleOcrDialogModuleId,
+        apiUrl: paddleOcrApiUrl.trim(),
+        accessToken: paddleOcrAccessToken.trim(),
+      })
+      if (!result.success || !result.data) {
+        throw new Error(result.error ?? t('common.requestFailed'))
+      }
+      setPaddleOcrDialogOpen(false)
+      setPaddleOcrDialogModuleId(null)
+      setPaddleOcrAccessToken('')
+      await refetchPaddleOcrStatus()
+      await refetch()
+    } catch (error) {
+      setPaddleOcrError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setPaddleOcrBusy(false)
+    }
+  }, [
+    paddleOcrAccessToken,
+    paddleOcrApiUrl,
+    paddleOcrDialogModuleId,
+    refetch,
+    refetchPaddleOcrStatus,
+    t,
+  ])
+
   return (
     <div className="page-shell page-shell-bleed">
       <div className="page-header">
@@ -334,6 +454,44 @@ function SkillsContent() {
           {installedSkillsError}
         </div>
       )}
+
+      <section className="surface-card space-y-4">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="section-heading">{t('skills.paddleocrTitle')}</h2>
+            <p className="text-sm text-muted-foreground">{t('skills.paddleocrLead')}</p>
+          </div>
+          <a
+            href="https://aistudio.baidu.com/paddleocr"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="button-secondary"
+          >
+            <ExternalLink className="h-4 w-4" />
+            {t('skills.paddleocr.openOfficial')}
+          </a>
+        </div>
+
+        {paddleOcrStatusError && (
+          <div className="rounded-[22px] border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+            {paddleOcrStatusError}
+          </div>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {PADDLEOCR_MARKETPLACE_CARDS.map((card) => (
+            <PaddleOcrMarketplaceCard
+              key={card.moduleId}
+              moduleId={card.moduleId}
+              icon={card.icon}
+              tone={card.tone}
+              status={paddleOcrStatus ? getPaddleOcrModuleStatus(paddleOcrStatus, card.moduleId) : null}
+              loading={paddleOcrStatusLoading}
+              onConfigure={openPaddleOcrDialog}
+            />
+          ))}
+        </div>
+      </section>
 
       {(!clawhubReady || clawhubCliLoading || clawhubInstallTask.status !== 'idle') && (
         <ClawhubSetupCard
@@ -451,6 +609,19 @@ function SkillsContent() {
           t={t}
         />
       )}
+
+      <PaddleOcrSetupDialog
+        open={paddleOcrDialogOpen}
+        busy={paddleOcrBusy}
+        error={paddleOcrError}
+        moduleId={paddleOcrDialogModuleId}
+        apiUrl={paddleOcrApiUrl}
+        accessToken={paddleOcrAccessToken}
+        onClose={closePaddleOcrDialog}
+        onApiUrlChange={setPaddleOcrApiUrl}
+        onAccessTokenChange={setPaddleOcrAccessToken}
+        onSubmit={submitPaddleOcrSetup}
+      />
     </div>
   )
 }
@@ -541,6 +712,99 @@ function ClawhubSetupCard({
         />
       )}
     </section>
+  )
+}
+
+function PaddleOcrMarketplaceCard({
+  moduleId,
+  icon: Icon,
+  tone,
+  status,
+  loading,
+  onConfigure,
+}: {
+  moduleId: PaddleOcrModuleId
+  icon: LucideIcon
+  tone: string
+  status: PaddleOcrStatusPayload['textRecognition'] | null
+  loading: boolean
+  onConfigure: (moduleId: PaddleOcrModuleId) => void
+}) {
+  const { t } = useTranslation()
+  const title = t(getPaddleOcrModuleTitleKey(moduleId))
+  const description = t(getPaddleOcrModuleDescriptionKey(moduleId))
+  const actionLabel = status?.configured
+    ? t('setup.paddleocr.manage')
+    : t('skills.paddleocr.configure')
+
+  return (
+    <div className={`rounded-[28px] border p-5 ${tone}`}>
+      <div className="flex items-start justify-between gap-4">
+        <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-background/80">
+          <Icon className="h-5 w-5 text-foreground" />
+        </span>
+        <span className="rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-xs text-muted-foreground">
+          {t('skills.sourceBundled')}
+        </span>
+      </div>
+
+      <div className="mt-5 space-y-3">
+        <div>
+          <p className="text-lg font-semibold text-foreground">{title}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+        </div>
+
+        {loading ? (
+          <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {t('common.loading')}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                status?.configured
+                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+              }`}
+            >
+              {status?.configured ? t('skills.ready') : t('skills.needsSetup')}
+            </span>
+            {status?.apiUrlConfigured && (
+              <span className="rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-xs text-muted-foreground">
+                {t('skills.paddleocr.endpointReady')}
+              </span>
+            )}
+          </div>
+        )}
+
+        {status?.apiUrl && (
+          <p className="rounded-2xl border border-border/70 bg-background/80 px-3 py-2 text-xs font-mono text-muted-foreground">
+            {status.apiUrl}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-5 flex w-full flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => onConfigure(moduleId)}
+          disabled={loading}
+          className="button-primary whitespace-nowrap"
+        >
+          {actionLabel}
+        </button>
+        <a
+          href="https://github.com/PaddlePaddle/PaddleOCR"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="button-secondary whitespace-nowrap"
+        >
+          <ArrowUpRight className="h-4 w-4" />
+          {t('skills.source')}
+        </a>
+      </div>
+    </div>
   )
 }
 

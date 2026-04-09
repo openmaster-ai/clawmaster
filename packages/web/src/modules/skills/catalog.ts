@@ -11,6 +11,7 @@ export interface CatalogSkill {
   /** Local OpenClaw `skills.entries.<skillKey>` id when it differs from the install slug. */
   skillKey?: string
   featured?: boolean
+  hiddenFromMarketplace?: boolean
   /** GitHub repo URL for docs/source link */
   sourceUrl?: string
 }
@@ -36,6 +37,7 @@ export const SKILL_CATALOG: CatalogSkill[] = [
     descriptionKey: 'skills.catalog.paddleocrDoc.desc',
     category: 'ocr',
     skillKey: 'paddleocr-doc-parsing',
+    hiddenFromMarketplace: true,
     sourceUrl: 'https://github.com/PaddlePaddle/PaddleOCR',
   },
   {
@@ -44,6 +46,7 @@ export const SKILL_CATALOG: CatalogSkill[] = [
     descriptionKey: 'skills.catalog.paddleocrText.desc',
     category: 'ocr',
     skillKey: 'paddleocr-text-recognition',
+    hiddenFromMarketplace: true,
     sourceUrl: 'https://github.com/PaddlePaddle/PaddleOCR',
   },
 

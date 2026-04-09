@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { changeLanguage } from '@/i18n'
 import SkillsPage from '../SkillsPage'
+import {
+  PADDLEOCR_DOC_SKILL_ID,
+  PADDLEOCR_TEXT_SKILL_ID,
+} from '@/shared/paddleocr'
 
 const mockGetSkillsResult = vi.fn()
 const mockGetClawhubCliStatusResult = vi.fn()
@@ -11,6 +15,8 @@ const mockInstallSkillResult = vi.fn()
 const mockUninstallSkillResult = vi.fn()
 const mockSetSkillEnabledResult = vi.fn()
 const mockScanInstalledSkillResult = vi.fn()
+const mockGetPaddleOcrStatusResult = vi.fn()
+const mockSetupPaddleOcrResult = vi.fn()
 
 vi.mock('@/shared/adapters/clawhub', () => ({
   getSkillsResult: (...args: any[]) => mockGetSkillsResult(...args),
@@ -21,6 +27,11 @@ vi.mock('@/shared/adapters/clawhub', () => ({
   uninstallSkillResult: (...args: any[]) => mockUninstallSkillResult(...args),
   setSkillEnabledResult: (...args: any[]) => mockSetSkillEnabledResult(...args),
   scanInstalledSkillResult: (...args: any[]) => mockScanInstalledSkillResult(...args),
+}))
+
+vi.mock('@/shared/adapters/paddleocr', () => ({
+  getPaddleOcrStatusResult: (...args: any[]) => mockGetPaddleOcrStatusResult(...args),
+  setupPaddleOcrResult: (...args: any[]) => mockSetupPaddleOcrResult(...args),
 }))
 
 describe('SkillsPage', () => {
@@ -39,6 +50,51 @@ describe('SkillsPage', () => {
     mockInstallSkillResult.mockResolvedValue({ success: true })
     mockUninstallSkillResult.mockResolvedValue({ success: true })
     mockSetSkillEnabledResult.mockResolvedValue({ success: true })
+    mockGetPaddleOcrStatusResult.mockResolvedValue({
+      success: true,
+      data: {
+        configured: false,
+        enabledModules: [],
+        missingModules: [],
+        textRecognition: {
+          configured: false,
+          enabled: false,
+          missing: false,
+          apiUrlConfigured: false,
+          accessTokenConfigured: false,
+        },
+        docParsing: {
+          configured: false,
+          enabled: false,
+          missing: false,
+          apiUrlConfigured: false,
+          accessTokenConfigured: false,
+        },
+      },
+    })
+    mockSetupPaddleOcrResult.mockResolvedValue({
+      success: true,
+      data: {
+        configured: false,
+        enabledModules: [PADDLEOCR_TEXT_SKILL_ID],
+        missingModules: [],
+        textRecognition: {
+          configured: true,
+          enabled: true,
+          missing: false,
+          apiUrlConfigured: true,
+          accessTokenConfigured: true,
+          apiUrl: 'https://demo.paddleocr.com/ocr',
+        },
+        docParsing: {
+          configured: false,
+          enabled: false,
+          missing: false,
+          apiUrlConfigured: false,
+          accessTokenConfigured: false,
+        },
+      },
+    })
     mockScanInstalledSkillResult.mockResolvedValue({
       success: true,
       data: {
@@ -67,7 +123,35 @@ describe('SkillsPage', () => {
     expect(screen.getByText('Start with four high-value skills')).toBeInTheDocument()
     expect(screen.queryByText('Curated Catalog')).not.toBeInTheDocument()
     expect(screen.queryByText('OpenClaw runtime status')).not.toBeInTheDocument()
+    expect(screen.getByText('Built-in PaddleOCR')).toBeInTheDocument()
     expect(screen.getAllByText('Loading...').length).toBeGreaterThan(0)
+  })
+
+  it('shows PaddleOCR setup entry points in the skill market and submits module-specific config', async () => {
+    mockGetSkillsResult.mockResolvedValue({ success: true, data: [] })
+
+    render(<SkillsPage />)
+
+    expect(await screen.findByText('Built-in PaddleOCR')).toBeInTheDocument()
+    expect(screen.getByText('High-Accuracy OCR')).toBeInTheDocument()
+    expect(screen.getByText('High-Accuracy Document Parsing')).toBeInTheDocument()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Configure now' })[0]!)
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('API endpoint'), {
+      target: { value: 'https://demo.paddleocr.com/ocr' },
+    })
+    fireEvent.change(screen.getByLabelText('API Key / Access Token'), {
+      target: { value: 'tok_text_123' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Verify & Enable' }))
+
+    expect(mockSetupPaddleOcrResult).toHaveBeenCalledWith({
+      moduleId: PADDLEOCR_TEXT_SKILL_ID,
+      apiUrl: 'https://demo.paddleocr.com/ocr',
+      accessToken: 'tok_text_123',
+    })
   })
 
   it('sorts featured skills by id', async () => {

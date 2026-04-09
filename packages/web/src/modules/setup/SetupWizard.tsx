@@ -2,6 +2,10 @@ import { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { platformResults } from '@/shared/adapters/platformResults'
 import {
+  capabilityToPaddleOcrModuleId,
+  getPaddleOcrModuleStatus,
+} from '@/shared/paddleocr'
+import {
   Shell,
   Check,
   ExternalLink,
@@ -17,6 +21,7 @@ import {
   Bot,
   Radar,
   ScanSearch,
+  FileText,
   Copy,
   FolderInput,
   Sparkles,
@@ -35,6 +40,7 @@ import {
 import { changeLanguage } from '@/i18n'
 import { buildGatewayUrl } from '@/shared/gatewayUrl'
 import { getSetupAdapter } from './adapters'
+import PaddleOcrSetupDialog from './PaddleOcrSetupDialog'
 import {
   CAPABILITIES,
   PROVIDERS,
@@ -42,7 +48,7 @@ import {
   CHANNEL_TYPES,
   DEFAULT_ONBOARDING_STATE,
 } from './types'
-import type { SystemInfo } from '@/lib/types'
+import type { PaddleOcrModuleId, SystemInfo } from '@/lib/types'
 import type { OpenclawProfileInput, OpenclawProfileSeedInput } from '@/shared/adapters/system'
 import type { SetupAdapter } from './adapters'
 import type {
@@ -58,11 +64,16 @@ interface SetupWizardProps {
   onComplete: () => void
 }
 
+function isSatisfiedCapabilityStatus(status: CapabilityStatus['status']): boolean {
+  return status === 'installed' || status === 'ready'
+}
+
 const CAPABILITY_TONES: Record<CapabilityId, string> = {
   engine: 'bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900',
   memory: 'bg-emerald-600 text-white',
   observe: 'bg-amber-500 text-stone-950',
-  ocr: 'bg-sky-600 text-white',
+  ocr_text: 'bg-sky-600 text-white',
+  ocr_doc: 'bg-cyan-700 text-white',
   agent: 'bg-rose-600 text-white',
 }
 
@@ -70,7 +81,8 @@ const CAPABILITY_DESC_KEYS: Record<CapabilityId, string> = {
   engine: 'capability.engine.desc',
   memory: 'capability.memory.desc',
   observe: 'capability.observe.desc',
-  ocr: 'capability.ocr.desc',
+  ocr_text: 'capability.ocrText.desc',
+  ocr_doc: 'capability.ocrDoc.desc',
   agent: 'capability.agent.desc',
 }
 
@@ -78,7 +90,8 @@ const CAPABILITY_ICONS: Record<CapabilityId, LucideIcon> = {
   engine: Shell,
   memory: HardDrive,
   observe: Radar,
-  ocr: ScanSearch,
+  ocr_text: ScanSearch,
+  ocr_doc: FileText,
   agent: Bot,
 }
 
@@ -101,6 +114,13 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const [profileSeedPath, setProfileSeedPath] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
+  const [paddleOcrDialogOpen, setPaddleOcrDialogOpen] = useState(false)
+  const [paddleOcrDialogModuleId, setPaddleOcrDialogModuleId] =
+    useState<PaddleOcrModuleId | null>(null)
+  const [paddleOcrApiUrl, setPaddleOcrApiUrl] = useState('')
+  const [paddleOcrAccessToken, setPaddleOcrAccessToken] = useState('')
+  const [paddleOcrBusy, setPaddleOcrBusy] = useState(false)
+  const [paddleOcrError, setPaddleOcrError] = useState<string | null>(null)
 
   const [onboard, setOnboard] = useState<OnboardingState>(DEFAULT_ONBOARDING_STATE)
   const updateOnboard = useCallback(
@@ -109,6 +129,32 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   )
 
   const adapter = getSetupAdapter()
+
+  const openPaddleOcrDialog = useCallback(async (capabilityId: 'ocr_text' | 'ocr_doc') => {
+    const moduleId = capabilityToPaddleOcrModuleId(capabilityId)
+    setPaddleOcrDialogModuleId(moduleId)
+    setPaddleOcrDialogOpen(true)
+    setPaddleOcrError(null)
+    setPaddleOcrAccessToken('')
+    setPaddleOcrApiUrl('')
+
+    try {
+      const status = await adapter.paddleocr.getStatus()
+      const moduleStatus = getPaddleOcrModuleStatus(status, moduleId)
+      if (moduleStatus.apiUrl) {
+        setPaddleOcrApiUrl(moduleStatus.apiUrl)
+      }
+    } catch {
+      // Keep the dialog usable even if the prefill request fails.
+    }
+  }, [adapter])
+
+  const closePaddleOcrDialog = useCallback(() => {
+    if (paddleOcrBusy) return
+    setPaddleOcrDialogOpen(false)
+    setPaddleOcrDialogModuleId(null)
+    setPaddleOcrError(null)
+  }, [paddleOcrBusy])
 
   const loadSystemInfo = useCallback(async () => {
     const result = await platformResults.detectSystem()
@@ -153,13 +199,15 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         if (!requiredSettled) return
 
         advanced = true
-        const requiredAllInstalled = requiredStatuses.every((item) => item.status === 'installed')
+        const requiredAllInstalled = requiredStatuses.every((item) =>
+          isSatisfiedCapabilityStatus(item.status),
+        )
         setPhase(requiredAllInstalled ? 'done' : 'ready')
       })
 
       const requiredAllInstalled = results
         .filter((r) => requiredIds.has(r.id))
-        .every((r) => r.status === 'installed')
+        .every((r) => isSatisfiedCapabilityStatus(r.status))
       if (!advanced) {
         setPhase(requiredAllInstalled ? 'done' : 'ready')
       }
@@ -168,6 +216,30 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       setPhase('error')
     }
   }, [adapter])
+
+  const submitPaddleOcrSetup = useCallback(async () => {
+    if (!paddleOcrDialogModuleId || !paddleOcrApiUrl.trim() || !paddleOcrAccessToken.trim()) {
+      return
+    }
+
+    setPaddleOcrBusy(true)
+    setPaddleOcrError(null)
+    try {
+      await adapter.paddleocr.setup({
+        moduleId: paddleOcrDialogModuleId,
+        apiUrl: paddleOcrApiUrl.trim(),
+        accessToken: paddleOcrAccessToken.trim(),
+      })
+      setPaddleOcrDialogOpen(false)
+      setPaddleOcrDialogModuleId(null)
+      setPaddleOcrAccessToken('')
+      await startDetection()
+    } catch (err) {
+      setPaddleOcrError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPaddleOcrBusy(false)
+    }
+  }, [adapter, paddleOcrAccessToken, paddleOcrApiUrl, paddleOcrDialogModuleId, startDetection])
 
   // 首次挂载自动开始检测
   useEffect(() => {
@@ -213,12 +285,12 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           )
         }
       })
-      setPhase('done')
+      await startDetection()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setPhase('error')
     }
-  }, [adapter, capabilities])
+  }, [adapter, capabilities, startDetection])
 
   // ─── 配置引导 ───
 
@@ -338,13 +410,24 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       },
   )
   const requiredMissing = capabilityCards.filter(
-    (c) => c.status === 'not_installed' && requiredIds.has(c.id),
+    (c) =>
+      !isSatisfiedCapabilityStatus(c.status) &&
+      c.status !== 'checking' &&
+      requiredIds.has(c.id),
   )
   const optionalMissing = capabilityCards.filter(
-    (c) => c.status === 'not_installed' && !requiredIds.has(c.id),
+    (c) =>
+      !isSatisfiedCapabilityStatus(c.status) &&
+      c.status !== 'checking' &&
+      !requiredIds.has(c.id),
   )
-  const installedCount = capabilityCards.filter((c) => c.status === 'installed').length
-  const pendingCount = capabilityCards.filter((c) => c.status === 'not_installed').length
+  const installedCount = capabilityCards.filter((c) =>
+    isSatisfiedCapabilityStatus(c.status),
+  ).length
+  const pendingCount = capabilityCards.filter(
+    (c) =>
+      c.status === 'not_installed' || c.status === 'needs_setup' || c.status === 'error',
+  ).length
   const workingCount =
     phase === 'installing'
       ? Object.values(installProgress).filter(
@@ -469,6 +552,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             progress={installProgress}
             phase={phase}
             onInstall={startInstall}
+            onConfigure={openPaddleOcrDialog}
           />
 
           <div className="surface-card-muted">
@@ -892,6 +976,19 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           </button>
         </div>
       )}
+
+      <PaddleOcrSetupDialog
+        open={paddleOcrDialogOpen}
+        busy={paddleOcrBusy}
+        error={paddleOcrError}
+        moduleId={paddleOcrDialogModuleId}
+        apiUrl={paddleOcrApiUrl}
+        accessToken={paddleOcrAccessToken}
+        onClose={closePaddleOcrDialog}
+        onApiUrlChange={setPaddleOcrApiUrl}
+        onAccessTokenChange={setPaddleOcrAccessToken}
+        onSubmit={submitPaddleOcrSetup}
+      />
     </div>
   )
 }
@@ -1222,10 +1319,11 @@ function CapabilityBadge({
         </span>
       )
     case 'installed':
+    case 'ready':
       return (
         <span className="inline-flex items-center gap-1 text-xs text-green-600">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          {version ? `v${version}` : t('common.installed')}
+          {version ? `v${version}` : t('setup.ready')}
         </span>
       )
     case 'not_installed':
@@ -1233,6 +1331,13 @@ function CapabilityBadge({
         <span className="inline-flex items-center gap-1 text-xs text-orange-500">
           <AlertCircle className="h-3.5 w-3.5" />
           {t('common.notInstalled')}
+        </span>
+      )
+    case 'needs_setup':
+      return (
+        <span className="inline-flex items-center gap-1 text-xs text-orange-500">
+          <AlertCircle className="h-3.5 w-3.5" />
+          {t('setup.paddleocr.needsSetupState')}
         </span>
       )
   }
@@ -1243,11 +1348,13 @@ function CapabilityDeck({
   progress,
   phase,
   onInstall,
+  onConfigure,
 }: {
   capabilities: CapabilityStatus[]
   progress: Record<CapabilityId, InstallProgress>
   phase: SetupPhase
   onInstall: (ids?: CapabilityId[]) => Promise<void>
+  onConfigure: (capabilityId: 'ocr_text' | 'ocr_doc') => void
 }) {
   const { t } = useTranslation()
 
@@ -1256,7 +1363,9 @@ function CapabilityDeck({
       {capabilities.map((capability) => {
         const Icon = CAPABILITY_ICONS[capability.id]
         const installState = progress[capability.id]
-        const isRequired = CAPABILITIES.find((item) => item.id === capability.id)?.required ?? false
+        const capabilityDef = CAPABILITIES.find((item) => item.id === capability.id)
+        const isRequired = capabilityDef?.required ?? false
+        const isConfigureCapability = capabilityDef?.action === 'configure'
         const installLocked =
           phase === 'installing' &&
           !installState &&
@@ -1296,7 +1405,18 @@ function CapabilityDeck({
             </div>
 
             <div className="setup-capability-action">
-              {capability.status === 'installed' || installState?.status === 'done' ? (
+              {isConfigureCapability ? (
+                <button
+                  type="button"
+                  onClick={() => onConfigure(capability.id as 'ocr_text' | 'ocr_doc')}
+                  disabled={capability.status === 'checking'}
+                  className="button-secondary"
+                >
+                  {capability.status === 'ready'
+                    ? t('setup.paddleocr.manage')
+                    : t('setup.paddleocr.configureAction', { name: t(capability.name) })}
+                </button>
+              ) : capability.status === 'installed' || installState?.status === 'done' ? (
                 <span className="inline-flex items-center gap-2 text-sm font-medium text-green-600">
                   <CheckCircle2 className="h-4 w-4" />
                   {t('setup.stageReady')}

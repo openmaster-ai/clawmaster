@@ -76,6 +76,22 @@ export interface OpenClawBinding {
   agentId: string
 }
 
+export interface OpenClawSkillEntry {
+  enabled?: boolean
+  apiKey?: string | Record<string, unknown>
+  env?: Record<string, string>
+  config?: Record<string, unknown>
+}
+
+export interface OpenClawSkillsConfig {
+  entries?: Record<string, OpenClawSkillEntry>
+}
+
+export interface OpenclawPathSettings {
+  configPath?: string
+  stateDir?: string
+}
+
 export interface ChannelVerifyResult {
   ok: boolean
   message: string
@@ -117,6 +133,7 @@ export interface OpenClawConfig {
   channels?: Record<string, OpenClawChannelEntry>
   models?: { providers?: Record<string, OpenClawModelProvider> }
   bindings?: OpenClawBinding[]
+  skills?: OpenClawSkillsConfig
   /** OpenClaw plugins.entries + metadata (from openclaw.json) */
   plugins?: {
     entries?: Record<
@@ -200,6 +217,31 @@ export interface SkillInfo {
   disabled?: boolean
   eligible?: boolean
   bundled?: boolean
+}
+
+export type PaddleOcrModuleId = 'paddleocr-text-recognition' | 'paddleocr-doc-parsing'
+
+export interface PaddleOcrModuleStatus {
+  configured: boolean
+  enabled: boolean
+  missing: boolean
+  apiUrlConfigured: boolean
+  accessTokenConfigured: boolean
+  apiUrl?: string
+}
+
+export interface PaddleOcrStatusPayload {
+  configured: boolean
+  enabledModules: PaddleOcrModuleId[]
+  missingModules: PaddleOcrModuleId[]
+  textRecognition: PaddleOcrModuleStatus
+  docParsing: PaddleOcrModuleStatus
+}
+
+export interface PaddleOcrSetupInput {
+  moduleId: PaddleOcrModuleId
+  apiUrl: string
+  accessToken: string
 }
 
 export interface ClawhubCliStatus {

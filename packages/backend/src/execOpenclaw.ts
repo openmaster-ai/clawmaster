@@ -11,11 +11,13 @@ import {
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { createRequire } from 'node:module'
 import { getOpenclawProfileArgs } from './openclawProfile.js'
 
 /** Node supports `stdio` on `execFile`; `@types/node` only lists it on spawn options */
 type ExecOpenclawFileOpts = ExecFileOptions & { stdio?: StdioOptions }
 import net from 'node:net'
+const require = createRequire(import.meta.url)
 
 /** GUI/backend child PATH may omit nvm global bin; resolve absolute path via login shell like Tauri `openclaw_cmd` */
 let cachedOpenclawBin: string | null | undefined
@@ -32,15 +34,79 @@ type DarwinLaunchAgentPlist = {
   EnvironmentVariables?: unknown
 }
 
+function getOpenclawPackageRoot(): string | null {
+  try {
+    const pkgJson = require.resolve('openclaw/package.json')
+    return path.dirname(pkgJson)
+  } catch {
+    return null
+  }
+}
+
+function getGlobalNpmRoot(): string | null {
+  try {
+    const out = execFileSync('npm', ['root', '-g'], {
+      encoding: 'utf8',
+      env: process.env,
+      windowsHide: true,
+    }).trim()
+    return out || null
+  } catch {
+    return null
+  }
+}
+
+function getGlobalOpenclawPackageRoot(): string | null {
+  const globalRoot = getGlobalNpmRoot()
+  if (!globalRoot) {
+    return null
+  }
+  const candidate = path.join(globalRoot, 'openclaw')
+  return fs.existsSync(candidate) ? candidate : null
+}
+
+function getOpenclawEntryFromPackageRoot(root: string | null): string | null {
+  if (!root) {
+    return null
+  }
+  const entry = path.join(root, 'openclaw.mjs')
+  return fs.existsSync(entry) ? entry : null
+}
+
+function resolveWin32OpenclawCommand(): ResolvedOpenclawCommand | null {
+  const profileArgs = getOpenclawProfileArgs()
+  const localEntry = getOpenclawEntryFromPackageRoot(getOpenclawPackageRoot())
+  if (localEntry) {
+    return {
+      bin: process.execPath,
+      argsPrefix: [localEntry, ...profileArgs],
+      env: process.env,
+    }
+  }
+
+  const globalEntry = getOpenclawEntryFromPackageRoot(getGlobalOpenclawPackageRoot())
+  if (globalEntry) {
+    return {
+      bin: process.execPath,
+      argsPrefix: [globalEntry, ...profileArgs],
+      env: process.env,
+    }
+  }
+
+  return {
+    bin: 'cmd',
+    argsPrefix: ['/d', '/s', '/c', 'openclaw', ...profileArgs],
+    env: process.env,
+  }
+}
+
 function resolveOpenclawBin(): string {
   if (cachedOpenclawBin !== undefined) {
     return cachedOpenclawBin ?? 'openclaw'
   }
   try {
     if (process.platform === 'win32') {
-      const out = execFileSync('cmd', ['/c', 'where openclaw'], { encoding: 'utf8' })
-      const line = out.trim().split(/\r?\n/)[0]?.trim()
-      cachedOpenclawBin = line && line.length > 0 ? line : null
+      cachedOpenclawBin = null
     } else if (process.platform === 'darwin') {
       const out = execFileSync('/bin/zsh', ['-ilc', 'command -v openclaw'], {
         encoding: 'utf8',
@@ -58,6 +124,10 @@ function resolveOpenclawBin(): string {
     cachedOpenclawBin = null
   }
   return cachedOpenclawBin ?? 'openclaw'
+}
+
+export function invalidateOpenclawBinCache(): void {
+  cachedOpenclawBin = undefined
 }
 
 function parseNodeVersion(raw: string): { major: number; minor: number; patch: number } | null {
@@ -137,6 +207,13 @@ function resolveDarwinCompatibleNodeBin(): string | null {
 }
 
 function resolveOpenclawCommand(): ResolvedOpenclawCommand {
+  if (process.platform === 'win32') {
+    return resolveWin32OpenclawCommand() ?? {
+      bin: 'cmd',
+      argsPrefix: ['/d', '/s', '/c', 'openclaw', ...getOpenclawProfileArgs()],
+      env: process.env,
+    }
+  }
   const openclawBin = resolveOpenclawBin()
   if (process.platform === 'darwin') {
     const nodeBin = resolveDarwinCompatibleNodeBin()

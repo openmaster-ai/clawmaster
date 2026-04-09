@@ -9,6 +9,22 @@
 import { execCommand } from '@/shared/adapters/platform'
 import { startGatewayResult, getGatewayStatusResult } from '@/shared/adapters/gateway'
 import { setConfigResult } from '@/shared/adapters/openclaw'
+import { installOpenclawGlobalResult } from '@/shared/adapters/npmOpenclaw'
+import {
+  bootstrapAfterInstallResult,
+  formatBootstrapSummary,
+} from '@/shared/adapters/openclawBootstrap'
+import {
+  getPaddleOcrStatusResult,
+  setupPaddleOcrResult,
+} from '@/shared/adapters/paddleocr'
+import {
+  capabilityToPaddleOcrModuleId,
+  getPaddleOcrModuleStatus,
+  PADDLEOCR_DOC_SKILL_ID,
+  PADDLEOCR_TEXT_SKILL_ID,
+} from '@/shared/paddleocr'
+import type { PaddleOcrSetupInput, PaddleOcrStatusPayload } from '@/lib/types'
 import {
   CAPABILITIES,
   PROVIDERS,
@@ -65,6 +81,11 @@ export interface OnboardingAdapter {
   installPlugin(packageName: string): Promise<void>
 }
 
+export interface PaddleOcrAdapter {
+  getStatus(): Promise<PaddleOcrStatusPayload>
+  setup(input: PaddleOcrSetupInput): Promise<PaddleOcrStatusPayload>
+}
+
 export interface SetupAdapter {
   /** 逐项检测五项能力，通过回调报告每项状态 */
   detectCapabilities(onUpdate: (status: CapabilityStatus) => void): Promise<CapabilityStatus[]>
@@ -72,6 +93,7 @@ export interface SetupAdapter {
   installCapabilities(ids: CapabilityId[], onProgress: (progress: InstallProgress) => void): Promise<void>
   /** 配置引导 */
   onboarding: OnboardingAdapter
+  paddleocr: PaddleOcrAdapter
 }
 
 // ─── 真实实现 ───
@@ -182,34 +204,133 @@ const realOnboardingAdapter: OnboardingAdapter = {
   },
 }
 
+const realPaddleOcrAdapter: PaddleOcrAdapter = {
+  async getStatus() {
+    const result = await getPaddleOcrStatusResult()
+    if (!result.success || !result.data) {
+      throw new Error(result.error ?? 'Failed to load PaddleOCR status')
+    }
+    return result.data
+  },
+
+  async setup(input) {
+    const result = await setupPaddleOcrResult(input)
+    if (!result.success || !result.data) {
+      throw new Error(result.error ?? 'Failed to configure PaddleOCR')
+    }
+    return result.data
+  },
+}
+
+function detectInstalledCapability(cap: (typeof CAPABILITIES)[number]): Promise<CapabilityStatus> {
+  if (cap.id === 'memory') {
+    return detectMemoryCapability()
+  }
+
+  return execCommand(cap.detectCmd, cap.detectArgs).then((output) => {
+    const match = output.match(/v?(\d+\.\d+[\w.-]*)/)
+    return {
+      id: cap.id,
+      name: cap.name,
+      status: 'installed',
+      version: match ? match[1] : output.trim().slice(0, 20),
+    } satisfies CapabilityStatus
+  })
+}
+
+function mapPaddleOcrCapabilityStatus(
+  cap: (typeof CAPABILITIES)[number],
+  payload: PaddleOcrStatusPayload,
+): CapabilityStatus {
+  const moduleId = capabilityToPaddleOcrModuleId(cap.id as 'ocr_text' | 'ocr_doc')
+  const moduleStatus = getPaddleOcrModuleStatus(payload, moduleId)
+
+  if (moduleStatus.configured) {
+    return {
+      id: cap.id,
+      name: cap.name,
+      status: 'ready',
+    }
+  }
+
+  if (moduleStatus.apiUrlConfigured && moduleStatus.missing) {
+    return {
+      id: cap.id,
+      name: cap.name,
+      status: 'error',
+      error: 'Bundled module is missing',
+    }
+  }
+
+  return {
+    id: cap.id,
+    name: cap.name,
+    status: 'needs_setup',
+  }
+}
+
+async function installEngineCapability(
+  onProgress: (progress: InstallProgress) => void,
+): Promise<void> {
+  onProgress({
+    id: 'engine',
+    status: 'installing',
+    progress: 20,
+    log: 'npm install -g openclaw',
+  })
+
+  const installResult = await installOpenclawGlobalResult('latest')
+  if (!installResult.success || !installResult.data) {
+    throw new Error(installResult.error ?? 'Failed to install OpenClaw CLI')
+  }
+  if (!installResult.data.ok) {
+    throw new Error(
+      installResult.data.stderr || installResult.data.stdout || 'OpenClaw CLI install failed',
+    )
+  }
+
+  onProgress({
+    id: 'engine',
+    status: 'installing',
+    progress: 75,
+    log: 'openclaw doctor --fix',
+  })
+
+  const bootstrapResult = await bootstrapAfterInstallResult()
+  if (!bootstrapResult.success) {
+    throw new Error(formatBootstrapSummary(bootstrapResult))
+  }
+}
+
 export const realSetupAdapter: SetupAdapter = {
   onboarding: realOnboardingAdapter,
+  paddleocr: realPaddleOcrAdapter,
 
   async detectCapabilities(onUpdate) {
+    let paddlePromise: Promise<PaddleOcrStatusPayload> | null = null
+
     return Promise.all(
       CAPABILITIES.map(async (cap) => {
         onUpdate({ id: cap.id, name: cap.name, status: 'checking' })
 
         try {
-          const status =
-            cap.id === 'memory'
-              ? await detectMemoryCapability()
-              : await execCommand(cap.detectCmd, cap.detectArgs).then((output) => {
-                  const match = output.match(/v?(\d+\.\d+[\w.-]*)/)
-                  return {
-                    id: cap.id,
-                    name: cap.name,
-                    status: 'installed',
-                    version: match ? match[1] : output.trim().slice(0, 20),
-                  } satisfies CapabilityStatus
-                })
+          if (cap.action === 'configure') {
+            paddlePromise ??= realPaddleOcrAdapter.getStatus()
+            const payload = await paddlePromise
+            const status = mapPaddleOcrCapabilityStatus(cap, payload)
+            onUpdate(status)
+            return status
+          }
+
+          const status = await detectInstalledCapability(cap)
           onUpdate(status)
           return status
-        } catch {
+        } catch (error) {
           const status: CapabilityStatus = {
             id: cap.id,
             name: cap.name,
-            status: 'not_installed',
+            status: cap.action === 'configure' ? 'error' : 'not_installed',
+            error: error instanceof Error ? error.message : String(error),
           }
           onUpdate(status)
           return status
@@ -223,11 +344,17 @@ export const realSetupAdapter: SetupAdapter = {
     const failures: string[] = []
     for (const id of ids) {
       const cap = CAPABILITIES.find((c) => c.id === id)
-      if (!cap) continue
+      if (!cap || cap.action !== 'install' || !cap.installSteps?.length) continue
 
       onProgress({ id, status: 'installing', progress: 0 })
 
       try {
+        if (id === 'engine') {
+          await installEngineCapability(onProgress)
+          onProgress({ id, status: 'done', progress: 100 })
+          continue
+        }
+
         const totalSteps = cap.installSteps.length
         for (let i = 0; i < totalSteps; i++) {
           const step = cap.installSteps[i]
@@ -260,11 +387,10 @@ export const realSetupAdapter: SetupAdapter = {
 
 // ─── Demo 实现 ───
 
-const DEMO_DETECT_RESULTS: Record<CapabilityId, { installed: boolean; version: string }> = {
+const DEMO_DETECT_RESULTS: Record<Exclude<CapabilityId, 'ocr_text' | 'ocr_doc'>, { installed: boolean; version: string }> = {
   engine: { installed: true, version: '2026.3.13' },
   memory: { installed: true, version: '0.2.0' },
   observe: { installed: false, version: '' },
-  ocr: { installed: false, version: '' },
   agent: { installed: true, version: '0.1.4' },
 }
 
@@ -305,8 +431,66 @@ const demoOnboardingAdapter: OnboardingAdapter = {
   },
 }
 
+const demoPaddleOcrConfiguredState: Record<
+  typeof PADDLEOCR_TEXT_SKILL_ID | typeof PADDLEOCR_DOC_SKILL_ID,
+  boolean
+> = {
+  [PADDLEOCR_TEXT_SKILL_ID]: false,
+  [PADDLEOCR_DOC_SKILL_ID]: false,
+}
+
+function demoPaddleOcrStatus(): PaddleOcrStatusPayload {
+  const textConfigured = demoPaddleOcrConfiguredState[PADDLEOCR_TEXT_SKILL_ID]
+  const docConfigured = demoPaddleOcrConfiguredState[PADDLEOCR_DOC_SKILL_ID]
+  return {
+    configured: textConfigured && docConfigured,
+    enabledModules: [
+      ...(textConfigured ? [PADDLEOCR_TEXT_SKILL_ID] : []),
+      ...(docConfigured ? [PADDLEOCR_DOC_SKILL_ID] : []),
+    ],
+    missingModules: [],
+    textRecognition: {
+      configured: textConfigured,
+      enabled: textConfigured,
+      missing: false,
+      apiUrlConfigured: textConfigured,
+      accessTokenConfigured: textConfigured,
+      apiUrl: textConfigured ? 'https://demo.paddleocr.com/ocr' : undefined,
+    },
+    docParsing: {
+      configured: docConfigured,
+      enabled: docConfigured,
+      missing: false,
+      apiUrlConfigured: docConfigured,
+      accessTokenConfigured: docConfigured,
+      apiUrl: docConfigured
+        ? 'https://demo.paddleocr.com/layout-parsing'
+        : undefined,
+    },
+  }
+}
+
+const demoPaddleOcrAdapter: PaddleOcrAdapter = {
+  async getStatus() {
+    await delay(400)
+    return demoPaddleOcrStatus()
+  },
+
+  async setup(input) {
+    await delay(900)
+    demoPaddleOcrConfiguredState[input.moduleId] = true
+    return demoPaddleOcrStatus()
+  },
+}
+
+export function resetDemoSetupAdapterState(): void {
+  demoPaddleOcrConfiguredState[PADDLEOCR_TEXT_SKILL_ID] = false
+  demoPaddleOcrConfiguredState[PADDLEOCR_DOC_SKILL_ID] = false
+}
+
 export const demoSetupAdapter: SetupAdapter = {
   onboarding: demoOnboardingAdapter,
+  paddleocr: demoPaddleOcrAdapter,
 
   async detectCapabilities(onUpdate) {
     const results: CapabilityStatus[] = []
@@ -315,13 +499,18 @@ export const demoSetupAdapter: SetupAdapter = {
       onUpdate({ id: cap.id, name: cap.name, status: 'checking' })
       await delay(400 + Math.random() * 300)
 
-      const demo = DEMO_DETECT_RESULTS[cap.id]
-      const status: CapabilityStatus = {
-        id: cap.id,
-        name: cap.name,
-        status: demo.installed ? 'installed' : 'not_installed',
-        version: demo.installed ? demo.version : undefined,
-      }
+      const status =
+        cap.action === 'configure'
+          ? mapPaddleOcrCapabilityStatus(cap, demoPaddleOcrStatus())
+          : (() => {
+              const demo = DEMO_DETECT_RESULTS[cap.id as keyof typeof DEMO_DETECT_RESULTS]
+              return {
+                id: cap.id,
+                name: cap.name,
+                status: demo.installed ? 'installed' : 'not_installed',
+                version: demo.installed ? demo.version : undefined,
+              } satisfies CapabilityStatus
+            })()
       onUpdate(status)
       results.push(status)
     }
@@ -332,7 +521,7 @@ export const demoSetupAdapter: SetupAdapter = {
   async installCapabilities(ids, onProgress) {
     for (const id of ids) {
       const cap = CAPABILITIES.find((c) => c.id === id)
-      if (!cap) continue
+      if (!cap || cap.action !== 'install') continue
 
       onProgress({ id, status: 'installing', progress: 0 })
 

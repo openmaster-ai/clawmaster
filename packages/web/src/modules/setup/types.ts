@@ -1,11 +1,25 @@
 /** 能力项 ID */
-export type CapabilityId = 'engine' | 'memory' | 'observe' | 'ocr' | 'agent'
+export type CapabilityId =
+  | 'engine'
+  | 'memory'
+  | 'observe'
+  | 'ocr_text'
+  | 'ocr_doc'
+  | 'agent'
+
+export type CapabilityCardStatus =
+  | 'checking'
+  | 'installed'
+  | 'not_installed'
+  | 'needs_setup'
+  | 'ready'
+  | 'error'
 
 /** 能力项状态 */
 export interface CapabilityStatus {
   id: CapabilityId
   name: string
-  status: 'checking' | 'installed' | 'not_installed' | 'error'
+  status: CapabilityCardStatus
   version?: string
   error?: string
 }
@@ -31,7 +45,8 @@ export interface CapabilityDef {
   name: string
   detectCmd: string
   detectArgs: string[]
-  installSteps: Array<{ cmd: string; args: string[] }>
+  installSteps?: Array<{ cmd: string; args: string[] }>
+  action: 'install' | 'configure'
   /** 是否必装。false 表示可在对应模块页面按需安装 */
   required: boolean
 }
@@ -43,6 +58,7 @@ export const CAPABILITIES: CapabilityDef[] = [
     name: 'capability.engine',
     detectCmd: 'openclaw',
     detectArgs: ['--version'],
+    action: 'install',
     required: true,
     installSteps: [
       { cmd: 'npm', args: ['install', '-g', 'openclaw'] },
@@ -53,6 +69,7 @@ export const CAPABILITIES: CapabilityDef[] = [
     name: 'capability.memory',
     detectCmd: 'openclaw',
     detectArgs: ['ltm', 'health'],
+    action: 'install',
     required: false,
     installSteps: [
       // 1. 创建目录 + 虚拟环境
@@ -72,27 +89,34 @@ export const CAPABILITIES: CapabilityDef[] = [
     name: 'capability.observe',
     detectCmd: 'clawprobe',
     detectArgs: ['--version'],
+    action: 'install',
     required: false,
     installSteps: [
       { cmd: 'npm', args: ['install', '-g', 'clawprobe'] },
     ],
   },
   {
-    id: 'ocr',
-    name: 'capability.ocr',
-    detectCmd: 'clawhub',
-    detectArgs: ['list', '--json'],
+    id: 'ocr_text',
+    name: 'capability.ocrText',
+    detectCmd: '',
+    detectArgs: [],
+    action: 'configure',
     required: false,
-    installSteps: [
-      { cmd: 'clawhub', args: ['install', 'paddleocr-doc-parsing'] },
-      { cmd: 'clawhub', args: ['install', 'paddleocr-text-recognition'] },
-    ],
+  },
+  {
+    id: 'ocr_doc',
+    name: 'capability.ocrDoc',
+    detectCmd: '',
+    detectArgs: [],
+    action: 'configure',
+    required: false,
   },
   {
     id: 'agent',
     name: 'capability.agent',
     detectCmd: 'python3',
     detectArgs: ['-c', 'import deepagents; print(deepagents.__version__)'],
+    action: 'install',
     required: false,
     installSteps: [
       { cmd: 'pip', args: ['install', 'langchain', 'langgraph', 'deepagents'] },
