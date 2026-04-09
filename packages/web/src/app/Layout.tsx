@@ -70,15 +70,6 @@ function normalizeVersion(version: string | undefined): string {
   return match ? match[0] : raw
 }
 
-function getInitialHostPlatform(): string | undefined {
-  if (typeof navigator === 'undefined') return undefined
-
-  const userAgentPlatform = (navigator as Navigator & { userAgentData?: { platform?: string } })
-    .userAgentData?.platform
-    ?.toLowerCase()
-  return userAgentPlatform ?? navigator.platform?.toLowerCase() ?? undefined
-}
-
 export default function Layout({ children }: LayoutProps) {
   const { t, i18n } = useTranslation()
   const location = useLocation()
@@ -87,7 +78,7 @@ export default function Layout({ children }: LayoutProps) {
   const [dark, setDark] = useState(isDark)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
-  const [hostPlatform, setHostPlatform] = useState<string | undefined>(getInitialHostPlatform)
+  const [hostPlatform, setHostPlatform] = useState<string | undefined>()
   const [gwStatus, setGwStatus] = useState<GatewayStatus | null>(null)
   const [updateBanner, setUpdateBanner] = useState<UpdateBannerState>({ status: 'idle' })
   const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false)
@@ -195,14 +186,28 @@ export default function Layout({ children }: LayoutProps) {
 
   useEffect(() => {
     if (!location.hash) return undefined
+    let cancelled = false
+    let attempts = 0
+    let handle: number | undefined
 
-    if (scrollToHashTarget(location.hash)) return undefined
+    function attemptScroll() {
+      if (cancelled) return
+      if (scrollToHashTarget(location.hash)) return
 
-    const handle = window.setTimeout(() => {
-      scrollToHashTarget(location.hash)
-    }, 80)
+      attempts += 1
+      if (attempts >= 60) return
 
-    return () => window.clearTimeout(handle)
+      handle = window.setTimeout(attemptScroll, 50)
+    }
+
+    attemptScroll()
+
+    return () => {
+      cancelled = true
+      if (typeof handle === 'number') {
+        window.clearTimeout(handle)
+      }
+    }
   }, [location.hash, location.pathname, scrollToHashTarget])
 
   function toggleDarkMode() {

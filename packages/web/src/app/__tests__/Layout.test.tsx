@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
@@ -26,14 +27,29 @@ function LocationSpy() {
   return <div data-testid="location-spy">{`${location.pathname}${location.hash}`}</div>
 }
 
-function renderLayout(initialPath = '/settings') {
+function DelayedProfileAnchor() {
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => setVisible(true), 250)
+    return () => window.clearTimeout(handle)
+  }, [])
+
+  return visible ? <div id="settings-profile">Profile anchor</div> : null
+}
+
+function renderLayout(initialPath = '/settings', children?: React.ReactNode) {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Layout>
         <LocationSpy />
-        <div id="settings-profile">Profile anchor</div>
-        <div id="gateway-runtime">Gateway anchor</div>
-        <div>测试内容</div>
+        {children ?? (
+          <>
+            <div id="settings-profile">Profile anchor</div>
+            <div id="gateway-runtime">Gateway anchor</div>
+            <div>测试内容</div>
+          </>
+        )}
       </Layout>
     </MemoryRouter>,
   )
@@ -171,6 +187,27 @@ describe('Layout', () => {
 
     expect(within(dialog).getByRole('option', { name: /设置：Profile 路径/i })).toBeInTheDocument()
     expect(within(dialog).getByRole('option', { name: /概览/i })).toBeInTheDocument()
+  })
+
+  it('keeps retrying hash jumps until delayed content mounts', async () => {
+    renderLayout('/settings#settings-profile', <DelayedProfileAnchor />)
+
+    expect(scrollIntoViewMock).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalled()
+    }, { timeout: 1000 })
+  })
+
+  it('does not expose windows-only runtime jump before backend host detection resolves', async () => {
+    mockDetectSystem.mockImplementation(() => new Promise(() => {}))
+    renderLayout('/settings')
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    const dialog = await screen.findByRole('dialog', { name: '命令面板' })
+
+    expect(within(dialog).queryByRole('option', { name: /设置：运行时/i })).not.toBeInTheDocument()
   })
 
   it('does not execute a command when enter confirms IME composition', async () => {
