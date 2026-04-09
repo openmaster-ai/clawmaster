@@ -66,6 +66,7 @@ type UpdateBannerState =
   | { status: 'available'; currentVersion: string; latestVersion: string }
 
 const COMMAND_HINT_DISMISSED_KEY = 'clawmaster-command-palette-hint-dismissed'
+const HASH_SCROLL_OBSERVER_TIMEOUT_MS = 10_000
 
 function isEditableEventTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -73,6 +74,15 @@ function isEditableEventTarget(target: EventTarget | null): boolean {
 
   const editableRoot = target.closest('input, textarea, select, [contenteditable="true"]')
   return Boolean(editableRoot)
+}
+
+function decodeHashTargetId(hashValue: string): string | null {
+  try {
+    const targetId = decodeURIComponent(hashValue.replace(/^#/, ''))
+    return targetId || null
+  } catch {
+    return null
+  }
 }
 
 function normalizeVersion(version: string | undefined): string {
@@ -188,13 +198,7 @@ export default function Layout({ children }: LayoutProps) {
   }, [currentPath])
 
   const scrollToHashTarget = useCallback((hashValue: string) => {
-    let targetId = ''
-    try {
-      targetId = decodeURIComponent(hashValue.replace(/^#/, ''))
-    } catch {
-      return false
-    }
-
+    const targetId = decodeHashTargetId(hashValue)
     if (!targetId) return false
 
     const target = document.getElementById(targetId)
@@ -206,14 +210,20 @@ export default function Layout({ children }: LayoutProps) {
 
   useEffect(() => {
     if (!location.hash) return undefined
+    if (!decodeHashTargetId(location.hash)) return undefined
+
     let cancelled = false
     let observer: MutationObserver | undefined
+    let timeoutHandle: number | undefined
 
     function tryScroll() {
       if (cancelled) return true
       const found = scrollToHashTarget(location.hash)
       if (found) {
         observer?.disconnect()
+        if (typeof timeoutHandle === 'number') {
+          window.clearTimeout(timeoutHandle)
+        }
       }
       return found
     }
@@ -224,9 +234,15 @@ export default function Layout({ children }: LayoutProps) {
       void tryScroll()
     })
     observer.observe(document.body, { childList: true, subtree: true })
+    timeoutHandle = window.setTimeout(() => {
+      observer?.disconnect()
+    }, HASH_SCROLL_OBSERVER_TIMEOUT_MS)
 
     return () => {
       cancelled = true
+      if (typeof timeoutHandle === 'number') {
+        window.clearTimeout(timeoutHandle)
+      }
       observer?.disconnect()
     }
   }, [location.hash, location.pathname, scrollToHashTarget])

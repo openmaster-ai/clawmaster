@@ -333,11 +333,62 @@ describe('Layout', () => {
   })
 
   it('ignores malformed hash fragments instead of crashing the shell', async () => {
+    const originalMutationObserver = window.MutationObserver
+    const observe = vi.fn()
+
+    Object.defineProperty(window, 'MutationObserver', {
+      configurable: true,
+      writable: true,
+      value: class {
+        observe = observe
+        disconnect = vi.fn()
+      },
+    })
+
     renderLayout('/settings#%E0%A4%A')
 
     expect(await screen.findByRole('heading', { level: 2, name: '设置' })).toBeInTheDocument()
     expect(screen.getByTestId('location-spy')).toHaveTextContent('/settings#%E0%A4%A')
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
+    expect(observe).not.toHaveBeenCalledWith(document.body, { childList: true, subtree: true })
+
+    Object.defineProperty(window, 'MutationObserver', {
+      configurable: true,
+      writable: true,
+      value: originalMutationObserver,
+    })
+  })
+
+  it('disconnects hash observers when an anchor never appears', async () => {
+    vi.useFakeTimers()
+
+    const originalMutationObserver = window.MutationObserver
+    const observe = vi.fn()
+    const disconnect = vi.fn()
+
+    Object.defineProperty(window, 'MutationObserver', {
+      configurable: true,
+      writable: true,
+      value: class {
+        observe = observe
+        disconnect = disconnect
+      },
+    })
+
+    renderLayout('/settings#old-anchor')
+
+    expect(observe).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(disconnect).toHaveBeenCalled()
+
+    Object.defineProperty(window, 'MutationObserver', {
+      configurable: true,
+      writable: true,
+      value: originalMutationObserver,
+    })
+    vi.useRealTimers()
   })
 
   it('runs quick actions from the command palette', async () => {
