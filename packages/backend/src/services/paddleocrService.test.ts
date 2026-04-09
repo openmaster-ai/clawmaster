@@ -6,9 +6,11 @@ import test from 'node:test'
 
 import { getOpenclawConfigPath } from '../paths.js'
 import {
+  clearPaddleOcr,
   getPaddleOcrStatus,
   PADDLEOCR_DOC_SKILL_ID,
   PADDLEOCR_TEXT_SKILL_ID,
+  previewPaddleOcr,
   setupPaddleOcr,
 } from './paddleocrService.js'
 
@@ -159,6 +161,48 @@ test('setupPaddleOcr is idempotent and preserves existing skill files', async ()
   assert.equal(fs.readFileSync(customSkillPath, 'utf8'), '# custom text recognition\n')
 })
 
+test('setupPaddleOcr can reuse the saved token when rotating only the endpoint', async () => {
+  const homeDir = makeTempHome('reuse-token')
+  setTempHomeEnv(homeDir)
+
+  const assetRoot = path.join(homeDir, 'assets')
+  writeSkillAsset(assetRoot, PADDLEOCR_TEXT_SKILL_ID)
+  writeSkillAsset(assetRoot, PADDLEOCR_DOC_SKILL_ID)
+
+  const skillsDir = path.join(homeDir, '.openclaw', 'workspace', 'skills')
+
+  await setupPaddleOcr(
+    {
+      moduleId: PADDLEOCR_TEXT_SKILL_ID,
+      apiUrl: 'https://demo.paddleocr.com/ocr',
+      accessToken: 'tok_saved',
+    },
+    {
+      assetRoot,
+      skillsDir,
+      validateCredentials: async () => undefined,
+    },
+  )
+
+  let observedToken = ''
+  await setupPaddleOcr(
+    {
+      moduleId: PADDLEOCR_TEXT_SKILL_ID,
+      apiUrl: 'https://demo.paddleocr.com/ocr',
+      accessToken: '',
+    },
+    {
+      assetRoot,
+      skillsDir,
+      validateCredentials: async (_moduleId, _apiUrl, accessToken) => {
+        observedToken = accessToken
+      },
+    },
+  )
+
+  assert.equal(observedToken, 'tok_saved')
+})
+
 test('setupPaddleOcr surfaces credential validation failures', async () => {
   const homeDir = makeTempHome('validation-error')
   setTempHomeEnv(homeDir)
@@ -232,6 +276,104 @@ test('setupPaddleOcr preserves the other module when configuring document parsin
     config.skills.entries[PADDLEOCR_TEXT_SKILL_ID].env.PADDLEOCR_ACCESS_TOKEN,
     'tok_text',
   )
+  assert.equal(
+    config.skills.entries[PADDLEOCR_DOC_SKILL_ID].env.PADDLEOCR_ACCESS_TOKEN,
+    'tok_doc',
+  )
+})
+
+test('previewPaddleOcr returns extracted text, stats, and response preview', async () => {
+  const homeDir = makeTempHome('preview')
+  setTempHomeEnv(homeDir)
+
+  const preview = await previewPaddleOcr(
+    {
+      moduleId: PADDLEOCR_TEXT_SKILL_ID,
+      apiUrl: 'https://demo.paddleocr.com/ocr',
+      accessToken: 'tok_preview',
+    },
+    {
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            errorCode: 0,
+            result: {
+              ocrResults: [
+                {
+                  prunedResult: {
+                    rec_texts: ['ClawMaster PaddleOCR Preview', 'Order #A-1024'],
+                  },
+                },
+              ],
+              dataInfo: {
+                numPages: 1,
+              },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      now: (() => {
+        let current = 100
+        return () => {
+          current += 25
+          return current
+        }
+      })(),
+    },
+  )
+
+  assert.equal(preview.moduleId, PADDLEOCR_TEXT_SKILL_ID)
+  assert.equal(preview.pageCount, 1)
+  assert.equal(preview.textLineCount, 2)
+  assert.match(preview.extractedText, /ClawMaster PaddleOCR Preview/)
+  assert.match(preview.responsePreview, /ocrResults/)
+  assert.equal(preview.latencyMs, 25)
+})
+
+test('clearPaddleOcr removes only the selected module entry', async () => {
+  const homeDir = makeTempHome('clear')
+  setTempHomeEnv(homeDir)
+
+  const assetRoot = path.join(homeDir, 'assets')
+  writeSkillAsset(assetRoot, PADDLEOCR_TEXT_SKILL_ID)
+  writeSkillAsset(assetRoot, PADDLEOCR_DOC_SKILL_ID)
+  const skillsDir = path.join(homeDir, '.openclaw', 'workspace', 'skills')
+
+  await setupPaddleOcr(
+    {
+      moduleId: PADDLEOCR_TEXT_SKILL_ID,
+      apiUrl: 'https://demo.paddleocr.com/ocr',
+      accessToken: 'tok_text',
+    },
+    {
+      assetRoot,
+      skillsDir,
+      validateCredentials: async () => undefined,
+    },
+  )
+  await setupPaddleOcr(
+    {
+      moduleId: PADDLEOCR_DOC_SKILL_ID,
+      apiUrl: 'https://demo.paddleocr.com/layout-parsing',
+      accessToken: 'tok_doc',
+    },
+    {
+      assetRoot,
+      skillsDir,
+      validateCredentials: async () => undefined,
+    },
+  )
+
+  const status = await clearPaddleOcr(
+    { moduleId: PADDLEOCR_TEXT_SKILL_ID },
+    { skillsDir },
+  )
+  assert.deepEqual(status.enabledModules, [PADDLEOCR_DOC_SKILL_ID])
+  assert.equal(status.textRecognition.configured, false)
+  assert.equal(status.docParsing.configured, true)
+
+  const config = JSON.parse(fs.readFileSync(getOpenclawConfigPath(), 'utf8')) as Record<string, any>
+  assert.equal(config.skills.entries[PADDLEOCR_TEXT_SKILL_ID], undefined)
   assert.equal(
     config.skills.entries[PADDLEOCR_DOC_SKILL_ID].env.PADDLEOCR_ACCESS_TOKEN,
     'tok_doc',

@@ -11,6 +11,8 @@ const mockDetectCapabilities = vi.fn()
 const mockInstallCapabilities = vi.fn()
 const mockPaddleOcrGetStatus = vi.fn()
 const mockPaddleOcrSetup = vi.fn()
+const mockPaddleOcrPreview = vi.fn()
+const mockPaddleOcrClear = vi.fn()
 const mockDetectSystem = vi.fn()
 const mockSaveProfile = vi.fn()
 const mockClearProfile = vi.fn()
@@ -20,6 +22,8 @@ const mockSetupAdapter = {
   paddleocr: {
     getStatus: (...args: any[]) => mockPaddleOcrGetStatus(...args),
     setup: (...args: any[]) => mockPaddleOcrSetup(...args),
+    preview: (...args: any[]) => mockPaddleOcrPreview(...args),
+    clear: (...args: any[]) => mockPaddleOcrClear(...args),
   },
   onboarding: {
     initConfig: vi.fn(),
@@ -119,6 +123,52 @@ describe('SetupWizard', () => {
       }
       if (input.moduleId === PADDLEOCR_DOC_SKILL_ID) {
         paddleOcrDocConfigured = true
+      }
+      return {
+        configured: paddleOcrTextConfigured && paddleOcrDocConfigured,
+        enabledModules: [
+          ...(paddleOcrTextConfigured ? [PADDLEOCR_TEXT_SKILL_ID] : []),
+          ...(paddleOcrDocConfigured ? [PADDLEOCR_DOC_SKILL_ID] : []),
+        ],
+        missingModules: [],
+        textRecognition: {
+          configured: paddleOcrTextConfigured,
+          enabled: paddleOcrTextConfigured,
+          missing: false,
+          apiUrlConfigured: paddleOcrTextConfigured,
+          accessTokenConfigured: paddleOcrTextConfigured,
+          apiUrl: paddleOcrTextConfigured ? 'https://demo.paddleocr.com/ocr' : undefined,
+        },
+        docParsing: {
+          configured: paddleOcrDocConfigured,
+          enabled: paddleOcrDocConfigured,
+          missing: false,
+          apiUrlConfigured: paddleOcrDocConfigured,
+          accessTokenConfigured: paddleOcrDocConfigured,
+          apiUrl: paddleOcrDocConfigured ? 'https://demo.paddleocr.com/layout-parsing' : undefined,
+        },
+      }
+    })
+    mockPaddleOcrPreview.mockImplementation(
+      async (input: { moduleId: string; apiUrl: string }) => ({
+        moduleId: input.moduleId,
+        apiUrl: input.apiUrl,
+        latencyMs: input.moduleId === PADDLEOCR_TEXT_SKILL_ID ? 123 : 240,
+        pageCount: 1,
+        textLineCount: input.moduleId === PADDLEOCR_TEXT_SKILL_ID ? 4 : 3,
+        extractedText:
+          input.moduleId === PADDLEOCR_TEXT_SKILL_ID
+            ? 'ClawMaster PaddleOCR Preview\nOrder #A-1024\nTotal: 42.80 USD\nShip to: Shanghai'
+            : '# ClawMaster PaddleOCR Preview\n\n- Order: A-1024\n- Total: 42.80 USD',
+        responsePreview: '{"ok":true}',
+      }),
+    )
+    mockPaddleOcrClear.mockImplementation(async (input: { moduleId: string }) => {
+      if (input.moduleId === PADDLEOCR_TEXT_SKILL_ID) {
+        paddleOcrTextConfigured = false
+      }
+      if (input.moduleId === PADDLEOCR_DOC_SKILL_ID) {
+        paddleOcrDocConfigured = false
       }
       return {
         configured: paddleOcrTextConfigured && paddleOcrDocConfigured,
@@ -375,13 +425,13 @@ describe('SetupWizard', () => {
     })
   })
 
-  it('opens the shared PaddleOCR setup dialog and keeps submit disabled until both fields are filled', async () => {
+  it('opens the shared PaddleOCR setup dialog and keeps submit disabled until the endpoint and token state are valid', async () => {
     render(<SetupWizard onComplete={() => {}} />)
 
     fireEvent.click(await screen.findByRole('button', { name: /Configure High-Accuracy OCR/ }))
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
-    const submitButton = screen.getByRole('button', { name: 'Verify & Enable' })
+    const submitButton = screen.getByRole('button', { name: 'Save & verify' })
     expect(submitButton).toBeDisabled()
 
     fireEvent.change(screen.getByLabelText('API endpoint'), {
@@ -395,7 +445,7 @@ describe('SetupWizard', () => {
     expect(submitButton).not.toBeDisabled()
   })
 
-  it('marks both PaddleOCR modules as ready after successful setup and keeps that state on rerender', async () => {
+  it('keeps PaddleOCR modules separate and shows a sample preview after saving one module', async () => {
     const { unmount } = render(<SetupWizard onComplete={() => {}} />)
 
     fireEvent.click(await screen.findByRole('button', { name: /Configure High-Accuracy OCR/ }))
@@ -405,7 +455,7 @@ describe('SetupWizard', () => {
     fireEvent.change(screen.getByLabelText('API Key / Access Token'), {
       target: { value: 'tok_test_1234567890' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Verify & Enable' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save & verify' }))
 
     await waitFor(() => {
       expect(mockPaddleOcrSetup).toHaveBeenCalledWith({
@@ -414,13 +464,46 @@ describe('SetupWizard', () => {
         accessToken: 'tok_test_1234567890',
       })
     })
+    expect(await screen.findByText('Sample preview')).toBeInTheDocument()
+    expect(await screen.findByText(/ClawMaster PaddleOCR Preview/)).toBeInTheDocument()
+    expect(mockPaddleOcrPreview).toHaveBeenCalledWith({
+      moduleId: PADDLEOCR_TEXT_SKILL_ID,
+      apiUrl: 'https://demo.paddleocr.com/ocr',
+      accessToken: 'tok_test_1234567890',
+    })
     expect(await screen.findByRole('button', { name: 'Update setup' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Configure High-Accuracy Document Parsing/ })).toBeInTheDocument()
 
     unmount()
     render(<SetupWizard onComplete={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Update setup' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Configure High-Accuracy Document Parsing/ })).toBeInTheDocument()
     })
+  })
+
+  it('can clear the saved PaddleOCR module configuration from the dialog', async () => {
+    render(<SetupWizard onComplete={() => {}} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Configure High-Accuracy OCR/ }))
+    fireEvent.change(screen.getByLabelText('API endpoint'), {
+      target: { value: 'https://demo.paddleocr.com/ocr' },
+    })
+    fireEvent.change(screen.getByLabelText('API Key / Access Token'), {
+      target: { value: 'tok_test_1234567890' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save & verify' }))
+    await screen.findByRole('button', { name: 'Disable & clear credentials' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Disable & clear credentials' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear module' }))
+
+    await waitFor(() => {
+      expect(mockPaddleOcrClear).toHaveBeenCalledWith({
+        moduleId: PADDLEOCR_TEXT_SKILL_ID,
+      })
+    })
+    expect(await screen.findByRole('button', { name: /Configure High-Accuracy OCR/ })).toBeInTheDocument()
   })
 })

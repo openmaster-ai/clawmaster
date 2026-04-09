@@ -17,7 +17,9 @@ import {
   formatBootstrapSummary,
 } from '@/shared/adapters/openclawBootstrap'
 import {
+  clearPaddleOcrResult,
   getPaddleOcrStatusResult,
+  previewPaddleOcrResult,
   setupPaddleOcrResult,
 } from '@/shared/adapters/paddleocr'
 import {
@@ -26,7 +28,12 @@ import {
   PADDLEOCR_DOC_SKILL_ID,
   PADDLEOCR_TEXT_SKILL_ID,
 } from '@/shared/paddleocr'
-import type { PaddleOcrSetupInput, PaddleOcrStatusPayload } from '@/lib/types'
+import type {
+  PaddleOcrClearInput,
+  PaddleOcrPreviewPayload,
+  PaddleOcrSetupInput,
+  PaddleOcrStatusPayload,
+} from '@/lib/types'
 import {
   CAPABILITIES,
   PROVIDERS,
@@ -191,6 +198,8 @@ export interface OnboardingAdapter {
 export interface PaddleOcrAdapter {
   getStatus(): Promise<PaddleOcrStatusPayload>
   setup(input: PaddleOcrSetupInput): Promise<PaddleOcrStatusPayload>
+  preview(input: PaddleOcrSetupInput): Promise<PaddleOcrPreviewPayload>
+  clear(input: PaddleOcrClearInput): Promise<PaddleOcrStatusPayload>
 }
 
 export interface SetupAdapter {
@@ -444,6 +453,22 @@ const realPaddleOcrAdapter: PaddleOcrAdapter = {
     }
     return result.data
   },
+
+  async preview(input) {
+    const result = await previewPaddleOcrResult(input)
+    if (!result.success || !result.data) {
+      throw new Error(result.error ?? 'Failed to preview PaddleOCR')
+    }
+    return result.data
+  },
+
+  async clear(input) {
+    const result = await clearPaddleOcrResult(input)
+    if (!result.success || !result.data) {
+      throw new Error(result.error ?? 'Failed to clear PaddleOCR configuration')
+    }
+    return result.data
+  },
 }
 
 function detectInstalledCapability(cap: (typeof CAPABILITIES)[number]): Promise<CapabilityStatus> {
@@ -673,41 +698,120 @@ const demoOnboardingAdapter: OnboardingAdapter = {
   },
 }
 
+type DemoPaddleOcrModuleState = {
+  configured: boolean
+  accessTokenConfigured: boolean
+  apiUrl?: string
+}
+
 const demoPaddleOcrConfiguredState: Record<
   typeof PADDLEOCR_TEXT_SKILL_ID | typeof PADDLEOCR_DOC_SKILL_ID,
-  boolean
+  DemoPaddleOcrModuleState
 > = {
-  [PADDLEOCR_TEXT_SKILL_ID]: false,
-  [PADDLEOCR_DOC_SKILL_ID]: false,
+  [PADDLEOCR_TEXT_SKILL_ID]: {
+    configured: false,
+    accessTokenConfigured: false,
+  },
+  [PADDLEOCR_DOC_SKILL_ID]: {
+    configured: false,
+    accessTokenConfigured: false,
+  },
+}
+
+function makeDemoPreviewPayload(
+  moduleId: typeof PADDLEOCR_TEXT_SKILL_ID | typeof PADDLEOCR_DOC_SKILL_ID,
+  apiUrl: string,
+): PaddleOcrPreviewPayload {
+  if (moduleId === PADDLEOCR_TEXT_SKILL_ID) {
+    const extractedText = [
+      'ClawMaster PaddleOCR Preview',
+      'Order #A-1024',
+      'Total: 42.80 USD',
+      'Ship to: Shanghai',
+    ].join('\n')
+    return {
+      moduleId,
+      apiUrl,
+      latencyMs: 428,
+      pageCount: 1,
+      textLineCount: 4,
+      extractedText,
+      responsePreview: JSON.stringify(
+        {
+          ocrResults: [
+            {
+              prunedResult: {
+                rec_texts: extractedText.split('\n'),
+                rec_scores: [0.99, 0.98, 0.97, 0.98],
+              },
+            },
+          ],
+          dataInfo: {
+            numPages: 1,
+            type: 'image',
+          },
+        },
+        null,
+        2,
+      ),
+    }
+  }
+
+  const extractedText = [
+    '# ClawMaster PaddleOCR Preview',
+    '',
+    '- Order: A-1024',
+    '- Total: 42.80 USD',
+    '- Ship to: Shanghai',
+  ].join('\n')
+  return {
+    moduleId,
+    apiUrl,
+    latencyMs: 612,
+    pageCount: 1,
+    textLineCount: 4,
+    extractedText,
+    responsePreview: JSON.stringify(
+      {
+        layoutParsingResults: [
+          {
+            markdown: {
+              text: extractedText,
+            },
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+  }
 }
 
 function demoPaddleOcrStatus(): PaddleOcrStatusPayload {
-  const textConfigured = demoPaddleOcrConfiguredState[PADDLEOCR_TEXT_SKILL_ID]
-  const docConfigured = demoPaddleOcrConfiguredState[PADDLEOCR_DOC_SKILL_ID]
+  const textState = demoPaddleOcrConfiguredState[PADDLEOCR_TEXT_SKILL_ID]
+  const docState = demoPaddleOcrConfiguredState[PADDLEOCR_DOC_SKILL_ID]
   return {
-    configured: textConfigured && docConfigured,
+    configured: textState.configured && docState.configured,
     enabledModules: [
-      ...(textConfigured ? [PADDLEOCR_TEXT_SKILL_ID] : []),
-      ...(docConfigured ? [PADDLEOCR_DOC_SKILL_ID] : []),
+      ...(textState.configured ? [PADDLEOCR_TEXT_SKILL_ID] : []),
+      ...(docState.configured ? [PADDLEOCR_DOC_SKILL_ID] : []),
     ],
     missingModules: [],
     textRecognition: {
-      configured: textConfigured,
-      enabled: textConfigured,
+      configured: textState.configured,
+      enabled: textState.configured,
       missing: false,
-      apiUrlConfigured: textConfigured,
-      accessTokenConfigured: textConfigured,
-      apiUrl: textConfigured ? 'https://demo.paddleocr.com/ocr' : undefined,
+      apiUrlConfigured: Boolean(textState.apiUrl),
+      accessTokenConfigured: textState.accessTokenConfigured,
+      apiUrl: textState.apiUrl,
     },
     docParsing: {
-      configured: docConfigured,
-      enabled: docConfigured,
+      configured: docState.configured,
+      enabled: docState.configured,
       missing: false,
-      apiUrlConfigured: docConfigured,
-      accessTokenConfigured: docConfigured,
-      apiUrl: docConfigured
-        ? 'https://demo.paddleocr.com/layout-parsing'
-        : undefined,
+      apiUrlConfigured: Boolean(docState.apiUrl),
+      accessTokenConfigured: docState.accessTokenConfigured,
+      apiUrl: docState.apiUrl,
     },
   }
 }
@@ -720,14 +824,49 @@ const demoPaddleOcrAdapter: PaddleOcrAdapter = {
 
   async setup(input) {
     await delay(900)
-    demoPaddleOcrConfiguredState[input.moduleId] = true
+    const existingState = demoPaddleOcrConfiguredState[input.moduleId]
+    if (!input.accessToken.trim() && !existingState.accessTokenConfigured) {
+      throw new Error('Access Token is required.')
+    }
+    demoPaddleOcrConfiguredState[input.moduleId] = {
+      configured: true,
+      accessTokenConfigured: existingState.accessTokenConfigured || Boolean(input.accessToken.trim()),
+      apiUrl: input.apiUrl.trim(),
+    }
+    return demoPaddleOcrStatus()
+  },
+
+  async preview(input) {
+    await delay(500)
+    const existingState = demoPaddleOcrConfiguredState[input.moduleId]
+    if (!input.accessToken.trim() && !existingState.accessTokenConfigured) {
+      throw new Error('Access Token is required.')
+    }
+    return makeDemoPreviewPayload(input.moduleId, input.apiUrl.trim())
+  },
+
+  async clear(input) {
+    await delay(500)
+    demoPaddleOcrConfiguredState[input.moduleId] = {
+      configured: false,
+      accessTokenConfigured: false,
+      apiUrl: undefined,
+    }
     return demoPaddleOcrStatus()
   },
 }
 
 export function resetDemoSetupAdapterState(): void {
-  demoPaddleOcrConfiguredState[PADDLEOCR_TEXT_SKILL_ID] = false
-  demoPaddleOcrConfiguredState[PADDLEOCR_DOC_SKILL_ID] = false
+  demoPaddleOcrConfiguredState[PADDLEOCR_TEXT_SKILL_ID] = {
+    configured: false,
+    accessTokenConfigured: false,
+    apiUrl: undefined,
+  }
+  demoPaddleOcrConfiguredState[PADDLEOCR_DOC_SKILL_ID] = {
+    configured: false,
+    accessTokenConfigured: false,
+    apiUrl: undefined,
+  }
 }
 
 export const demoSetupAdapter: SetupAdapter = {
