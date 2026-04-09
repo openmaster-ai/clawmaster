@@ -101,6 +101,8 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
     if (!open) return undefined
 
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.isComposing || event.keyCode === 229) return
+
       if (event.key === 'Escape') {
         event.preventDefault()
         onClose()
@@ -123,7 +125,6 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
       }
 
       if (event.key === 'Enter') {
-        if (event.isComposing || event.keyCode === 229) return
         const activeCommand = filteredCommands[activeIndex]
         if (!activeCommand) return
         event.preventDefault()

@@ -243,6 +243,24 @@ describe('Layout', () => {
     expect(screen.getByRole('dialog', { name: '命令面板' })).toBeInTheDocument()
   })
 
+  it('does not move palette selection when arrow keys are used during IME composition', async () => {
+    renderLayout('/settings')
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    const dialog = await screen.findByRole('dialog', { name: '命令面板' })
+    const initialOption = within(dialog).getAllByRole('option').find((option) => (
+      option.getAttribute('aria-selected') === 'true'
+    ))
+
+    expect(initialOption).toBeDefined()
+
+    fireEvent.keyDown(window, { key: 'ArrowDown', isComposing: true })
+
+    expect(initialOption).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('dialog', { name: '命令面板' })).toBeInTheDocument()
+  })
+
   it('runs quick actions from the command palette', async () => {
     renderLayout('/settings')
 
