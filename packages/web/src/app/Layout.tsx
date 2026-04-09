@@ -76,6 +76,10 @@ function isEditableEventTarget(target: EventTarget | null): boolean {
   return Boolean(editableRoot)
 }
 
+function hasActiveModalDialog(): boolean {
+  return Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'))
+}
+
 function decodeHashTargetId(hashValue: string): string | null {
   try {
     const targetId = decodeURIComponent(hashValue.replace(/^#/, ''))
@@ -284,6 +288,7 @@ export default function Layout({ children }: LayoutProps) {
       if (event.key.toLowerCase() !== 'k') return
       if (isAppleClientPlatform(clientPlatform) ? !event.metaKey : !event.ctrlKey) return
       if (isEditableEventTarget(event.target)) return
+      if (hasActiveModalDialog()) return
       event.preventDefault()
       openCommandPalette()
     }

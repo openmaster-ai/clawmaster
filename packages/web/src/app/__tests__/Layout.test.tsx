@@ -216,6 +216,19 @@ describe('Layout', () => {
     expect(screen.queryByRole('dialog', { name: '命令面板' })).not.toBeInTheDocument()
   })
 
+  it('does not open the command palette while another modal dialog is active', async () => {
+    renderLayout('/settings', (
+      <div role="dialog" aria-modal="true" aria-label="Open modal">
+        Existing modal
+      </div>
+    ))
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    expect(screen.getByRole('dialog', { name: 'Open modal' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '命令面板' })).not.toBeInTheDocument()
+  })
+
   it('uses cmd+k on apple clients without stealing ctrl+k', async () => {
     Object.defineProperty(window.navigator, 'platform', {
       configurable: true,
@@ -306,6 +319,34 @@ describe('Layout', () => {
     const options = within(dialog).getAllByRole('option')
     expect(options[0]).toHaveAttribute('aria-selected', 'true')
     expect(options[0]).toHaveTextContent('Profile 路径')
+
+    fireEvent.keyDown(window, { key: 'Enter' })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location-spy')).toHaveTextContent('/settings#settings-profile')
+    })
+  })
+
+  it('executes the focused palette option when keyboard users press enter', async () => {
+    renderLayout('/settings')
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    const dialog = await screen.findByRole('dialog', { name: '命令面板' })
+
+    fireEvent.change(within(dialog).getByPlaceholderText('搜索页面、区块和快捷操作...'), {
+      target: { value: 'settings' },
+    })
+
+    const profileOption = await within(dialog).findByRole('option', { name: /设置：Profile 路径/i })
+    const selectedBeforeFocus = within(dialog).getAllByRole('option').find((option) => (
+      option.getAttribute('aria-selected') === 'true'
+    ))
+
+    expect(selectedBeforeFocus).toBeDefined()
+    expect(selectedBeforeFocus).not.toBe(profileOption)
+    fireEvent.focus(profileOption)
+    expect(profileOption).toHaveAttribute('aria-selected', 'true')
 
     fireEvent.keyDown(window, { key: 'Enter' })
 

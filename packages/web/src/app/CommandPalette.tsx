@@ -189,6 +189,7 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
                   role="option"
                   aria-selected={active}
                   className={cn('command-palette-item', active && 'command-palette-item-active')}
+                  onFocus={() => setActiveIndex(index)}
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => {
                     command.execute()
