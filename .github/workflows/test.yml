@@ -119,12 +119,12 @@ jobs:
       - name: Prepare isolated Windows profile
         shell: pwsh
         run: |
-          $home = Join-Path $env:RUNNER_TEMP 'clawmaster-home'
+          $targetHome = Join-Path $env:RUNNER_TEMP 'clawmaster-home'
           $appData = Join-Path $env:RUNNER_TEMP 'clawmaster-appdata'
-          New-Item -ItemType Directory -Force -Path $home | Out-Null
+          New-Item -ItemType Directory -Force -Path $targetHome | Out-Null
           New-Item -ItemType Directory -Force -Path $appData | Out-Null
-          "USERPROFILE=$home" >> $env:GITHUB_ENV
-          "HOME=$home" >> $env:GITHUB_ENV
+          "USERPROFILE=$targetHome" >> $env:GITHUB_ENV
+          "HOME=$targetHome" >> $env:GITHUB_ENV
           "APPDATA=$appData" >> $env:GITHUB_ENV
           "BACKEND_PORT=3311" >> $env:GITHUB_ENV
           "DISTRO_NAME=Ubuntu-24.04" >> $env:GITHUB_ENV
@@ -193,11 +193,11 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          if (Test-Path $env:BACKEND_LOG) {
+          if ($env:BACKEND_LOG -and (Test-Path $env:BACKEND_LOG)) {
             Write-Host '--- backend stdout ---'
             Get-Content $env:BACKEND_LOG
           }
-          if (Test-Path $env:BACKEND_ERR_LOG) {
+          if ($env:BACKEND_ERR_LOG -and (Test-Path $env:BACKEND_ERR_LOG)) {
             Write-Host '--- backend stderr ---'
             Get-Content $env:BACKEND_ERR_LOG
           }
