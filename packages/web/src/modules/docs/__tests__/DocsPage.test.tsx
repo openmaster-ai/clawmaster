@@ -105,7 +105,10 @@ describe('DocsPage', () => {
     })
 
     await waitFor(() => {
-      expect(mockUpsertLocalDataDocuments).toHaveBeenCalled()
+      expect(mockUpsertLocalDataDocuments).toHaveBeenCalledWith(
+        expect.any(Array),
+        { replace: { module: 'docs' } },
+      )
       expect(mockSearchLocalData).toHaveBeenCalledWith({ query: 'gateway setup', module: 'docs', limit: 8 })
     })
     expect(await screen.findByRole('heading', { name: 'Indexed Local Data' })).toBeInTheDocument()
@@ -127,7 +130,10 @@ describe('DocsPage', () => {
     })
 
     await waitFor(() => {
-      expect(mockUpsertLocalDataDocuments).toHaveBeenCalled()
+      expect(mockUpsertLocalDataDocuments).toHaveBeenCalledWith(
+        expect.any(Array),
+        { replace: { module: 'docs' } },
+      )
     })
     expect(mockSearchLocalData).not.toHaveBeenCalled()
 

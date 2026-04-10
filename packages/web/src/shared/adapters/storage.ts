@@ -53,12 +53,18 @@ export async function getLocalDataStatsResult(): Promise<AdapterResult<LocalData
 
 export async function upsertLocalDataDocumentsResult(
   documents: LocalDataDocument[],
+  options?: {
+    replace?: {
+      module: string
+      sourceType?: string
+    }
+  },
 ): Promise<AdapterResult<LocalDataStats>> {
   if (getIsTauri()) return desktopStorageUnavailable()
   return webFetchJson<LocalDataStats>('/api/storage/documents', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ documents }),
+    body: JSON.stringify({ documents, replace: options?.replace }),
   })
 }
 

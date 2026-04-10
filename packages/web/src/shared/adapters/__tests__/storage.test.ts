@@ -63,6 +63,39 @@ describe('storage adapter', () => {
             content: 'Install OpenClaw and start the gateway.',
           },
         ],
+        replace: undefined,
+      }),
+    })
+  })
+
+  it('can request replace semantics for generated document sources', async () => {
+    const { webFetchJson } = await import('../webHttp')
+    vi.mocked(webFetchJson).mockResolvedValue({ success: true, data: { documentCount: 1 }, error: null })
+
+    await upsertLocalDataDocumentsResult([
+      {
+        id: 'docs:quickstart',
+        module: 'docs',
+        sourceType: 'guide',
+        title: 'Quick Start',
+        content: 'Install OpenClaw and start the gateway.',
+      },
+    ], { replace: { module: 'docs' } })
+
+    expect(webFetchJson).toHaveBeenCalledWith('/api/storage/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        documents: [
+          {
+            id: 'docs:quickstart',
+            module: 'docs',
+            sourceType: 'guide',
+            title: 'Quick Start',
+            content: 'Install OpenClaw and start the gateway.',
+          },
+        ],
+        replace: { module: 'docs' },
       }),
     })
   })

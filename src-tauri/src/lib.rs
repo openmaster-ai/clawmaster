@@ -1181,10 +1181,17 @@ fn parse_node_major(version: &str) -> Option<u32> {
 }
 
 fn supports_seekdb_embedded(target_platform: &str, target_arch: &str) -> bool {
-    match target_platform {
+    match normalize_local_data_target_platform(target_platform) {
         "linux" => target_arch == "x64" || target_arch == "arm64",
         "darwin" => target_arch == "arm64",
         _ => false,
+    }
+}
+
+fn normalize_local_data_target_platform(platform: &str) -> &str {
+    match platform {
+        "macos" => "darwin",
+        other => other,
     }
 }
 
@@ -1345,7 +1352,7 @@ fn resolve_local_data_status(
         "native",
         profile_key,
         data_root,
-        std::env::consts::OS,
+        normalize_local_data_target_platform(std::env::consts::OS),
         &target_arch,
         node_installed,
         node_version,
@@ -1881,8 +1888,9 @@ fn reindex_openclaw_memory() -> Result<OpenclawMemoryReindexPayload, String> {
 mod tests {
     use super::{
         get_config_path_candidates_for, get_openclaw_profile_args, get_openclaw_profile_data_dir,
-        local_data_profile_key, normalize_clawmaster_runtime_selection, parse_node_major,
-        parse_wsl_list_verbose, resolve_config_path_from_candidates, resolve_local_data_status,
+        local_data_profile_key, normalize_clawmaster_runtime_selection,
+        normalize_local_data_target_platform, parse_node_major, parse_wsl_list_verbose,
+        resolve_config_path_from_candidates, resolve_local_data_status,
         resolve_selected_wsl_distro_from_list, supports_seekdb_embedded,
         OpenclawProfileSelection,
     };
@@ -2014,6 +2022,8 @@ mod tests {
         assert!(supports_seekdb_embedded("linux", "x64"));
         assert!(supports_seekdb_embedded("linux", "arm64"));
         assert!(supports_seekdb_embedded("darwin", "arm64"));
+        assert!(supports_seekdb_embedded("macos", "arm64"));
+        assert_eq!(normalize_local_data_target_platform("macos"), "darwin");
         assert!(!supports_seekdb_embedded("darwin", "x64"));
         assert!(!supports_seekdb_embedded("windows", "x64"));
     }

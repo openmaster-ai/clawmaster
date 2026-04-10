@@ -81,6 +81,11 @@ export interface LocalDataSearchOptions {
   limit?: number
 }
 
+export interface LocalDataReplaceScope {
+  module: string
+  sourceType?: string
+}
+
 export interface LocalDataHostRootContext {
   platform?: NodeJS.Platform | string
   wslDistro?: string | null
@@ -463,6 +468,34 @@ export class FallbackFileStore {
       return false
     })
     this.writeDocuments(kept)
+    return this.stats()
+  }
+
+  replaceDocuments(documents: LocalDataDocument[], scope: LocalDataReplaceScope): LocalDataStats {
+    this.init()
+    const module = scope.module.trim()
+    const sourceType = scope.sourceType?.trim() || undefined
+    if (!module) throw new Error('Local data replace module is required')
+
+    const normalized = documents.map((item) => {
+      const doc = normalizeDocument(item)
+      assertValidDocument(doc)
+      if (doc.module !== module) {
+        throw new Error(`Local data replace expected module "${module}" but received "${doc.module}"`)
+      }
+      if (sourceType && doc.sourceType !== sourceType) {
+        throw new Error(`Local data replace expected sourceType "${sourceType}" but received "${doc.sourceType}"`)
+      }
+      return doc
+    })
+
+    const next = this.readDocuments().filter((doc) => {
+      if (doc.module !== module) return true
+      if (sourceType && doc.sourceType !== sourceType) return true
+      return false
+    })
+    next.push(...normalized)
+    this.writeDocuments(next)
     return this.stats()
   }
 

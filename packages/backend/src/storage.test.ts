@@ -226,3 +226,54 @@ test('FallbackFileStore can rebuild and reset without corrupting schema state', 
 
   fs.rmSync(root, { recursive: true, force: true })
 })
+
+test('FallbackFileStore can replace generated module documents without keeping stale entries', () => {
+  const root = tempDir('filestore-replace')
+  const store = new FallbackFileStore({
+    state: 'ready',
+    engine: 'fallback',
+    runtimeTarget: 'native',
+    profileKey: 'default',
+    dataRoot: root,
+    engineRoot: path.join(root, 'fallback'),
+    nodeRequirement: '>=20',
+    supportsEmbedded: true,
+    targetPlatform: 'darwin',
+    targetArch: 'arm64',
+    reasonCode: null,
+  })
+
+  store.upsertDocuments([
+    {
+      id: 'docs:old',
+      module: 'docs',
+      sourceType: 'guide',
+      title: 'Old docs entry',
+      content: 'This retired-only document should not remain searchable.',
+    },
+    {
+      id: 'memory:keep',
+      module: 'memory',
+      sourceType: 'note',
+      title: 'Memory entry',
+      content: 'Keep this unrelated module document.',
+    },
+  ])
+
+  const stats = store.replaceDocuments([
+    {
+      id: 'docs:new',
+      module: 'docs',
+      sourceType: 'guide',
+      title: 'New docs entry',
+      content: 'Fresh gateway setup document.',
+    },
+  ], { module: 'docs' })
+
+  assert.equal(stats.documentCount, 2)
+  assert.equal(store.search({ query: 'retired-only', module: 'docs' }).length, 0)
+  assert.equal(store.search({ query: 'fresh gateway', module: 'docs' })[0]?.id, 'docs:new')
+  assert.equal(store.search({ query: 'unrelated', module: 'memory' })[0]?.id, 'memory:keep')
+
+  fs.rmSync(root, { recursive: true, force: true })
+})

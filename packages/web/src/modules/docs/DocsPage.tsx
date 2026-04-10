@@ -369,7 +369,9 @@ export default function DocsPage() {
   useEffect(() => {
     let cancelled = false
     setLocalDataIndexState('pending')
-    void upsertLocalDataDocumentsResult(localDataDocuments)
+    void upsertLocalDataDocumentsResult(localDataDocuments, {
+      replace: { module: 'docs' },
+    })
       .then((result) => {
         if (!cancelled) {
           setLocalDataIndexState(result.success ? 'ready' : 'failed')

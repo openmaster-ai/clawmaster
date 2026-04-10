@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 // Mock window.matchMedia for theme code
@@ -182,6 +182,56 @@ const mockRebuildLocalData = vi.fn()
 const mockResetLocalData = vi.fn()
 const mockIsTauri = vi.fn()
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
+function makeSystemInfo(overrides: any = {}) {
+  return {
+    nodejs: { installed: true, version: '20.0.0' },
+    npm: { installed: true, version: '10.0.0' },
+    openclaw: {
+      installed: true,
+      version: '2026.3.28',
+      configPath: '/home/.openclaw/openclaw.json',
+      dataDir: '/home/.openclaw',
+      profileMode: 'default',
+      profileName: null,
+      overrideActive: false,
+      configPathCandidates: ['/home/.openclaw/openclaw.json'],
+      existingConfigPaths: ['/home/.openclaw/openclaw.json'],
+      ...overrides.openclaw,
+    },
+    storage: {
+      state: 'ready',
+      engine: 'fallback',
+      runtimeTarget: 'native',
+      profileKey: 'default',
+      dataRoot: '/home/.clawmaster/data/default',
+      engineRoot: '/home/.clawmaster/data/default/fallback',
+      nodeRequirement: '>=20',
+      supportsEmbedded: true,
+      targetPlatform: 'darwin',
+      targetArch: 'arm64',
+      reasonCode: null,
+      ...overrides.storage,
+    },
+    runtime: {
+      mode: 'native',
+      hostPlatform: 'darwin',
+      wslAvailable: false,
+      selectedDistro: null,
+      selectedDistroExists: null,
+      distros: [],
+      ...overrides.runtime,
+    },
+  }
+}
+
 vi.mock('@/shared/adapters/platformResults', () => ({
   platformResults: {
     saveClawmasterRuntime: (...args: any[]) => mockSaveRuntime(...args),
@@ -210,42 +260,7 @@ vi.mock('@/shared/adapters/platform', () => ({
 
 vi.mock('@/adapters', () => ({
   platform: {
-    detectSystem: vi.fn().mockResolvedValue({
-      nodejs: { installed: true, version: '20.0.0' },
-      npm: { installed: true, version: '10.0.0' },
-      openclaw: {
-        installed: true,
-        version: '2026.3.28',
-        configPath: '/home/.openclaw/openclaw.json',
-        dataDir: '/home/.openclaw',
-        profileMode: 'default',
-        profileName: null,
-        overrideActive: false,
-        configPathCandidates: ['/home/.openclaw/openclaw.json'],
-        existingConfigPaths: ['/home/.openclaw/openclaw.json'],
-      },
-      storage: {
-        state: 'ready',
-        engine: 'fallback',
-        runtimeTarget: 'native',
-        profileKey: 'default',
-        dataRoot: '/home/.clawmaster/data/default',
-        engineRoot: '/home/.clawmaster/data/default/fallback',
-        nodeRequirement: '>=20',
-        supportsEmbedded: true,
-        targetPlatform: 'darwin',
-        targetArch: 'arm64',
-        reasonCode: null,
-      },
-      runtime: {
-        mode: 'native',
-        hostPlatform: 'darwin',
-        wslAvailable: false,
-        selectedDistro: null,
-        selectedDistroExists: null,
-        distros: [],
-      },
-    }),
+    detectSystem: vi.fn().mockResolvedValue(makeSystemInfo()),
   },
 }))
 
@@ -255,6 +270,7 @@ vi.mock('@/i18n', () => ({
 
 // Import after mocks
 import Settings from '../SettingsPage'
+import { platform } from '@/adapters'
 
 function renderSettings() {
   return render(
@@ -267,6 +283,7 @@ function renderSettings() {
 describe('UpdateSection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(platform.detectSystem).mockResolvedValue(makeSystemInfo())
     mockIsTauri.mockReturnValue(false)
     mockBootstrap.mockResolvedValue({ success: true })
     mockSaveProfile.mockResolvedValue({ success: true, data: undefined, error: null })
@@ -452,6 +469,84 @@ describe('UpdateSection', () => {
     })
     section = screen.getByText('Local Data').closest('section')
     expect(section).not.toBeNull()
+    expect(within(section!).queryByText('12')).not.toBeInTheDocument()
+  })
+
+  it('ignores out-of-order local data stats responses after switching profile', async () => {
+    const firstStats = deferred<any>()
+    mockGetLocalDataStats
+      .mockReturnValueOnce(firstStats.promise)
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          engine: 'fallback',
+          state: 'ready',
+          profileKey: 'dev',
+          dataRoot: '/home/.clawmaster/data/dev',
+          engineRoot: '/home/.clawmaster/data/dev/fallback',
+          documentCount: 3,
+          moduleCounts: { docs: 3 },
+          schemaVersion: 1,
+          updatedAt: '2026-04-10T01:00:00.000Z',
+        },
+        error: null,
+      })
+
+    vi.mocked(platform.detectSystem)
+      .mockResolvedValueOnce(makeSystemInfo())
+      .mockResolvedValueOnce(makeSystemInfo({
+        openclaw: {
+          dataDir: '/home/.openclaw-dev',
+          profileMode: 'dev',
+          overrideActive: true,
+        },
+        storage: {
+          profileKey: 'dev',
+          dataRoot: '/home/.clawmaster/data/dev',
+          engineRoot: '/home/.clawmaster/data/dev/fallback',
+        },
+      }))
+
+    renderSettings()
+
+    const heading = await screen.findByText('Local Data')
+    let section = heading.closest('section')
+    expect(section).not.toBeNull()
+
+    const profileSection = screen.getByText('OpenClaw profile').closest('section')
+    expect(profileSection).not.toBeNull()
+    const profile = within(profileSection!)
+    fireEvent.click(profile.getByRole('button', { name: /Dev/ }))
+    fireEvent.click(profile.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockGetLocalDataStats).toHaveBeenCalledTimes(2)
+    })
+    section = screen.getByText('Local Data').closest('section')
+    expect(section).not.toBeNull()
+    expect(within(section!).getAllByText('3')).toHaveLength(2)
+
+    await act(async () => {
+      firstStats.resolve({
+        success: true,
+        data: {
+          engine: 'fallback',
+          state: 'ready',
+          profileKey: 'default',
+          dataRoot: '/home/.clawmaster/data/default',
+          engineRoot: '/home/.clawmaster/data/default/fallback',
+          documentCount: 12,
+          moduleCounts: { docs: 12 },
+          schemaVersion: 1,
+          updatedAt: '2026-04-10T00:00:00.000Z',
+        },
+        error: null,
+      })
+    })
+
+    section = screen.getByText('Local Data').closest('section')
+    expect(section).not.toBeNull()
+    expect(within(section!).getAllByText('3')).toHaveLength(2)
     expect(within(section!).queryByText('12')).not.toBeInTheDocument()
   })
 

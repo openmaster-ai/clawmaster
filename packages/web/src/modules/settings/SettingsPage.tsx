@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { platform } from '@/adapters'
@@ -90,6 +90,7 @@ export default function Settings() {
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null)
   const [localDataStats, setLocalDataStats] = useState<LocalDataStats | null>(null)
   const [localDataBusy, setLocalDataBusy] = useState(false)
+  const localDataStatsRequestRef = useRef(0)
   const [logsOpen, setLogsOpen] = useState<DiagnosticsScope | null>(null)
   const [feedback, setFeedback] = useState<{ tone: 'info' | 'success' | 'error'; message: string } | null>(null)
   const [confirmAction, setConfirmAction] = useState<'reset' | 'uninstall' | 'local-data-reset' | null>(null)
@@ -113,7 +114,7 @@ export default function Settings() {
       setRuntimeDistro(info.runtime?.selectedDistro ?? '')
       setRuntimeError(null)
       setLocalDataStats(null)
-      void loadLocalDataStats()
+      void loadLocalDataStats(info.storage)
     } catch (err) {
       console.error('Failed to load system info:', err)
     } finally {
@@ -121,9 +122,19 @@ export default function Settings() {
     }
   }
 
-  async function loadLocalDataStats() {
+  async function loadLocalDataStats(expectedStorage?: LocalDataInfo) {
+    const requestId = ++localDataStatsRequestRef.current
     const result = await getLocalDataStatsResult()
+    if (requestId !== localDataStatsRequestRef.current) return
     if (result.success && result.data) {
+      if (
+        expectedStorage &&
+        (result.data.profileKey !== expectedStorage.profileKey ||
+          result.data.engineRoot !== expectedStorage.engineRoot)
+      ) {
+        setLocalDataStats(null)
+        return
+      }
       setLocalDataStats(result.data)
     } else {
       setLocalDataStats(null)
@@ -131,9 +142,11 @@ export default function Settings() {
   }
 
   async function rebuildLocalData() {
+    const requestId = ++localDataStatsRequestRef.current
     setLocalDataBusy(true)
     const result = await rebuildLocalDataResult()
     setLocalDataBusy(false)
+    if (requestId !== localDataStatsRequestRef.current) return
     if (result.success && result.data) {
       setLocalDataStats(result.data)
       setFeedback({ tone: 'success', message: t('settings.localDataRebuildSuccess') })
@@ -143,9 +156,11 @@ export default function Settings() {
   }
 
   async function resetLocalData() {
+    const requestId = ++localDataStatsRequestRef.current
     setLocalDataBusy(true)
     const result = await resetLocalDataResult()
     setLocalDataBusy(false)
+    if (requestId !== localDataStatsRequestRef.current) return
     if (result.success && result.data) {
       setLocalDataStats(result.data)
       setFeedback({ tone: 'success', message: t('settings.localDataResetSuccess') })
