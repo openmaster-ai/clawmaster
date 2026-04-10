@@ -4,7 +4,9 @@ import type { NextFunction, Request, Response } from 'express'
 export const CLAWMASTER_SERVICE_TOKEN_ENV = 'CLAWMASTER_SERVICE_TOKEN'
 export const CLAWMASTER_SERVICE_TOKEN_QUERY_KEY = 'serviceToken'
 export const CLAWMASTER_SERVICE_TOKEN_ALT_QUERY_KEY = 'token'
+export const CLAWMASTER_DANGER_TOKEN_HEADER = 'x-clawmaster-danger-token'
 export const SERVICE_AUTH_ERROR = 'ClawMaster service token required'
+export const SERVICE_DANGER_ERROR = 'ClawMaster destructive action confirmation required'
 
 type RequestLike = {
   headers?: Record<string, string | string[] | undefined>
@@ -69,10 +71,25 @@ export function isServiceRequestAuthorized(request: RequestLike): boolean {
   return requestToken ? safeTokenEquals(configuredToken, requestToken) : false
 }
 
+export function isDangerousServiceRequestAuthorized(request: RequestLike): boolean {
+  const configuredToken = getServiceAuthToken()
+  if (!configuredToken) return true
+  const dangerHeader = getSingleHeaderValue(request.headers?.[CLAWMASTER_DANGER_TOKEN_HEADER])?.trim()
+  return dangerHeader ? safeTokenEquals(configuredToken, dangerHeader) : false
+}
+
 export function requireServiceAuth(req: Request, res: Response, next: NextFunction): void {
   if (isServiceRequestAuthorized(req)) {
     next()
     return
   }
   res.status(401).json({ error: SERVICE_AUTH_ERROR })
+}
+
+export function requireDangerousServiceAuth(req: Request, res: Response, next: NextFunction): void {
+  if (isDangerousServiceRequestAuthorized(req)) {
+    next()
+    return
+  }
+  res.status(403).json({ error: SERVICE_DANGER_ERROR })
 }

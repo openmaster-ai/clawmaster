@@ -38,4 +38,14 @@ describe('webHttp auth helpers', () => {
     expect(isServiceAuthError(result.error)).toBe(true)
     expect(eventSpy).toHaveBeenCalledTimes(1)
   })
+
+  it('adds the danger confirmation header when a service token is stored', async () => {
+    localStorage.setItem('clawmaster-service-token', 'secret-token')
+
+    const { createDangerousActionHeaders } = await import('../webHttp')
+    const headers = createDangerousActionHeaders({ 'Content-Type': 'application/json' })
+
+    expect(headers.get('X-Clawmaster-Danger-Token')).toBe('secret-token')
+    expect(headers.get('Content-Type')).toBe('application/json')
+  })
 })

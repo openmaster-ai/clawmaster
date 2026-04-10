@@ -4,8 +4,9 @@ import { fail, ok } from '@/shared/adapters/types'
 export const SERVICE_TOKEN_STORAGE_KEY = 'clawmaster-service-token'
 export const SERVICE_AUTH_REQUIRED_EVENT = 'clawmaster-service-auth-required'
 export const SERVICE_AUTH_ERROR = 'CLAWMASTER_SERVICE_AUTH_REQUIRED'
+export const SERVICE_DANGER_TOKEN_HEADER = 'X-Clawmaster-Danger-Token'
 
-function getServiceToken(): string {
+export function getStoredServiceToken(): string {
   if (typeof window === 'undefined') return ''
   return localStorage.getItem(SERVICE_TOKEN_STORAGE_KEY)?.trim() || ''
 }
@@ -16,7 +17,7 @@ function notifyServiceAuthRequired() {
 }
 
 function withServiceAuth(init?: RequestInit): RequestInit | undefined {
-  const token = getServiceToken()
+  const token = getStoredServiceToken()
   if (!token) return init
   const headers = new Headers(init?.headers)
   if (!headers.has('Authorization')) {
@@ -71,11 +72,20 @@ export function createAuthedWebSocketUrl(pathname: string): string {
   if (typeof window === 'undefined') return pathname
   const url = new URL(pathname, window.location.href)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  const token = getServiceToken()
+  const token = getStoredServiceToken()
   if (token) {
     url.searchParams.set('serviceToken', token)
   }
   return url.toString()
+}
+
+export function createDangerousActionHeaders(headers?: HeadersInit): Headers {
+  const next = new Headers(headers)
+  const token = getStoredServiceToken()
+  if (token) {
+    next.set(SERVICE_DANGER_TOKEN_HEADER, token)
+  }
+  return next
 }
 
 export async function webFetch(

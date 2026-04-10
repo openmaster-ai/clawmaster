@@ -1,4 +1,5 @@
 import type express from 'express'
+import { requireDangerousServiceAuth } from '../serviceAuth.js'
 import {
   backupOpenclaw,
   getClawmasterRuntime,
@@ -60,7 +61,7 @@ export function registerSettingsRoutes(app: express.Express): void {
     }
   })
 
-  app.post('/api/settings/openclaw-restore', async (req, res) => {
+  app.post('/api/settings/openclaw-restore', requireDangerousServiceAuth, async (req, res) => {
     try {
       const tarPath = typeof (req.body as { tarPath?: string })?.tarPath === 'string' ? (req.body as { tarPath: string }).tarPath : ''
       await restoreOpenclawBackup(tarPath)
@@ -72,7 +73,7 @@ export function registerSettingsRoutes(app: express.Express): void {
     }
   })
 
-  app.post('/api/settings/remove-openclaw-data', (req, res) => {
+  app.post('/api/settings/remove-openclaw-data', requireDangerousServiceAuth, (req, res) => {
     try {
       removeOpenclawData((req.body as { confirm?: string })?.confirm)
       res.status(204).end()
@@ -83,7 +84,7 @@ export function registerSettingsRoutes(app: express.Express): void {
     }
   })
 
-  app.post('/api/settings/reset-config', (_req, res) => {
+  app.post('/api/settings/reset-config', requireDangerousServiceAuth, (_req, res) => {
     try {
       resetConfig()
       res.status(204).end()
@@ -123,7 +124,7 @@ export function registerSettingsRoutes(app: express.Express): void {
     }
   })
 
-  app.post('/api/settings/uninstall-openclaw', async (_req, res) => {
+  app.post('/api/settings/uninstall-openclaw', requireDangerousServiceAuth, async (_req, res) => {
     try {
       res.json(await uninstallOpenclaw())
     } catch (error: unknown) {

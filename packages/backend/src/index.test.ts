@@ -122,3 +122,151 @@ test('createApp protects api routes when a service token is configured', async (
     })
   })
 })
+
+test('createApp rejects destructive settings actions without the danger header in service mode', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-frontend-danger-'))
+  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><body>ClawMaster Service</body></html>', 'utf8')
+
+  await withFrontendDist(dir, async () => {
+    await withServiceToken('secret-token', async () => {
+      const app = createApp()
+      const server = app.listen(0, '127.0.0.1')
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once('listening', resolve)
+          server.once('error', reject)
+        })
+
+        const address = server.address()
+        assert.ok(address && typeof address === 'object')
+        const baseUrl = `http://127.0.0.1:${address.port}`
+
+        const removeResponse = await fetch(`${baseUrl}/api/settings/remove-openclaw-data`, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer secret-token',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ confirm: 'DELETE' }),
+        })
+        assert.equal(removeResponse.status, 403)
+
+        const resetResponse = await fetch(`${baseUrl}/api/settings/reset-config`, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer secret-token',
+          },
+        })
+        assert.equal(resetResponse.status, 403)
+
+        const restoreResponse = await fetch(`${baseUrl}/api/settings/openclaw-restore`, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer secret-token',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ tarPath: '' }),
+        })
+        assert.equal(restoreResponse.status, 403)
+      } finally {
+        if (server.listening) {
+          await new Promise<void>((resolve, reject) => {
+            server.close((error) => {
+              if (error) reject(error)
+              else resolve()
+            })
+          })
+        }
+      }
+    })
+  })
+})
+
+test('createApp allows destructive restore validation when the danger header is present', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-frontend-danger-ok-'))
+  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><body>ClawMaster Service</body></html>', 'utf8')
+
+  await withFrontendDist(dir, async () => {
+    await withServiceToken('secret-token', async () => {
+      const app = createApp()
+      const server = app.listen(0, '127.0.0.1')
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once('listening', resolve)
+          server.once('error', reject)
+        })
+
+        const address = server.address()
+        assert.ok(address && typeof address === 'object')
+        const baseUrl = `http://127.0.0.1:${address.port}`
+
+        const restoreResponse = await fetch(`${baseUrl}/api/settings/openclaw-restore`, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer secret-token',
+            'X-Clawmaster-Danger-Token': 'secret-token',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ tarPath: '' }),
+        })
+        assert.equal(restoreResponse.status, 400)
+      } finally {
+        if (server.listening) {
+          await new Promise<void>((resolve, reject) => {
+            server.close((error) => {
+              if (error) reject(error)
+              else resolve()
+            })
+          })
+        }
+      }
+    })
+  })
+})
+
+test('createApp rejects unsafe config dot-path writes', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-frontend-config-'))
+  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><body>ClawMaster Service</body></html>', 'utf8')
+
+  await withFrontendDist(dir, async () => {
+    await withServiceToken('secret-token', async () => {
+      const app = createApp()
+      const server = app.listen(0, '127.0.0.1')
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once('listening', resolve)
+          server.once('error', reject)
+        })
+
+        const address = server.address()
+        assert.ok(address && typeof address === 'object')
+        const baseUrl = `http://127.0.0.1:${address.port}`
+
+        const response = await fetch(`${baseUrl}/api/config/${encodeURIComponent('__proto__.polluted')}`, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer secret-token',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ value: true }),
+        })
+
+        assert.equal(response.status, 400)
+        assert.match(await response.text(), /Unsafe config path segment: __proto__/)
+        assert.equal(({} as Record<string, unknown>).polluted, undefined)
+      } finally {
+        if (server.listening) {
+          await new Promise<void>((resolve, reject) => {
+            server.close((error) => {
+              if (error) reject(error)
+              else resolve()
+            })
+          })
+        }
+      }
+    })
+  })
+})

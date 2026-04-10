@@ -2,7 +2,7 @@ import { tauriInvoke } from '@/shared/adapters/invoke'
 import { fromPromise } from '@/shared/adapters/resultHelpers'
 import type { AdapterResult } from '@/shared/adapters/types'
 import { getIsTauri } from '@/shared/adapters/platform'
-import { webFetchJson, webFetchVoid } from '@/shared/adapters/webHttp'
+import { createDangerousActionHeaders, webFetchJson, webFetchVoid } from '@/shared/adapters/webHttp'
 
 export interface UninstallOpenclawCliOutput {
   ok: boolean
@@ -31,7 +31,10 @@ export async function resetOpenclawConfigResult(): Promise<AdapterResult<void>> 
   if (getIsTauri()) {
     return fromPromise(() => tauriInvoke<void>('reset_openclaw_config'))
   }
-  return webFetchVoid('/api/settings/reset-config', { method: 'POST' })
+  return webFetchVoid('/api/settings/reset-config', {
+    method: 'POST',
+    headers: createDangerousActionHeaders(),
+  })
 }
 
 export async function uninstallOpenclawCliResult(): Promise<
@@ -44,6 +47,7 @@ export async function uninstallOpenclawCliResult(): Promise<
   }
   return webFetchJson<UninstallOpenclawCliOutput>('/api/settings/uninstall-openclaw', {
     method: 'POST',
+    headers: createDangerousActionHeaders(),
   })
 }
 
@@ -90,7 +94,7 @@ export async function restoreOpenclawBackupResult(tarPath: string): Promise<Adap
   }
   return webFetchVoid('/api/settings/openclaw-restore', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: createDangerousActionHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ tarPath }),
   })
 }
@@ -103,7 +107,7 @@ export async function removeOpenclawDataResult(): Promise<AdapterResult<void>> {
   }
   return webFetchVoid('/api/settings/remove-openclaw-data', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: createDangerousActionHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ confirm: 'DELETE' }),
   })
 }
