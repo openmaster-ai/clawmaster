@@ -143,7 +143,7 @@ describe('DashboardPage', () => {
     expect(screen.getByText('运维私有部署')).toBeInTheDocument()
     expect(screen.getByText('扩展助手能力')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '文档' })).toHaveAttribute('href', '/docs')
-    expect(screen.getByRole('link', { name: '插件' })).toHaveAttribute('href', '/plugins')
+    expect(screen.getAllByRole('link', { name: '能力中心' })[0]).toHaveAttribute('href', '/capabilities')
 
     fireEvent.click(screen.getByRole('button', { name: '打开 接入飞书或 Lark 清单' }))
 
@@ -171,6 +171,16 @@ describe('DashboardPage', () => {
     )
     expect(screen.getByRole('link', { name: '查看日志' })).toHaveAttribute('href', '/gateway')
     expect(screen.getByRole('link', { name: '编辑配置' })).toHaveAttribute('href', '/config')
+
+    fireEvent.click(screen.getByRole('button', { name: '打开 扩展助手能力 清单' }))
+
+    const capabilityDialog = await screen.findByRole('dialog')
+    const capabilityLinks = within(capabilityDialog).getAllByRole('link', { name: '前往对应区块' })
+    const capabilityHrefs = capabilityLinks.map((link) => link.getAttribute('href'))
+    expect(capabilityHrefs).toContain('/capabilities#capability-connect-data')
+    expect(capabilityHrefs).toContain('/capabilities#capability-automation')
+    expect(capabilityHrefs).toContain('/capabilities#capability-enhance')
+    expect(capabilityHrefs).toContain('/capabilities#capability-status')
   })
 
   it('shows the no-channel placeholder when config has no channels', async () => {

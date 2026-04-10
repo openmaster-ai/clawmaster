@@ -40,6 +40,16 @@ export type CommandDescriptor =
 
 const CURATED_SECTION_COMMANDS: SectionCommandDescriptor[] = [
   {
+    id: 'capability-status',
+    kind: 'section',
+    icon: 'sparkles',
+    path: '/capabilities',
+    hash: 'capability-status',
+    labelKey: 'command.jump.capabilityStatus',
+    descriptionKey: 'command.jump.capabilityStatusDesc',
+    keywords: ['capabilities', 'capability center', 'extensions', 'status', 'verify'],
+  },
+  {
     id: 'settings-runtime',
     kind: 'section',
     icon: 'settings-2',
