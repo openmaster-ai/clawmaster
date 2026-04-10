@@ -3,8 +3,10 @@ import { promisify } from 'util'
 import fs from 'fs'
 import { getOpenclawConfigResolution } from '../paths.js'
 import { getClawmasterRuntimeSelection } from '../clawmasterSettings.js'
+import { resolveLocalDataStatus } from '../storage.js'
 import {
   execWslCommand,
+  getWslHomeDirSync,
   getWslOpenclawProbeSync,
   listWslDistrosSync,
   resolveSelectedWslDistroSync,
@@ -37,6 +39,7 @@ export async function detectSystemInfo() {
     ? resolveSelectedWslDistroSync(runtimeSelection)
     : null
   const useWsl = shouldUseWslRuntime(runtimeSelection) && Boolean(selectedDistro)
+  const wslHomeDir = useWsl && selectedDistro ? getWslHomeDirSync(selectedDistro) : null
 
   let nodejs = { installed: false, version: '' }
   const nv = await checkCmd('node', ['--version'], useWsl, selectedDistro)
@@ -84,10 +87,21 @@ export async function detectSystemInfo() {
     }
     openclaw = { ...openclaw, installed: true, version }
   }
+  const storage = resolveLocalDataStatus({
+    runtimeSelection,
+    profileSelection: resolution.profileSelection,
+    hostPlatform: process.platform,
+    hostArch: process.arch,
+    nodeInstalled: nodejs.installed,
+    nodeVersion: nodejs.version,
+    selectedWslDistro: selectedDistro,
+    wslHomeDir,
+  })
   return {
     nodejs,
     npm,
     openclaw,
+    storage,
     runtime: {
       mode: runtimeSelection.mode,
       hostPlatform: process.platform,

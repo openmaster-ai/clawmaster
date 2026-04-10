@@ -47,6 +47,7 @@ pub struct SystemInfo {
     pub nodejs: NodejsInfo,
     pub npm: NpmInfo,
     pub openclaw: OpenClawInfo,
+    pub storage: LocalDataInfo,
     pub runtime: RuntimeInfo,
 }
 
@@ -103,6 +104,22 @@ pub struct RuntimeInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_start_backend: Option<bool>,
     pub distros: Vec<RuntimeDistroInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalDataInfo {
+    pub state: String,
+    pub engine: String,
+    pub runtime_target: String,
+    pub profile_key: String,
+    pub data_root: Option<String>,
+    pub engine_root: Option<String>,
+    pub node_requirement: String,
+    pub supports_embedded: bool,
+    pub target_platform: String,
+    pub target_arch: String,
+    pub reason_code: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -880,6 +897,7 @@ fn resolve_selected_wsl_distro(selection: &ClawmasterRuntimeSelection) -> Option
     resolve_selected_wsl_distro_from_list(&distros, selection)
 }
 
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn resolve_selected_wsl_distro_from_list(
     distros: &[RuntimeDistroInfo],
     selection: &ClawmasterRuntimeSelection,
@@ -1142,6 +1160,197 @@ fn get_config_resolution() -> OpenclawConfigResolution {
         config_path_candidates: default_candidates,
         existing_config_paths,
     }
+}
+
+fn normalize_arch_label(arch: &str) -> String {
+    match arch {
+        "x86_64" => "x64".to_string(),
+        "aarch64" => "arm64".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn parse_node_major(version: &str) -> Option<u32> {
+    let digits = version
+        .trim()
+        .trim_start_matches('v')
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect::<String>();
+    digits.parse::<u32>().ok()
+}
+
+fn supports_seekdb_embedded(target_platform: &str, target_arch: &str) -> bool {
+    match target_platform {
+        "linux" => target_arch == "x64" || target_arch == "arm64",
+        "darwin" => target_arch == "arm64",
+        _ => false,
+    }
+}
+
+fn local_data_profile_key(profile_selection: &OpenclawProfileSelection) -> String {
+    if profile_selection.kind == "named" {
+        if let Some(name) = profile_selection.name.as_ref() {
+            return format!("named:{name}");
+        }
+    }
+    profile_selection.kind.clone()
+}
+
+fn clawmaster_data_root_native(
+    profile_selection: &OpenclawProfileSelection,
+    home_dir: &Path,
+) -> PathBuf {
+    let base = home_dir.join(".clawmaster").join("data");
+    match profile_selection.kind.as_str() {
+        "dev" => base.join("dev"),
+        "named" => profile_selection
+            .name
+            .as_ref()
+            .map(|name| base.join("named").join(name))
+            .unwrap_or_else(|| base.join("default")),
+        _ => base.join("default"),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn clawmaster_data_root_posix(
+    profile_selection: &OpenclawProfileSelection,
+    home_dir: &str,
+) -> String {
+    let base = join_posix(&join_posix(home_dir, ".clawmaster"), "data");
+    match profile_selection.kind.as_str() {
+        "dev" => join_posix(&base, "dev"),
+        "named" => profile_selection
+            .name
+            .as_ref()
+            .map(|name| join_posix(&join_posix(&base, "named"), name))
+            .unwrap_or_else(|| join_posix(&base, "default")),
+        _ => join_posix(&base, "default"),
+    }
+}
+
+fn local_data_status_for_root(
+    runtime_target: &str,
+    profile_key: String,
+    data_root: String,
+    target_platform: &str,
+    target_arch: &str,
+    node_installed: bool,
+    node_version: &str,
+    join_child: impl Fn(&str, &str) -> String,
+) -> LocalDataInfo {
+    let supports_embedded = supports_seekdb_embedded(target_platform, target_arch);
+    let node_major = parse_node_major(node_version);
+    let fallback_root = join_child(&data_root, "fallback");
+
+    if !node_installed {
+        return LocalDataInfo {
+            state: "degraded".to_string(),
+            engine: "fallback".to_string(),
+            runtime_target: runtime_target.to_string(),
+            profile_key,
+            data_root: Some(data_root),
+            engine_root: Some(fallback_root),
+            node_requirement: ">=20".to_string(),
+            supports_embedded,
+            target_platform: target_platform.to_string(),
+            target_arch: target_arch.to_string(),
+            reason_code: Some("node_missing".to_string()),
+        };
+    }
+
+    if node_major.map(|major| major < 20).unwrap_or(true) {
+        return LocalDataInfo {
+            state: "degraded".to_string(),
+            engine: "fallback".to_string(),
+            runtime_target: runtime_target.to_string(),
+            profile_key,
+            data_root: Some(data_root),
+            engine_root: Some(fallback_root),
+            node_requirement: ">=20".to_string(),
+            supports_embedded,
+            target_platform: target_platform.to_string(),
+            target_arch: target_arch.to_string(),
+            reason_code: Some("node_too_old".to_string()),
+        };
+    }
+
+    LocalDataInfo {
+        state: "ready".to_string(),
+        engine: "fallback".to_string(),
+        runtime_target: runtime_target.to_string(),
+        profile_key,
+        data_root: Some(data_root.clone()),
+        engine_root: Some(join_child(&data_root, "fallback")),
+        node_requirement: ">=20".to_string(),
+        supports_embedded,
+        target_platform: target_platform.to_string(),
+        target_arch: target_arch.to_string(),
+        reason_code: None,
+    }
+}
+
+fn resolve_local_data_status(
+    _runtime_selection: &ClawmasterRuntimeSelection,
+    profile_selection: &OpenclawProfileSelection,
+    node_installed: bool,
+    node_version: &str,
+    _selected_wsl_distro: Option<&str>,
+    _wsl_home_dir: Option<&str>,
+) -> LocalDataInfo {
+    let target_arch = normalize_arch_label(std::env::consts::ARCH);
+    let profile_key = local_data_profile_key(profile_selection);
+
+    #[cfg(target_os = "windows")]
+    if should_use_wsl_runtime(_runtime_selection) {
+        let supports_embedded = supports_seekdb_embedded("linux", &target_arch);
+        if _selected_wsl_distro.is_none() {
+            return LocalDataInfo {
+                state: "blocked".to_string(),
+                engine: "unavailable".to_string(),
+                runtime_target: "wsl2".to_string(),
+                profile_key,
+                data_root: None,
+                engine_root: None,
+                node_requirement: ">=20".to_string(),
+                supports_embedded,
+                target_platform: "linux".to_string(),
+                target_arch,
+                reason_code: Some("wsl_distro_missing".to_string()),
+            };
+        }
+
+        let data_root = clawmaster_data_root_posix(
+            profile_selection,
+            _wsl_home_dir.unwrap_or("/home"),
+        );
+        return local_data_status_for_root(
+            "wsl2",
+            profile_key,
+            data_root,
+            "linux",
+            &target_arch,
+            node_installed,
+            node_version,
+            join_posix,
+        );
+    }
+
+    let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    let data_root = clawmaster_data_root_native(profile_selection, &home_dir)
+        .to_string_lossy()
+        .to_string();
+    local_data_status_for_root(
+        "native",
+        profile_key,
+        data_root,
+        std::env::consts::OS,
+        &target_arch,
+        node_installed,
+        node_version,
+        |base, child| PathBuf::from(base).join(child).to_string_lossy().to_string(),
+    )
 }
 
 fn get_config_path() -> PathBuf {
@@ -1672,8 +1881,9 @@ fn reindex_openclaw_memory() -> Result<OpenclawMemoryReindexPayload, String> {
 mod tests {
     use super::{
         get_config_path_candidates_for, get_openclaw_profile_args, get_openclaw_profile_data_dir,
-        normalize_clawmaster_runtime_selection, parse_wsl_list_verbose,
-        resolve_config_path_from_candidates, resolve_selected_wsl_distro_from_list,
+        local_data_profile_key, normalize_clawmaster_runtime_selection, parse_node_major,
+        parse_wsl_list_verbose, resolve_config_path_from_candidates, resolve_local_data_status,
+        resolve_selected_wsl_distro_from_list, supports_seekdb_embedded,
         OpenclawProfileSelection,
     };
     use std::fs;
@@ -1779,6 +1989,56 @@ mod tests {
                 .expect("named dir should resolve"),
             PathBuf::from("/home/alice/.openclaw-team-a")
         );
+    }
+
+    #[test]
+    fn local_data_profile_key_is_stable_for_profile_scopes() {
+        assert_eq!(
+            local_data_profile_key(&OpenclawProfileSelection {
+                kind: "default".to_string(),
+                name: None,
+            }),
+            "default"
+        );
+        assert_eq!(
+            local_data_profile_key(&OpenclawProfileSelection {
+                kind: "named".to_string(),
+                name: Some("team-a".to_string()),
+            }),
+            "named:team-a"
+        );
+    }
+
+    #[test]
+    fn seekdb_embedded_support_matrix_matches_upstream_bindings() {
+        assert!(supports_seekdb_embedded("linux", "x64"));
+        assert!(supports_seekdb_embedded("linux", "arm64"));
+        assert!(supports_seekdb_embedded("darwin", "arm64"));
+        assert!(!supports_seekdb_embedded("darwin", "x64"));
+        assert!(!supports_seekdb_embedded("windows", "x64"));
+    }
+
+    #[test]
+    fn parse_node_major_supports_standard_node_versions() {
+        assert_eq!(parse_node_major("v20.11.1"), Some(20));
+        assert_eq!(parse_node_major("18.19.0"), Some(18));
+        assert_eq!(parse_node_major(""), None);
+    }
+
+    #[test]
+    fn local_data_status_falls_back_when_node_is_too_old() {
+        let runtime = normalize_clawmaster_runtime_selection(None, None, None, None);
+        let profile = OpenclawProfileSelection {
+            kind: "dev".to_string(),
+            name: None,
+        };
+
+        let status = resolve_local_data_status(&runtime, &profile, true, "v18.19.0", None, None);
+
+        assert_eq!(status.state, "degraded");
+        assert_eq!(status.engine, "fallback");
+        assert_eq!(status.reason_code.as_deref(), Some("node_too_old"));
+        assert!(status.engine_root.unwrap().contains(".clawmaster"));
     }
 
     #[test]
@@ -1913,6 +2173,23 @@ fn detect_system() -> Result<SystemInfo, String> {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
     let resolution = get_config_resolution();
     let config_path = resolution.config_path.clone();
+    let storage_profile_selection = resolution.profile_selection.clone();
+    #[cfg(target_os = "windows")]
+    let storage_wsl_home = if should_use_wsl_runtime(&runtime_selection) {
+        selected_distro.as_deref().map(get_wsl_home_dir)
+    } else {
+        None
+    };
+    #[cfg(not(target_os = "windows"))]
+    let storage_wsl_home: Option<String> = None;
+    let storage = resolve_local_data_status(
+        &runtime_selection,
+        &storage_profile_selection,
+        nodejs.installed,
+        &nodejs.version,
+        selected_distro.as_deref(),
+        storage_wsl_home.as_deref(),
+    );
 
     let openclaw = OpenClawInfo {
         installed: openclaw_version.is_some() || config_path.exists(),
@@ -1958,6 +2235,7 @@ fn detect_system() -> Result<SystemInfo, String> {
         nodejs,
         npm,
         openclaw,
+        storage,
         runtime: RuntimeInfo {
             mode: runtime_selection.mode.clone(),
             host_platform: std::env::consts::OS.to_string(),

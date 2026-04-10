@@ -6,14 +6,23 @@ import DocsPage from '../DocsPage'
 
 const mockExecCommand = vi.fn()
 const mockWriteText = vi.fn()
+const mockUpsertLocalDataDocuments = vi.fn()
+const mockSearchLocalData = vi.fn()
 
 vi.mock('@/shared/adapters/platform', () => ({
   execCommand: (...args: any[]) => mockExecCommand(...args),
 }))
 
+vi.mock('@/shared/adapters/storage', () => ({
+  upsertLocalDataDocumentsResult: (...args: any[]) => mockUpsertLocalDataDocuments(...args),
+  searchLocalDataResult: (...args: any[]) => mockSearchLocalData(...args),
+}))
+
 describe('DocsPage', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
+    mockUpsertLocalDataDocuments.mockResolvedValue({ success: true, data: { documentCount: 14 }, error: null })
+    mockSearchLocalData.mockResolvedValue({ success: true, data: [], error: null })
     await changeLanguage('en')
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -54,6 +63,45 @@ describe('DocsPage', () => {
       expect(screen.getByText('Gateway will not start')).toBeInTheDocument()
       expect(screen.queryByText('Connect Feishu or Lark')).not.toBeInTheDocument()
     })
+  })
+
+  it('shows indexed fallback store results for docs queries', async () => {
+    mockSearchLocalData.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          id: 'docs:guide:quickstart',
+          module: 'docs',
+          sourceType: 'guide',
+          sourcePath: 'https://docs.openclaw.ai/quickstart',
+          title: 'Quick Start',
+          content: 'Install OpenClaw and start the gateway.',
+          tags: ['install', 'setup', 'gateway'],
+          metadata: { url: 'https://docs.openclaw.ai/quickstart' },
+          updatedAt: '2026-04-10T00:00:00.000Z',
+          score: 99,
+          snippet: 'Install OpenClaw and start the gateway.',
+        },
+      ],
+      error: null,
+    })
+
+    render(
+      <MemoryRouter>
+        <DocsPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('Search guides, commands, and troubleshooting...'), {
+      target: { value: 'gateway setup' },
+    })
+
+    await waitFor(() => {
+      expect(mockUpsertLocalDataDocuments).toHaveBeenCalled()
+      expect(mockSearchLocalData).toHaveBeenCalledWith({ query: 'gateway setup', module: 'docs', limit: 8 })
+    })
+    expect(await screen.findByRole('heading', { name: 'Indexed Local Data' })).toBeInTheDocument()
+    expect(screen.getByText('Install OpenClaw and start the gateway.')).toBeInTheDocument()
   })
 
   it('shows the local empty state when no built-in results match the query', async () => {

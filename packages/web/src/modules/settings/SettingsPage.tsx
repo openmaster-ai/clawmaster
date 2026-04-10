@@ -4,6 +4,12 @@ import { Link } from 'react-router-dom'
 import { platform } from '@/adapters'
 import { platformResults } from '@/shared/adapters/platformResults'
 import { isTauri } from '@/shared/adapters/platform'
+import {
+  getLocalDataStatsResult,
+  rebuildLocalDataResult,
+  resetLocalDataResult,
+  type LocalDataStats,
+} from '@/shared/adapters/storage'
 import { changeLanguage } from '@/i18n'
 import { useInstallTask } from '@/shared/hooks/useInstallTask'
 import { ActionBanner } from '@/shared/components/ActionBanner'
@@ -11,7 +17,7 @@ import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { InstallTask } from '@/shared/components/InstallTask'
 import { RecentLogsSheet } from '@/shared/components/RecentLogsSheet'
 import { isWindowsHostPlatform } from '@/shared/hostPlatform'
-import { CheckCircle2, AlertCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, FileText, Copy, FolderInput, Sparkles, Laptop, MonitorCog, Radio, MessageSquare } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, FileText, Copy, FolderInput, Sparkles, Laptop, MonitorCog, Radio, MessageSquare, Database } from 'lucide-react'
 import type { SystemInfo } from '@/lib/types'
 import type { OpenclawNpmVersions } from '@/shared/adapters/npmOpenclaw'
 import type { ClawmasterRuntimeInput, OpenclawProfileInput, OpenclawProfileSeedInput } from '@/shared/adapters/system'
@@ -21,6 +27,7 @@ type ProfileMode = OpenclawProfileInput['kind']
 type ProfileSeedMode = OpenclawProfileSeedInput['mode']
 type RuntimeMode = ClawmasterRuntimeInput['mode']
 type DiagnosticsScope = 'all' | 'gateway' | 'channels'
+type LocalDataInfo = NonNullable<SystemInfo['storage']>
 
 function getStoredTheme(): ThemeMode {
   return (localStorage.getItem('clawmaster-theme') as ThemeMode) || 'system'
@@ -36,6 +43,32 @@ function applyTheme(mode: ThemeMode) {
     root.classList.add(mode)
   }
   localStorage.setItem('clawmaster-theme', mode)
+}
+
+function localDataStateLabelKey(state: LocalDataInfo['state']): string {
+  if (state === 'ready') return 'settings.localDataStateReady'
+  if (state === 'blocked') return 'settings.localDataStateBlocked'
+  return 'settings.localDataStateDegraded'
+}
+
+function localDataEngineLabelKey(engine: LocalDataInfo['engine']): string {
+  if (engine === 'seekdb-embedded') return 'settings.localDataEngineEmbedded'
+  if (engine === 'fallback') return 'settings.localDataEngineFallback'
+  return 'settings.localDataEngineUnavailable'
+}
+
+function localDataReasonLabelKey(reason: LocalDataInfo['reasonCode']): string | null {
+  if (reason === 'node_missing') return 'settings.localDataReasonNodeMissing'
+  if (reason === 'node_too_old') return 'settings.localDataReasonNodeTooOld'
+  if (reason === 'embedded_platform_unsupported') return 'settings.localDataReasonUnsupportedPlatform'
+  if (reason === 'wsl_distro_missing') return 'settings.localDataReasonWslDistroMissing'
+  return null
+}
+
+function localDataStateClass(state: LocalDataInfo['state']): string {
+  if (state === 'ready') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+  if (state === 'blocked') return 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300'
+  return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
 }
 
 export default function Settings() {
@@ -55,9 +88,11 @@ export default function Settings() {
   const [runtimeSaving, setRuntimeSaving] = useState(false)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null)
+  const [localDataStats, setLocalDataStats] = useState<LocalDataStats | null>(null)
+  const [localDataBusy, setLocalDataBusy] = useState(false)
   const [logsOpen, setLogsOpen] = useState<DiagnosticsScope | null>(null)
   const [feedback, setFeedback] = useState<{ tone: 'info' | 'success' | 'error'; message: string } | null>(null)
-  const [confirmAction, setConfirmAction] = useState<'reset' | 'uninstall' | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'reset' | 'uninstall' | 'local-data-reset' | null>(null)
 
   useEffect(() => {
     loadSystemInfo()
@@ -77,10 +112,42 @@ export default function Settings() {
       setRuntimeMode(info.runtime?.mode ?? 'native')
       setRuntimeDistro(info.runtime?.selectedDistro ?? '')
       setRuntimeError(null)
+      void loadLocalDataStats()
     } catch (err) {
       console.error('Failed to load system info:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadLocalDataStats() {
+    const result = await getLocalDataStatsResult()
+    if (result.success && result.data) {
+      setLocalDataStats(result.data)
+    }
+  }
+
+  async function rebuildLocalData() {
+    setLocalDataBusy(true)
+    const result = await rebuildLocalDataResult()
+    setLocalDataBusy(false)
+    if (result.success && result.data) {
+      setLocalDataStats(result.data)
+      setFeedback({ tone: 'success', message: t('settings.localDataRebuildSuccess') })
+    } else {
+      setFeedback({ tone: 'error', message: result.error ?? t('common.unknownError') })
+    }
+  }
+
+  async function resetLocalData() {
+    setLocalDataBusy(true)
+    const result = await resetLocalDataResult()
+    setLocalDataBusy(false)
+    if (result.success && result.data) {
+      setLocalDataStats(result.data)
+      setFeedback({ tone: 'success', message: t('settings.localDataResetSuccess') })
+    } else {
+      setFeedback({ tone: 'error', message: result.error ?? t('common.unknownError') })
     }
   }
 
@@ -163,6 +230,7 @@ export default function Settings() {
   const resolvedProfileMode = systemInfo?.openclaw.profileMode ?? 'default'
   const resolvedProfileName = systemInfo?.openclaw.profileName ?? ''
   const resolvedDataDir = systemInfo?.openclaw.dataDir ?? ''
+  const localData = systemInfo?.storage
   const defaultCandidates = systemInfo?.openclaw.configPathCandidates ?? []
   const existingConfigPaths = systemInfo?.openclaw.existingConfigPaths ?? []
   const resolvedRuntimeMode = systemInfo?.runtime?.mode ?? 'native'
@@ -665,6 +733,128 @@ export default function Settings() {
         </div>
       </section>
 
+      {localData && (
+        <section id="settings-local-data" className="surface-card">
+          <div className="section-heading">
+            <div>
+              <h3 className="section-title">{t('settings.localDataTitle')}</h3>
+              <p className="text-sm text-muted-foreground">{t('settings.localDataDesc')}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+            <div className="rounded-[1.75rem] border border-border/80 bg-muted/30 p-5">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`inline-flex whitespace-nowrap rounded-full border px-3 py-1 text-xs font-medium ${localDataStateClass(localData.state)}`}>
+                  {t(localDataStateLabelKey(localData.state))}
+                </span>
+                <span className="inline-flex whitespace-nowrap rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-medium text-foreground">
+                  {t(localDataEngineLabelKey(localData.engine))}
+                </span>
+              </div>
+              <div className="mt-5 flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/80">
+                  <Database className="h-5 w-5 text-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">
+                    {localData.state === 'ready'
+                      ? t('settings.localDataReadySummary')
+                      : localData.state === 'blocked'
+                        ? t('settings.localDataBlockedSummary')
+                        : t('settings.localDataFallbackSummary')}
+                  </p>
+                  {localDataReasonLabelKey(localData.reasonCode) ? (
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      {t(localDataReasonLabelKey(localData.reasonCode)!)}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      {t('settings.localDataNoPythonHint')}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataRuntime')}</p>
+                  <p className="mt-2 text-sm font-semibold">
+                    {localData.runtimeTarget === 'wsl2' ? t('settings.runtimeWsl2') : t('settings.runtimeNative')}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataProfile')}</p>
+                  <p className="mt-2 text-sm font-semibold">
+                    {resolvedProfileMode === 'named'
+                      ? `${t('settings.profileNamed')} · ${resolvedProfileName}`
+                      : resolvedProfileMode === 'dev'
+                        ? t('settings.profileDev')
+                        : t('settings.profileDefault')}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataEmbeddedSupport')}</p>
+                  <p className="mt-2 text-sm font-semibold">
+                    {localData.supportsEmbedded ? t('settings.localDataSupported') : t('settings.localDataUnavailable')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataDocuments')}</p>
+                  <p className="mt-2 text-xl font-semibold">{localDataStats?.documentCount ?? 0}</p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataDocsModule')}</p>
+                  <p className="mt-2 text-xl font-semibold">{localDataStats?.moduleCounts.docs ?? 0}</p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataUpdatedAt')}</p>
+                  <p className="mt-2 truncate text-sm font-semibold">
+                    {localDataStats?.updatedAt ? new Date(localDataStats.updatedAt).toLocaleString() : t('common.notSet')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void rebuildLocalData()}
+                  disabled={localDataBusy || localData.state === 'blocked'}
+                  className="button-secondary"
+                >
+                  {localDataBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  {t('settings.localDataRebuild')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction('local-data-reset')}
+                  disabled={localDataBusy || localData.state === 'blocked'}
+                  className="button-danger"
+                >
+                  {t('settings.localDataReset')}
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-[1.75rem] border border-border/80 bg-muted/40 p-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                {t('settings.localDataResolved')}
+              </p>
+              <div className="mt-4 space-y-3 text-sm">
+                <LocalDataRow label={t('settings.localDataEngine')} value={t(localDataEngineLabelKey(localData.engine))} />
+                <LocalDataRow label={t('settings.localDataTarget')} value={`${localData.targetPlatform} · ${localData.targetArch}`} />
+                <LocalDataRow label={t('settings.localDataNodeRequirement')} value={localData.nodeRequirement} />
+                <LocalDataRow label={t('settings.localDataRoot')} value={localData.dataRoot ?? t('common.notSet')} monospace />
+                <LocalDataRow label={t('settings.localDataEngineRoot')} value={localData.engineRoot ?? t('common.notSet')} monospace />
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* 系统信息 */}
       <section id="settings-system-info" className="surface-card">
         <div className="section-heading">
@@ -884,6 +1074,27 @@ export default function Settings() {
           })()
         }}
       />
+      <ConfirmDialog
+        open={confirmAction === 'local-data-reset'}
+        title={t('settings.localDataResetConfirm')}
+        tone="danger"
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={() => {
+          setConfirmAction(null)
+          void resetLocalData()
+        }}
+      />
+    </div>
+  )
+}
+
+function LocalDataRow({ label, value, monospace = false }: { label: string; value: string; monospace?: boolean }) {
+  return (
+    <div className="grid gap-1 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] sm:items-start">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`min-w-0 break-all text-left sm:text-right ${monospace ? 'font-mono text-xs' : 'font-medium'}`}>
+        {value}
+      </span>
     </div>
   )
 }

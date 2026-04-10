@@ -84,6 +84,41 @@ vi.mock('react-i18next', () => ({
         'settings.runtimeDefaultTag': 'default',
         'settings.runtimeOpenclawInDistro': 'OpenClaw in distro',
         'settings.runtimeOpenclawMissing': 'Not found',
+        'settings.localDataTitle': 'Local Data',
+        'settings.localDataDesc': 'Prepare the profile-scoped storage foundation for Docs, Logs, and future hybrid search without adding Python dependencies.',
+        'settings.localDataStateReady': 'Ready',
+        'settings.localDataStateDegraded': 'Fallback',
+        'settings.localDataStateBlocked': 'Blocked',
+        'settings.localDataEngineEmbedded': 'SeekDB embedded',
+        'settings.localDataEngineFallback': 'Fallback store',
+        'settings.localDataEngineUnavailable': 'Unavailable',
+        'settings.localDataReadySummary': 'SeekDB embedded can run for this runtime target.',
+        'settings.localDataFallbackSummary': 'ClawMaster will keep working through a file-backed fallback until SeekDB embedded is available.',
+        'settings.localDataBlockedSummary': 'Local data cannot pick a safe target yet.',
+        'settings.localDataNoPythonHint': 'This foundation uses JavaScript/TypeScript runtime paths only; no Python package or Python-based skill is required.',
+        'settings.localDataReasonNodeMissing': 'Node.js is missing in the selected runtime. SeekDB requires Node 20 or newer, so the fallback store is selected.',
+        'settings.localDataReasonNodeTooOld': 'The selected runtime uses Node.js below 20. Upgrade Node.js to enable SeekDB embedded where the platform supports it.',
+        'settings.localDataReasonUnsupportedPlatform': 'SeekDB embedded bindings are not available on this target yet. Use WSL2, server mode later, or fallback storage.',
+        'settings.localDataReasonWslDistroMissing': 'WSL2 mode is selected, but the saved distro is missing. Re-select the distro before Local Data can safely resolve a target.',
+        'settings.localDataRuntime': 'Runtime',
+        'settings.localDataProfile': 'Profile',
+        'settings.localDataEmbeddedSupport': 'Embedded support',
+        'settings.localDataSupported': 'Supported',
+        'settings.localDataUnavailable': 'Unavailable',
+        'settings.localDataResolved': 'Resolved storage',
+        'settings.localDataEngine': 'Engine',
+        'settings.localDataTarget': 'Target',
+        'settings.localDataNodeRequirement': 'Node requirement',
+        'settings.localDataRoot': 'Data root',
+        'settings.localDataEngineRoot': 'Engine root',
+        'settings.localDataDocuments': 'Documents',
+        'settings.localDataDocsModule': 'Docs indexed',
+        'settings.localDataUpdatedAt': 'Updated',
+        'settings.localDataRebuild': 'Rebuild Index',
+        'settings.localDataReset': 'Reset Store',
+        'settings.localDataRebuildSuccess': 'Local Data index rebuilt.',
+        'settings.localDataResetSuccess': 'Local Data store reset.',
+        'settings.localDataResetConfirm': 'Reset Local Data fallback store? Indexed data will be rebuilt by modules as they load.',
         'logs.settingsTitle': 'Diagnostics',
         'logs.settingsDescription': 'Use this hub when you need a broader diagnostics view after checking contextual module logs.',
         'logs.openRecent': 'View Recent Logs',
@@ -114,6 +149,8 @@ vi.mock('react-i18next', () => ({
         'logs.noLogs': 'No recent logs',
         'logs.noScopedLogs': `No matching logs found in the last ${opts?.count ?? 0} lines`,
         'common.close': 'Close',
+        'common.cancel': 'Cancel',
+        'common.confirm': 'Confirm',
         'common.notInstalled': 'Not installed',
         'common.unknownError': 'Unknown error',
         'common.save': 'Save',
@@ -139,6 +176,9 @@ const mockSaveProfile = vi.fn()
 const mockClearProfile = vi.fn()
 const mockSaveRuntime = vi.fn()
 const mockGetLogsResult = vi.fn()
+const mockGetLocalDataStats = vi.fn()
+const mockRebuildLocalData = vi.fn()
+const mockResetLocalData = vi.fn()
 
 vi.mock('@/shared/adapters/platformResults', () => ({
   platformResults: {
@@ -156,6 +196,12 @@ vi.mock('@/shared/adapters/logs', () => ({
   getLogsResult: (...args: any[]) => mockGetLogsResult(...args),
 }))
 
+vi.mock('@/shared/adapters/storage', () => ({
+  getLocalDataStatsResult: (...args: any[]) => mockGetLocalDataStats(...args),
+  rebuildLocalDataResult: (...args: any[]) => mockRebuildLocalData(...args),
+  resetLocalDataResult: (...args: any[]) => mockResetLocalData(...args),
+}))
+
 vi.mock('@/adapters', () => ({
   platform: {
     detectSystem: vi.fn().mockResolvedValue({
@@ -171,6 +217,19 @@ vi.mock('@/adapters', () => ({
         overrideActive: false,
         configPathCandidates: ['/home/.openclaw/openclaw.json'],
         existingConfigPaths: ['/home/.openclaw/openclaw.json'],
+      },
+      storage: {
+        state: 'ready',
+        engine: 'fallback',
+        runtimeTarget: 'native',
+        profileKey: 'default',
+        dataRoot: '/home/.clawmaster/data/default',
+        engineRoot: '/home/.clawmaster/data/default/fallback',
+        nodeRequirement: '>=20',
+        supportsEmbedded: true,
+        targetPlatform: 'darwin',
+        targetArch: 'arm64',
+        reasonCode: null,
       },
       runtime: {
         mode: 'native',
@@ -220,6 +279,51 @@ describe('UpdateSection', () => {
           message: '2026-04-06T12:16:01.997+08:00 [gateway] listening on ws://127.0.0.1:18789',
         },
       ],
+    })
+    mockGetLocalDataStats.mockResolvedValue({
+      success: true,
+      data: {
+        engine: 'fallback',
+        state: 'ready',
+        profileKey: 'default',
+        dataRoot: '/home/.clawmaster/data/default',
+        engineRoot: '/home/.clawmaster/data/default/fallback',
+        documentCount: 12,
+        moduleCounts: { docs: 12 },
+        schemaVersion: 1,
+        updatedAt: '2026-04-10T00:00:00.000Z',
+      },
+      error: null,
+    })
+    mockRebuildLocalData.mockResolvedValue({
+      success: true,
+      data: {
+        engine: 'fallback',
+        state: 'ready',
+        profileKey: 'default',
+        dataRoot: '/home/.clawmaster/data/default',
+        engineRoot: '/home/.clawmaster/data/default/fallback',
+        documentCount: 12,
+        moduleCounts: { docs: 12 },
+        schemaVersion: 1,
+        updatedAt: '2026-04-10T00:00:00.000Z',
+      },
+      error: null,
+    })
+    mockResetLocalData.mockResolvedValue({
+      success: true,
+      data: {
+        engine: 'fallback',
+        state: 'ready',
+        profileKey: 'default',
+        dataRoot: '/home/.clawmaster/data/default',
+        engineRoot: '/home/.clawmaster/data/default/fallback',
+        documentCount: 0,
+        moduleCounts: {},
+        schemaVersion: 1,
+        updatedAt: '2026-04-10T00:00:00.000Z',
+      },
+      error: null,
     })
     // Mock fetch to prevent real GitHub API calls in fetchReleaseNotes()
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -284,6 +388,55 @@ describe('UpdateSection', () => {
       'href',
       '/channels#channels-page',
     )
+  })
+
+  it('shows the local data storage foundation status', async () => {
+    renderSettings()
+
+    const heading = await screen.findByText('Local Data')
+    const section = heading.closest('section')
+    expect(section).not.toBeNull()
+    const localData = within(section!)
+
+    expect(localData.getByText('Ready')).toBeInTheDocument()
+    expect(localData.getAllByText('Fallback store').length).toBeGreaterThan(0)
+    expect(localData.getByText('This foundation uses JavaScript/TypeScript runtime paths only; no Python package or Python-based skill is required.')).toBeInTheDocument()
+    expect(localData.getByText('/home/.clawmaster/data/default/fallback')).toBeInTheDocument()
+    expect(localData.getAllByText('12')).toHaveLength(2)
+  })
+
+  it('rebuilds the local data fallback index from settings', async () => {
+    renderSettings()
+
+    const heading = await screen.findByText('Local Data')
+    const section = heading.closest('section')
+    expect(section).not.toBeNull()
+    const localData = within(section!)
+
+    fireEvent.click(localData.getByRole('button', { name: 'Rebuild Index' }))
+
+    await waitFor(() => {
+      expect(mockRebuildLocalData).toHaveBeenCalledTimes(1)
+    })
+    expect(await screen.findByText('Local Data index rebuilt.')).toBeInTheDocument()
+  })
+
+  it('resets the local data fallback store after confirmation', async () => {
+    renderSettings()
+
+    const heading = await screen.findByText('Local Data')
+    const section = heading.closest('section')
+    expect(section).not.toBeNull()
+    const localData = within(section!)
+
+    fireEvent.click(localData.getByRole('button', { name: 'Reset Store' }))
+    expect(await screen.findByRole('dialog', { name: 'Reset Local Data fallback store? Indexed data will be rebuilt by modules as they load.' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => {
+      expect(mockResetLocalData).toHaveBeenCalledTimes(1)
+    })
+    expect(await screen.findByText('Local Data store reset.')).toBeInTheDocument()
   })
 
   it('shows checking state when button clicked', async () => {

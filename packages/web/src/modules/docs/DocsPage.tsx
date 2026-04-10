@@ -6,6 +6,7 @@ import {
   BookOpen,
   Bot,
   Copy,
+  Database,
   ExternalLink,
   FileSearch,
   HardDrive,
@@ -18,6 +19,12 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { execCommand } from '@/shared/adapters/platform'
+import {
+  searchLocalDataResult,
+  upsertLocalDataDocumentsResult,
+  type LocalDataDocument,
+  type LocalDataSearchResult,
+} from '@/shared/adapters/storage'
 import { ActionBanner } from '@/shared/components/ActionBanner'
 
 const DOCS_SITE_URL = 'https://docs.openclaw.ai'
@@ -122,6 +129,8 @@ export default function DocsPage() {
   const [liveResults, setLiveResults] = useState<DocResult[]>([])
   const [liveSearching, setLiveSearching] = useState(false)
   const [liveSearched, setLiveSearched] = useState(false)
+  const [indexedResults, setIndexedResults] = useState<LocalDataSearchResult[]>([])
+  const [indexedSearching, setIndexedSearching] = useState(false)
   const [feedback, setFeedback] = useState<FeedbackState>(null)
 
   const scenarios = useMemo<ResourceCardData[]>(
@@ -314,9 +323,75 @@ export default function DocsPage() {
     [t],
   )
 
+  const localDataDocuments = useMemo<LocalDataDocument[]>(() => {
+    const resourceDocs = [
+      ...scenarios.map((item) => ({ item, sourceType: 'scenario' })),
+      ...guides.map((item) => ({ item, sourceType: 'guide' })),
+      ...troubleshooting.map((item) => ({ item, sourceType: 'troubleshooting' })),
+    ].map(({ item, sourceType }) => ({
+      id: `docs:${sourceType}:${item.id}`,
+      module: 'docs',
+      sourceType,
+      sourcePath: item.route ?? item.url,
+      title: item.title,
+      content: `${item.title}\n${item.description}\n${item.meta}\n${item.searchTerms.join(' ')}`,
+      tags: [item.meta, ...item.searchTerms],
+      metadata: {
+        route: item.route,
+        url: item.url,
+      },
+    }))
+
+    const commandDocs = commands.map((item) => ({
+      id: `docs:command:${item.id}`,
+      module: 'docs',
+      sourceType: 'command',
+      sourcePath: item.route ?? item.url,
+      title: item.title,
+      content: `${item.title}\n${item.description}\n${item.command}\n${item.meta}\n${item.searchTerms.join(' ')}`,
+      tags: [item.meta, ...item.searchTerms],
+      metadata: {
+        command: item.command,
+        route: item.route,
+        url: item.url,
+      },
+    }))
+
+    return [...resourceDocs, ...commandDocs]
+  }, [commands, guides, scenarios, troubleshooting])
+
   useEffect(() => {
     setLiveResults([])
     setLiveSearched(false)
+  }, [query])
+
+  useEffect(() => {
+    void upsertLocalDataDocumentsResult(localDataDocuments)
+  }, [localDataDocuments])
+
+  useEffect(() => {
+    const trimmed = query.trim()
+    let cancelled = false
+    if (!trimmed) {
+      setIndexedResults([])
+      setIndexedSearching(false)
+      return
+    }
+
+    setIndexedSearching(true)
+    void searchLocalDataResult({ query: trimmed, module: 'docs', limit: 8 })
+      .then((result) => {
+        if (!cancelled) {
+          setIndexedResults(result.success && result.data ? result.data : [])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIndexedSearching(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [query])
 
   const filteredScenarios = scenarios.filter((item) =>
@@ -333,6 +408,7 @@ export default function DocsPage() {
   )
 
   const hasQuery = query.trim().length > 0
+  const hasIndexedResults = indexedResults.length > 0
   const localMatchCount =
     filteredScenarios.length +
     filteredGuides.length +
@@ -455,7 +531,35 @@ export default function DocsPage() {
             </div>
           </div>
 
-          {localMatchCount === 0 ? (
+          {hasIndexedResults || indexedSearching ? (
+            <section className="rounded-[1.5rem] border border-border/70 bg-muted/20 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">{t('docs.indexedResultsTitle')}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {t('docs.indexedResultsDesc', { count: indexedResults.length })}
+                  </p>
+                </div>
+                <span className="inline-flex whitespace-nowrap rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-medium text-foreground">
+                  <Database className="mr-1.5 h-3.5 w-3.5" />
+                  {t('settings.localDataEngineFallback')}
+                </span>
+              </div>
+              {indexedSearching && indexedResults.length === 0 ? (
+                <div className="state-panel min-h-0 py-5 text-sm text-muted-foreground">
+                  {t('common.searching')}
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {indexedResults.map((result) => (
+                    <IndexedResultCard key={result.id} result={result} />
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {localMatchCount === 0 && !hasIndexedResults && !indexedSearching ? (
             <div className="state-panel min-h-0 py-8 text-muted-foreground">
               <p className="font-medium text-foreground">{t('docs.noLocalResultsTitle')}</p>
               <p className="mt-1 text-sm">{t('docs.noLocalResultsDesc')}</p>
@@ -574,6 +678,40 @@ function InfoRow({ title, description }: { title: string; description: string })
       <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
     </div>
   )
+}
+
+function IndexedResultCard({ result }: { result: LocalDataSearchResult }) {
+  const route = typeof result.metadata.route === 'string' ? result.metadata.route : undefined
+  const url = typeof result.metadata.url === 'string' ? result.metadata.url : undefined
+  const command = typeof result.metadata.command === 'string' ? result.metadata.command : undefined
+  const body = (
+    <div className="list-card block transition hover:border-primary/50">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-medium text-primary">{result.title}</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{result.snippet}</p>
+          {command ? (
+            <code className="mt-2 block overflow-x-auto rounded-xl bg-muted px-3 py-2 text-xs text-foreground">
+              {command}
+            </code>
+          ) : null}
+        </div>
+        <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      </div>
+    </div>
+  )
+
+  if (route) {
+    return <Link to={route}>{body}</Link>
+  }
+  if (url) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer">
+        {body}
+      </a>
+    )
+  }
+  return body
 }
 
 function SectionGrid({
