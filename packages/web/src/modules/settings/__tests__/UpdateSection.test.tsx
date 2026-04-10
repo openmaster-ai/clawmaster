@@ -273,6 +273,19 @@ describe('UpdateSection', () => {
     expect(screen.queryByText(/webchat disconnected code=1001/)).not.toBeInTheDocument()
   })
 
+  it('links channel diagnostics back to the stable channels page anchor', async () => {
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('Diagnostics')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('link', { name: 'Go to Channels' })).toHaveAttribute(
+      'href',
+      '/channels#channels-page',
+    )
+  })
+
   it('shows checking state when button clicked', async () => {
     mockListVersions.mockImplementation(() => new Promise(() => {})) // never resolves
     renderSettings()

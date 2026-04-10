@@ -495,7 +495,7 @@ export default function Channels() {
 
   if (error || config === null) {
     return (
-      <>
+      <div id="channels-page" className="page-shell page-shell-wide">
         <div className="state-panel space-y-3 text-sm text-red-500">
           <div>{error ? `${t('channelsPage.loadFailed')}${error}` : t('channelsPage.noConfig')}</div>
           <div className="flex flex-wrap items-center gap-3">
@@ -516,7 +516,7 @@ export default function Channels() {
           lines={320}
           scope="channels"
         />
-      </>
+      </div>
     )
   }
 
@@ -548,7 +548,7 @@ export default function Channels() {
   }
 
   return (
-    <div className="page-shell page-shell-wide">
+    <div id="channels-page" className="page-shell page-shell-wide">
       {feedback ? (
         <ActionBanner tone={feedback.tone} message={feedback.message} onDismiss={() => setFeedback(null)} />
       ) : null}

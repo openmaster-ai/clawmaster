@@ -762,7 +762,7 @@ export default function Settings() {
                 <FileText className="h-4 w-4" />
                 {t('logs.openChannelLogs')}
               </button>
-              <Link to="/channels#channel-focus" className="inline-flex items-center gap-2 px-1 text-sm font-medium text-primary hover:underline">
+              <Link to="/channels#channels-page" className="inline-flex items-center gap-2 px-1 text-sm font-medium text-primary hover:underline">
                 {t('logs.gotoChannelsPage')}
               </Link>
             </div>
