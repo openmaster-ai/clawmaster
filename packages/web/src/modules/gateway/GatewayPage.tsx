@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ScrollText } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { platform } from '@/adapters'
 import { platformResults } from '@/shared/adapters/platformResults'
 import { ActionBanner } from '@/shared/components/ActionBanner'
@@ -108,10 +109,15 @@ export default function Gateway() {
           <h1 className="page-title">{t('gateway.title')}</h1>
           <p className="page-subtitle">{t('gateway.editConfigHint')}</p>
         </div>
-        <button type="button" onClick={() => setLogsOpen(true)} className="button-secondary">
-          <ScrollText className="h-4 w-4" />
-          {t('logs.openRecent')}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={() => setLogsOpen(true)} className="button-secondary">
+            <ScrollText className="h-4 w-4" />
+            {t('logs.openRecent')}
+          </button>
+          <Link to="/settings#settings-logs" className="inline-flex items-center gap-2 px-1 text-sm font-medium text-primary hover:underline">
+            {t('logs.moreDiagnostics')}
+          </Link>
+        </div>
       </div>
 
       <div className="metric-grid">
@@ -200,6 +206,9 @@ export default function Gateway() {
                 <ScrollText className="h-4 w-4" />
                 {t('logs.openRecent')}
               </button>
+              <Link to="/settings#settings-logs" className="inline-flex items-center gap-2 px-1 text-sm font-medium text-primary hover:underline">
+                {t('logs.moreDiagnostics')}
+              </Link>
             </div>
           </div>
         )}

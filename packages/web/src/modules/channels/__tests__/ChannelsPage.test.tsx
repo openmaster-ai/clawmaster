@@ -112,10 +112,30 @@ describe('ChannelsPage', () => {
     renderChannels()
 
     expect(await screen.findByText('推荐入口')).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: '更多诊断' })[0]).toHaveAttribute(
+      'href',
+      '/settings#settings-logs',
+    )
 
     fireEvent.click(screen.getByRole('button', { name: '查看最近日志' }))
 
     expect(await screen.findByRole('dialog', { name: '通道排障日志' })).toBeInTheDocument()
     expect(screen.getByText('webchat disconnected code=1001')).toBeInTheDocument()
+  })
+
+  it('keeps a stable page anchor when the config load fails', async () => {
+    mockGetConfig.mockResolvedValue({
+      success: false,
+      error: 'boom',
+    })
+
+    const { container } = renderChannels()
+
+    expect(await screen.findByText('加载失败:boom')).toBeInTheDocument()
+    expect(container.querySelector('#channels-page')).toBeTruthy()
+    expect(screen.getByRole('link', { name: '更多诊断' })).toHaveAttribute(
+      'href',
+      '/settings#settings-logs',
+    )
   })
 })

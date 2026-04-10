@@ -288,8 +288,8 @@ export default function Dashboard() {
         {
           id: 'diagnostics',
           label: t('dashboard.task.private.step4'),
-          to: '/settings#settings-system-info',
-          hint: t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('settings.systemInfo') }),
+          to: '/settings#settings-logs',
+          hint: t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('logs.settingsTitle') }),
           status: systemLoading ? 'loading' : systemInfo?.openclaw.installed ? 'ready' : 'attention',
         },
       ],

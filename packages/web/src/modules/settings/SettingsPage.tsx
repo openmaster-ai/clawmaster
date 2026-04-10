@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { platform } from '@/adapters'
 import { platformResults } from '@/shared/adapters/platformResults'
 import { isTauri } from '@/shared/adapters/platform'
@@ -10,7 +11,7 @@ import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { InstallTask } from '@/shared/components/InstallTask'
 import { RecentLogsSheet } from '@/shared/components/RecentLogsSheet'
 import { isWindowsHostPlatform } from '@/shared/hostPlatform'
-import { CheckCircle2, AlertCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, FileText, Copy, FolderInput, Sparkles, Laptop, MonitorCog } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, FileText, Copy, FolderInput, Sparkles, Laptop, MonitorCog, Radio, MessageSquare } from 'lucide-react'
 import type { SystemInfo } from '@/lib/types'
 import type { OpenclawNpmVersions } from '@/shared/adapters/npmOpenclaw'
 import type { ClawmasterRuntimeInput, OpenclawProfileInput, OpenclawProfileSeedInput } from '@/shared/adapters/system'
@@ -19,6 +20,7 @@ type ThemeMode = 'system' | 'light' | 'dark'
 type ProfileMode = OpenclawProfileInput['kind']
 type ProfileSeedMode = OpenclawProfileSeedInput['mode']
 type RuntimeMode = ClawmasterRuntimeInput['mode']
+type DiagnosticsScope = 'all' | 'gateway' | 'channels'
 
 function getStoredTheme(): ThemeMode {
   return (localStorage.getItem('clawmaster-theme') as ThemeMode) || 'system'
@@ -53,7 +55,7 @@ export default function Settings() {
   const [runtimeSaving, setRuntimeSaving] = useState(false)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null)
-  const [logsOpen, setLogsOpen] = useState(false)
+  const [logsOpen, setLogsOpen] = useState<DiagnosticsScope | null>(null)
   const [feedback, setFeedback] = useState<{ tone: 'info' | 'success' | 'error'; message: string } | null>(null)
   const [confirmAction, setConfirmAction] = useState<'reset' | 'uninstall' | null>(null)
 
@@ -166,6 +168,26 @@ export default function Settings() {
   const resolvedRuntimeMode = systemInfo?.runtime?.mode ?? 'native'
   const resolvedRuntimeDistro = systemInfo?.runtime?.selectedDistro ?? ''
   const isWindowsHost = isWindowsHostPlatform(systemInfo?.runtime?.hostPlatform)
+  const diagnosticsSheetConfig = logsOpen === 'gateway'
+    ? {
+        title: t('logs.gatewayTitle'),
+        description: t('logs.gatewayDescription'),
+        lines: 240,
+        scope: 'gateway' as const,
+      }
+    : logsOpen === 'channels'
+      ? {
+          title: t('logs.channelsTitle'),
+          description: t('logs.channelsDescription'),
+          lines: 320,
+          scope: 'channels' as const,
+        }
+      : {
+          title: t('logs.settingsTitle'),
+          description: t('logs.settingsDescription'),
+          lines: 200,
+          scope: 'all' as const,
+        }
   const runtimeDirty =
     runtimeMode !== resolvedRuntimeMode ||
     (runtimeMode === 'wsl2' && runtimeDistro.trim() !== resolvedRuntimeDistro)
@@ -676,17 +698,76 @@ export default function Settings() {
         )}
       </section>
 
-      <section id="settings-logs" className="surface-card">
+      <section id="settings-logs" className="surface-card space-y-4">
         <div className="section-heading">
           <div>
             <h3 className="section-title">{t('logs.settingsTitle')}</h3>
             <p className="section-subtitle">{t('logs.settingsDescription')}</p>
           </div>
         </div>
-        <button type="button" className="button-secondary" onClick={() => setLogsOpen(true)}>
-          <FileText className="h-4 w-4" />
-          {t('logs.openRecent')}
-        </button>
+        <div className="inline-note">{t('logs.hubDescription')}</div>
+        <div className="grid gap-4 xl:grid-cols-3">
+          <div className="rounded-[1.4rem] border border-border/70 bg-muted/25 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/80">
+                <MonitorCog className="h-4 w-4 text-foreground" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-sm font-semibold text-foreground">{t('logs.systemCardTitle')}</h4>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{t('logs.systemCardDescription')}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button type="button" className="button-secondary" onClick={() => setLogsOpen('all')}>
+                <FileText className="h-4 w-4" />
+                {t('logs.openSystemLogs')}
+              </button>
+              <Link to="/settings#settings-system-info" className="inline-flex items-center gap-2 px-1 text-sm font-medium text-primary hover:underline">
+                {t('logs.gotoSystemInfo')}
+              </Link>
+            </div>
+          </div>
+          <div className="rounded-[1.4rem] border border-border/70 bg-muted/25 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/80">
+                <Radio className="h-4 w-4 text-foreground" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-sm font-semibold text-foreground">{t('logs.gatewayCardTitle')}</h4>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{t('logs.gatewayCardDescription')}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button type="button" className="button-secondary" onClick={() => setLogsOpen('gateway')}>
+                <FileText className="h-4 w-4" />
+                {t('logs.openGatewayLogs')}
+              </button>
+              <Link to="/gateway#gateway-runtime" className="inline-flex items-center gap-2 px-1 text-sm font-medium text-primary hover:underline">
+                {t('logs.gotoGatewayPage')}
+              </Link>
+            </div>
+          </div>
+          <div className="rounded-[1.4rem] border border-border/70 bg-muted/25 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/80">
+                <MessageSquare className="h-4 w-4 text-foreground" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-sm font-semibold text-foreground">{t('logs.channelsCardTitle')}</h4>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{t('logs.channelsCardDescription')}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button type="button" className="button-secondary" onClick={() => setLogsOpen('channels')}>
+                <FileText className="h-4 w-4" />
+                {t('logs.openChannelLogs')}
+              </button>
+              <Link to="/channels#channels-page" className="inline-flex items-center gap-2 px-1 text-sm font-medium text-primary hover:underline">
+                {t('logs.gotoChannelsPage')}
+              </Link>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* 更新 */}
@@ -761,12 +842,12 @@ export default function Settings() {
       </section>
 
       <RecentLogsSheet
-        open={logsOpen}
-        onClose={() => setLogsOpen(false)}
-        title={t('logs.settingsTitle')}
-        description={t('logs.settingsDescription')}
-        lines={200}
-        scope="all"
+        open={Boolean(logsOpen)}
+        onClose={() => setLogsOpen(null)}
+        title={diagnosticsSheetConfig.title}
+        description={diagnosticsSheetConfig.description}
+        lines={diagnosticsSheetConfig.lines}
+        scope={diagnosticsSheetConfig.scope}
       />
       <ConfirmDialog
         open={confirmAction === 'reset'}

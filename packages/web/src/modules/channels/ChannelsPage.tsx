@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import {
   CircleDashed,
@@ -494,13 +495,18 @@ export default function Channels() {
 
   if (error || config === null) {
     return (
-      <>
+      <div id="channels-page" className="page-shell page-shell-wide">
         <div className="state-panel space-y-3 text-sm text-red-500">
           <div>{error ? `${t('channelsPage.loadFailed')}${error}` : t('channelsPage.noConfig')}</div>
-          <button type="button" onClick={() => setLogsOpen(true)} className="button-secondary">
-            <ScrollText className="h-4 w-4" />
-            {t('logs.openRecent')}
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => setLogsOpen(true)} className="button-secondary">
+              <ScrollText className="h-4 w-4" />
+              {t('logs.openRecent')}
+            </button>
+            <Link to="/settings#settings-logs" className="inline-flex items-center gap-2 px-1 text-sm font-medium text-primary hover:underline">
+              {t('logs.moreDiagnostics')}
+            </Link>
+          </div>
         </div>
         <RecentLogsSheet
           open={logsOpen}
@@ -510,7 +516,7 @@ export default function Channels() {
           lines={320}
           scope="channels"
         />
-      </>
+      </div>
     )
   }
 
@@ -542,7 +548,7 @@ export default function Channels() {
   }
 
   return (
-    <div className="page-shell page-shell-wide">
+    <div id="channels-page" className="page-shell page-shell-wide">
       {feedback ? (
         <ActionBanner tone={feedback.tone} message={feedback.message} onDismiss={() => setFeedback(null)} />
       ) : null}
@@ -561,6 +567,9 @@ export default function Channels() {
             <ScrollText className="h-4 w-4" />
             {t('logs.openRecent')}
           </button>
+          <Link to="/settings#settings-logs" className="inline-flex items-center gap-2 px-1 text-sm font-medium text-primary hover:underline">
+            {t('logs.moreDiagnostics')}
+          </Link>
           <button type="button" onClick={focusCatalog} className="button-secondary">
             <Layers3 className="h-4 w-4" />
             {t('channelsPage.jumpToCatalog')}
@@ -1145,14 +1154,19 @@ export default function Channels() {
                   <div className="mt-1 text-xs opacity-90 whitespace-pre-wrap break-all">{verifyResult.detail}</div>
                 ) : null}
                 {!verifyResult.ok ? (
-                  <button
-                    type="button"
-                    className="button-secondary mt-3 px-3 py-1.5 text-xs"
-                    onClick={() => setLogsOpen(true)}
-                  >
-                    <ScrollText className="h-3.5 w-3.5" />
-                    {t('logs.openRecent')}
-                  </button>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      className="button-secondary px-3 py-1.5 text-xs"
+                      onClick={() => setLogsOpen(true)}
+                    >
+                      <ScrollText className="h-3.5 w-3.5" />
+                      {t('logs.openRecent')}
+                    </button>
+                    <Link to="/settings#settings-logs" className="inline-flex items-center gap-2 text-xs font-medium text-primary hover:underline">
+                      {t('logs.moreDiagnostics')}
+                    </Link>
+                  </div>
                 ) : null}
               </div>
             ) : null}

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 
 // Mock window.matchMedia for theme code
 Object.defineProperty(window, 'matchMedia', {
@@ -84,8 +85,25 @@ vi.mock('react-i18next', () => ({
         'settings.runtimeOpenclawInDistro': 'OpenClaw in distro',
         'settings.runtimeOpenclawMissing': 'Not found',
         'logs.settingsTitle': 'Diagnostics',
-        'logs.settingsDescription': 'Open recent system logs here when you need to troubleshoot runtime issues.',
+        'logs.settingsDescription': 'Use this hub when you need a broader diagnostics view after checking contextual module logs.',
         'logs.openRecent': 'View Recent Logs',
+        'logs.gatewayTitle': 'Recent Gateway Logs',
+        'logs.gatewayDescription': 'Use this when the gateway fails to start, restart, bind, or authenticate correctly.',
+        'logs.channelsTitle': 'Channel Troubleshooting Logs',
+        'logs.channelsDescription': 'Check recent logs when channel verification, login, or account setup fails.',
+        'logs.hubDescription': 'Open scoped logs first, then jump back into the module that owns the fix.',
+        'logs.systemCardTitle': 'System runtime',
+        'logs.systemCardDescription': 'Review install, CLI, and runtime level logs before changing environment-wide settings.',
+        'logs.gatewayCardTitle': 'Gateway diagnostics',
+        'logs.gatewayCardDescription': 'Inspect gateway startup, auth, and binding failures, then return to the gateway module.',
+        'logs.channelsCardTitle': 'Channel diagnostics',
+        'logs.channelsCardDescription': 'Check recent login, verification, and account-binding errors before editing channel setup.',
+        'logs.openSystemLogs': 'Open System Logs',
+        'logs.openGatewayLogs': 'Open Gateway Diagnostics',
+        'logs.openChannelLogs': 'Open Channel Diagnostics',
+        'logs.gotoSystemInfo': 'Open System Info',
+        'logs.gotoGatewayPage': 'Go to Gateway',
+        'logs.gotoChannelsPage': 'Go to Channels',
         'logs.searchPlaceholder': 'Search logs',
         'logs.allLevels': 'All Levels',
         'logs.recentLines': `Last ${opts?.count ?? 0} lines`,
@@ -173,6 +191,14 @@ vi.mock('@/i18n', () => ({
 // Import after mocks
 import Settings from '../SettingsPage'
 
+function renderSettings() {
+  return render(
+    <MemoryRouter>
+      <Settings />
+    </MemoryRouter>,
+  )
+}
+
 describe('UpdateSection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -206,7 +232,7 @@ describe('UpdateSection', () => {
   })
 
   it('renders current version and check button', async () => {
-    render(<Settings />)
+    renderSettings()
     await waitFor(() => {
       expect(screen.getByText('Update')).toBeInTheDocument()
     })
@@ -216,21 +242,53 @@ describe('UpdateSection', () => {
   })
 
   it('opens recent diagnostics logs from settings and keeps the full log stream', async () => {
-    render(<Settings />)
+    renderSettings()
     await waitFor(() => {
       expect(screen.getByText('Diagnostics')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'View Recent Logs' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open System Logs' }))
 
     expect(await screen.findByRole('dialog', { name: 'Diagnostics' })).toBeInTheDocument()
     expect(screen.getByText(/webchat disconnected code=1001/)).toBeInTheDocument()
     expect(screen.getByText(/\[gateway\] listening on ws:\/\/127\.0\.0\.1:18789/)).toBeInTheDocument()
   })
 
+  it('opens gateway-scoped diagnostics from the settings hub', async () => {
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('Diagnostics')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('link', { name: 'Go to Gateway' })).toHaveAttribute(
+      'href',
+      '/gateway#gateway-runtime',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Gateway Diagnostics' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Recent Gateway Logs' })).toBeInTheDocument()
+    expect(screen.getByText(/\[gateway\] listening on ws:\/\/127\.0\.0\.1:18789/)).toBeInTheDocument()
+    expect(screen.queryByText(/webchat disconnected code=1001/)).not.toBeInTheDocument()
+  })
+
+  it('links channel diagnostics back to the stable channels page anchor', async () => {
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('Diagnostics')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('link', { name: 'Go to Channels' })).toHaveAttribute(
+      'href',
+      '/channels#channels-page',
+    )
+  })
+
   it('shows checking state when button clicked', async () => {
     mockListVersions.mockImplementation(() => new Promise(() => {})) // never resolves
-    render(<Settings />)
+    renderSettings()
     await waitFor(() => screen.getByText('Check for updates'))
     fireEvent.click(screen.getByText('Check for updates'))
     expect(screen.getByText('Checking...')).toBeInTheDocument()
@@ -244,7 +302,7 @@ describe('UpdateSection', () => {
         distTags: { latest: '2026.3.28' },
       },
     })
-    render(<Settings />)
+    renderSettings()
     await waitFor(() => screen.getByText('Check for updates'))
     fireEvent.click(screen.getByText('Check for updates'))
     await waitFor(() => {
@@ -260,7 +318,7 @@ describe('UpdateSection', () => {
         distTags: { latest: '2026.4.1' },
       },
     })
-    render(<Settings />)
+    renderSettings()
     await waitFor(() => screen.getByText('Check for updates'))
     fireEvent.click(screen.getByText('Check for updates'))
     await waitFor(() => {
@@ -296,7 +354,7 @@ describe('UpdateSection', () => {
       },
     })
 
-    render(<Settings />)
+    renderSettings()
 
     const runtimeHeading = await screen.findByText('Runtime')
     expect(runtimeHeading).toBeInTheDocument()
@@ -326,7 +384,7 @@ describe('UpdateSection', () => {
         distTags: { latest: '2026.4.1' },
       },
     })
-    render(<Settings />)
+    renderSettings()
     await waitFor(() => screen.getByText('Check for updates'))
     fireEvent.click(screen.getByText('Check for updates'))
     await waitFor(() => {
@@ -346,7 +404,7 @@ describe('UpdateSection', () => {
         distTags: { latest: '2026.4.1', beta: '2026.5.0-beta.1' },
       },
     })
-    render(<Settings />)
+    renderSettings()
     await waitFor(() => screen.getByText('Check for updates'))
     fireEvent.click(screen.getByText('Check for updates'))
     await waitFor(() => {
@@ -362,7 +420,7 @@ describe('UpdateSection', () => {
       success: false,
       error: 'network timeout',
     })
-    render(<Settings />)
+    renderSettings()
     await waitFor(() => screen.getByText('Check for updates'))
     fireEvent.click(screen.getByText('Check for updates'))
     await waitFor(() => {
@@ -382,7 +440,7 @@ describe('UpdateSection', () => {
       success: true,
       data: { ok: true, steps: [] },
     })
-    render(<Settings />)
+    renderSettings()
     await waitFor(() => screen.getByText('Check for updates'))
     fireEvent.click(screen.getByText('Check for updates'))
     await waitFor(() => screen.getByText('Update to 2026.4.1'))
@@ -400,7 +458,7 @@ describe('UpdateSection', () => {
         distTags: { latest: '2026.4.1' },
       },
     })
-    render(<Settings />)
+    renderSettings()
     await waitFor(() => screen.getByText('Check for updates'))
     fireEvent.click(screen.getByText('Check for updates'))
     await waitFor(() => screen.getByText('Version:'))
@@ -424,7 +482,7 @@ describe('UpdateSection', () => {
         distTags: { latest: '2026.4.1', beta: '2026.5.0-beta.1' },
       },
     })
-    render(<Settings />)
+    renderSettings()
     await waitFor(() => screen.getByText('Check for updates'))
     fireEvent.click(screen.getByText('Check for updates'))
     await waitFor(() => {
@@ -434,7 +492,7 @@ describe('UpdateSection', () => {
   })
 
   it('saves a named OpenClaw profile from settings', async () => {
-    render(<Settings />)
+    renderSettings()
 
     await waitFor(() => {
       expect(screen.getByText('OpenClaw profile')).toBeInTheDocument()
@@ -463,7 +521,7 @@ describe('UpdateSection', () => {
   })
 
   it('imports a named OpenClaw profile from a config path in settings', async () => {
-    render(<Settings />)
+    renderSettings()
 
     await waitFor(() => {
       expect(screen.getByText('OpenClaw profile')).toBeInTheDocument()

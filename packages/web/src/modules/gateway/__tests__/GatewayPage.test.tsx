@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { changeLanguage } from '@/i18n'
 import GatewayPage from '../GatewayPage'
 
@@ -68,9 +69,17 @@ describe('GatewayPage', () => {
   })
 
   it('opens recent gateway logs and keeps only gateway-scoped entries', async () => {
-    render(<GatewayPage />)
+    render(
+      <MemoryRouter>
+        <GatewayPage />
+      </MemoryRouter>,
+    )
 
     expect(await screen.findByRole('heading', { name: 'Gateway Management' })).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'More Diagnostics' })[0]).toHaveAttribute(
+      'href',
+      '/settings#settings-logs',
+    )
 
     fireEvent.click(screen.getAllByRole('button', { name: 'View Recent Logs' })[0])
 
