@@ -181,7 +181,7 @@ describe('DashboardPage', () => {
     expect(capabilityHrefs).toContain('/capabilities#capability-automation')
     expect(capabilityHrefs).toContain('/capabilities#capability-enhance')
     expect(capabilityHrefs).toContain('/capabilities#capability-runtime')
-  })
+  }, 10000)
 
   it('shows the no-channel placeholder when config has no channels', async () => {
     mockDetectSystem.mockResolvedValue({

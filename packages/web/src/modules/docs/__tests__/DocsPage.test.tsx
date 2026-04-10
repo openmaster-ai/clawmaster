@@ -1,19 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { changeLanguage } from '@/i18n'
 import DocsPage from '../DocsPage'
 
 const mockExecCommand = vi.fn()
 const mockWriteText = vi.fn()
+const mockUpsertLocalDataDocuments = vi.fn()
+const mockSearchLocalData = vi.fn()
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
 
 vi.mock('@/shared/adapters/platform', () => ({
   execCommand: (...args: any[]) => mockExecCommand(...args),
 }))
 
+vi.mock('@/shared/adapters/storage', () => ({
+  upsertLocalDataDocumentsResult: (...args: any[]) => mockUpsertLocalDataDocuments(...args),
+  searchLocalDataResult: (...args: any[]) => mockSearchLocalData(...args),
+}))
+
 describe('DocsPage', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
+    mockUpsertLocalDataDocuments.mockResolvedValue({ success: true, data: { documentCount: 14 }, error: null })
+    mockSearchLocalData.mockResolvedValue({ success: true, data: [], error: null })
     await changeLanguage('en')
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -53,6 +70,171 @@ describe('DocsPage', () => {
       expect(screen.getByRole('heading', { name: 'Local Matches' })).toBeInTheDocument()
       expect(screen.getByText('Gateway will not start')).toBeInTheDocument()
       expect(screen.queryByText('Connect Feishu or Lark')).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows indexed fallback store results for docs queries', async () => {
+    mockSearchLocalData.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          id: 'docs:guide:quickstart',
+          module: 'docs',
+          sourceType: 'guide',
+          sourcePath: 'https://docs.openclaw.ai/quickstart',
+          title: 'Quick Start',
+          content: 'Install OpenClaw and start the gateway.',
+          tags: ['install', 'setup', 'gateway'],
+          metadata: { url: 'https://docs.openclaw.ai/quickstart' },
+          updatedAt: '2026-04-10T00:00:00.000Z',
+          score: 99,
+          snippet: 'Install OpenClaw and start the gateway.',
+        },
+      ],
+      error: null,
+    })
+
+    render(
+      <MemoryRouter>
+        <DocsPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('Search guides, commands, and troubleshooting...'), {
+      target: { value: 'gateway setup' },
+    })
+
+    await waitFor(() => {
+      expect(mockUpsertLocalDataDocuments).toHaveBeenCalledWith(
+        expect.any(Array),
+        { replace: { module: 'docs' } },
+      )
+      expect(mockSearchLocalData).toHaveBeenCalledWith({ query: 'gateway setup', module: 'docs', limit: 8 })
+    })
+    expect(await screen.findByRole('heading', { name: 'Indexed Local Data' })).toBeInTheDocument()
+    expect(screen.getByText('Install OpenClaw and start the gateway.')).toBeInTheDocument()
+  })
+
+  it('waits for local docs indexing before querying the fallback store', async () => {
+    const upsert = deferred<{ success: true; data: { documentCount: number }; error: null }>()
+    mockUpsertLocalDataDocuments.mockReturnValue(upsert.promise)
+
+    render(
+      <MemoryRouter>
+        <DocsPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('Search guides, commands, and troubleshooting...'), {
+      target: { value: 'gateway setup' },
+    })
+
+    await waitFor(() => {
+      expect(mockUpsertLocalDataDocuments).toHaveBeenCalledWith(
+        expect.any(Array),
+        { replace: { module: 'docs' } },
+      )
+    })
+    expect(mockSearchLocalData).not.toHaveBeenCalled()
+
+    await act(async () => {
+      upsert.resolve({ success: true, data: { documentCount: 14 }, error: null })
+    })
+
+    await waitFor(() => {
+      expect(mockSearchLocalData).toHaveBeenCalledWith({ query: 'gateway setup', module: 'docs', limit: 8 })
+    })
+  })
+
+  it('waits for the latest docs reindex when localized docs change mid-flight', async () => {
+    const firstUpsert = deferred<{ success: true; data: { documentCount: number }; error: null }>()
+    const secondUpsert = deferred<{ success: true; data: { documentCount: number }; error: null }>()
+    mockUpsertLocalDataDocuments
+      .mockReturnValueOnce(firstUpsert.promise)
+      .mockReturnValueOnce(secondUpsert.promise)
+
+    render(
+      <MemoryRouter>
+        <DocsPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(mockUpsertLocalDataDocuments).toHaveBeenCalledTimes(1)
+    })
+
+    await act(async () => {
+      await changeLanguage('ja')
+    })
+
+    await waitFor(() => {
+      expect(mockUpsertLocalDataDocuments).toHaveBeenCalledTimes(2)
+    })
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'gateway setup' },
+    })
+
+    await act(async () => {
+      firstUpsert.resolve({ success: true, data: { documentCount: 14 }, error: null })
+    })
+
+    expect(mockSearchLocalData).not.toHaveBeenCalled()
+
+    await act(async () => {
+      secondUpsert.resolve({ success: true, data: { documentCount: 14 }, error: null })
+    })
+
+    await waitFor(() => {
+      expect(mockSearchLocalData).toHaveBeenCalledWith({ query: 'gateway setup', module: 'docs', limit: 8 })
+    })
+  })
+
+  it('retries local docs indexing after a transient write failure on a later query', async () => {
+    mockUpsertLocalDataDocuments
+      .mockResolvedValueOnce({ success: false, error: 'backend booting' })
+      .mockResolvedValueOnce({ success: true, data: { documentCount: 14 }, error: null })
+    mockSearchLocalData.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          id: 'docs:guide:quickstart',
+          module: 'docs',
+          sourceType: 'guide',
+          title: 'Quick Start',
+          content: 'Install OpenClaw and start the gateway.',
+          tags: ['install', 'setup', 'gateway'],
+          metadata: {},
+          updatedAt: '2026-04-10T00:00:00.000Z',
+          score: 88,
+          snippet: 'Install OpenClaw and start the gateway.',
+        },
+      ],
+      error: null,
+    })
+
+    render(
+      <MemoryRouter>
+        <DocsPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('Search guides, commands, and troubleshooting...'), {
+      target: { value: 'gateway' },
+    })
+
+    await waitFor(() => {
+      expect(mockUpsertLocalDataDocuments).toHaveBeenCalledTimes(1)
+    })
+    expect(mockSearchLocalData).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByPlaceholderText('Search guides, commands, and troubleshooting...'), {
+      target: { value: 'gateway setup' },
+    })
+
+    await waitFor(() => {
+      expect(mockUpsertLocalDataDocuments).toHaveBeenCalledTimes(2)
+      expect(mockSearchLocalData).toHaveBeenCalledWith({ query: 'gateway setup', module: 'docs', limit: 8 })
     })
   })
 

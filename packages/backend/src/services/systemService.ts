@@ -3,8 +3,10 @@ import { promisify } from 'util'
 import fs from 'fs'
 import { getOpenclawConfigResolution } from '../paths.js'
 import { getClawmasterRuntimeSelection } from '../clawmasterSettings.js'
+import { resolveLocalDataStatus } from '../storage.js'
 import {
   execWslCommand,
+  getWslHomeDirSync,
   getWslOpenclawProbeSync,
   listWslDistrosSync,
   resolveSelectedWslDistroSync,
@@ -12,6 +14,24 @@ import {
 } from '../wslRuntime.js'
 
 const execAsync = promisify(exec)
+
+export function getLocalDataBackendNodeRuntime() {
+  return {
+    installed: true,
+    version: process.version,
+  }
+}
+
+export function resolveBackendLocalDataStatus(
+  args: Omit<Parameters<typeof resolveLocalDataStatus>[0], 'nodeInstalled' | 'nodeVersion'>,
+) {
+  const backendNode = getLocalDataBackendNodeRuntime()
+  return resolveLocalDataStatus({
+    ...args,
+    nodeInstalled: backendNode.installed,
+    nodeVersion: backendNode.version,
+  })
+}
 
 async function checkCmd(cmd: string, args: string[], useWsl: boolean, distro: string | null): Promise<string | null> {
   try {
@@ -37,6 +57,7 @@ export async function detectSystemInfo() {
     ? resolveSelectedWslDistroSync(runtimeSelection)
     : null
   const useWsl = shouldUseWslRuntime(runtimeSelection) && Boolean(selectedDistro)
+  const wslHomeDir = useWsl && selectedDistro ? getWslHomeDirSync(selectedDistro) : null
 
   let nodejs = { installed: false, version: '' }
   const nv = await checkCmd('node', ['--version'], useWsl, selectedDistro)
@@ -84,10 +105,21 @@ export async function detectSystemInfo() {
     }
     openclaw = { ...openclaw, installed: true, version }
   }
+  // In web mode Local Data is served by this backend process, so status must reflect
+  // the backend Node runtime rather than the selected OpenClaw runtime inside WSL.
+  const storage = resolveBackendLocalDataStatus({
+    runtimeSelection,
+    profileSelection: resolution.profileSelection,
+    hostPlatform: process.platform,
+    hostArch: process.arch,
+    selectedWslDistro: selectedDistro,
+    wslHomeDir,
+  })
   return {
     nodejs,
     npm,
     openclaw,
+    storage,
     runtime: {
       mode: runtimeSelection.mode,
       hostPlatform: process.platform,

@@ -12,6 +12,7 @@ import { registerClawprobeRoutes } from './clawprobeRoutes.js'
 import { registerLogsRoutes, attachLogsStreamServer as attachWs } from './logsRoutes.js'
 import { registerMemoryRoutes } from './memoryRoutes.js'
 import { registerExecRoutes } from './execRoutes.js'
+import { registerStorageRoutes } from './storageRoutes.js'
 
 export function registerDomainRoutes(app: express.Express): void {
   registerSystemRoutes(app)
@@ -26,6 +27,7 @@ export function registerDomainRoutes(app: express.Express): void {
   registerLogsRoutes(app)
   registerMemoryRoutes(app)
   registerExecRoutes(app)
+  registerStorageRoutes(app)
 }
 
 export function attachLogsStreamServer(server: Server): void {

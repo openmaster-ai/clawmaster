@@ -40,6 +40,19 @@ export interface SystemInfo {
     configPathCandidates?: string[]
     existingConfigPaths?: string[]
   }
+  storage?: {
+    state: 'ready' | 'degraded' | 'blocked'
+    engine: 'seekdb-embedded' | 'fallback' | 'unavailable'
+    runtimeTarget: 'native' | 'wsl2'
+    profileKey: string
+    dataRoot?: string | null
+    engineRoot?: string | null
+    nodeRequirement: string
+    supportsEmbedded: boolean
+    targetPlatform: string
+    targetArch: string
+    reasonCode?: 'node_missing' | 'node_too_old' | 'embedded_platform_unsupported' | 'wsl_distro_missing' | null
+  }
   runtime?: {
     mode: 'native' | 'wsl2'
     hostPlatform?: string
