@@ -824,6 +824,7 @@ export default {
   "capability.notEnabled": "{{name}} not enabled",
   "capability.installing": "Installing...",
   "capability.install": "Install {{name}}",
+  "capability.installVerifyFailed": "{{name}} finished installing, but the availability check still failed. Review the configuration and try again.",
   "capability.recheck": "Re-check",
   "capability.engine": "Core Engine",
   "capability.engine.desc": "OpenClaw CLI and gateway runtime. This is the base layer for every other module.",

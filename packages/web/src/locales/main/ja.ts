@@ -824,6 +824,7 @@ export default {
   "capability.notEnabled": "{{name}}は未有効化です",
   "capability.installing": "インストール中...",
   "capability.install": "{{name}}をインストール",
+  "capability.installVerifyFailed": "{{name}}のインストールは完了しましたが、利用可否の確認に失敗しました。設定を見直して再試行してください。",
   "capability.recheck": "再検出",
   "capability.engine": "コアエンジン",
   "capability.engine.desc": "OpenClaw CLI とゲートウェイ実行基盤。すべてのモジュールの土台です。",

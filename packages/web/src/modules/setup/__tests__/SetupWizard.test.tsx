@@ -213,4 +213,49 @@ describe('SetupWizard', () => {
 
     expect(await screen.findByText(/switch the runtime in Settings/i)).toBeInTheDocument()
   })
+
+  it('waits for Ollama model pulls to finish before refreshing status', async () => {
+    const { getOllamaStatus, pullModel } = await import('@/shared/adapters/ollama')
+
+    vi.mocked(getOllamaStatus).mockResolvedValue({
+      success: true,
+      data: {
+        installed: true,
+        version: '0.9.0',
+        running: true,
+        models: [],
+      },
+      error: null,
+    })
+
+    let resolvePull: (() => void) | undefined
+    vi.mocked(pullModel).mockImplementation(() => new Promise((resolve) => {
+      resolvePull = () => resolve({
+        success: true,
+        data: 'pulled',
+        error: null,
+      })
+    }))
+
+    render(<SetupWizard onComplete={() => {}} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start Configuration' }))
+    fireEvent.click(await screen.findByRole('button', { name: /Ollama/i }))
+    expect(await screen.findByText('Ollama Running')).toBeInTheDocument()
+
+    vi.mocked(getOllamaStatus).mockClear()
+
+    fireEvent.click(screen.getByRole('button', { name: /llama3\.2/i }))
+
+    await waitFor(() => {
+      expect(pullModel).toHaveBeenCalledWith('llama3.2')
+    })
+    expect(getOllamaStatus).not.toHaveBeenCalled()
+
+    resolvePull?.()
+
+    await waitFor(() => {
+      expect(getOllamaStatus).toHaveBeenCalledTimes(1)
+    })
+  })
 })

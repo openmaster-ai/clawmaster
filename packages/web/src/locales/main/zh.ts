@@ -824,6 +824,7 @@ export default {
   "capability.notEnabled": "{{name}}尚未启用",
   "capability.installing": "安装中...",
   "capability.install": "安装{{name}}",
+  "capability.installVerifyFailed": "{{name}}已安装完成，但能力检测仍然失败。请检查配置后重试。",
   "capability.recheck": "重新检测",
   "capability.engine": "核心引擎",
   "capability.engine.desc": "OpenClaw CLI 与网关运行时，是所有模块的基础层。",
