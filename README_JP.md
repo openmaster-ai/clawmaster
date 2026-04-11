@@ -64,6 +64,28 @@ npm run dev:web
 npm run tauri:dev
 ```
 
+### 方法 3: サービス CLI をインストール
+
+```bash
+npm i -g clawmaster
+clawmaster doctor
+clawmaster serve --daemon
+clawmaster status
+```
+
+既定のサービス URL:
+- `http://127.0.0.1:3001`
+- `clawmaster serve` はサービストークンを表示します。ブラウザ UI ではそのトークンを入力してください。
+
+よく使うコマンド:
+- `clawmaster serve --host 127.0.0.1 --port 3001`
+- `clawmaster serve --host 127.0.0.1 --port 3001 --daemon`
+- `clawmaster serve --host 127.0.0.1 --port 3001 --token your-own-token`
+- `clawmaster status`
+- `clawmaster status --token your-own-token`
+- `clawmaster stop`
+- `clawmaster doctor`
+
 本番ビルド:
 
 ```bash

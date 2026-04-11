@@ -1,6 +1,9 @@
 import type { Server } from 'node:http'
+import type { Duplex } from 'node:stream'
+import { URL } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { parseLogLine, readLogTailStrings } from '../logs.js'
+import { isServiceAuthEnabled, isServiceRequestAuthorized } from '../serviceAuth.js'
 
 export type LogEntry = {
   timestamp: string
@@ -16,7 +19,30 @@ export function getLogEntries(linesRequested: number): LogEntry[] {
 
 /** Attach WS at `/api/logs/stream` (same path as before). */
 export function attachLogsWebSocket(server: Server): WebSocketServer {
-  const wss = new WebSocketServer({ server, path: '/api/logs/stream' })
+  const wss = new WebSocketServer({ noServer: true })
+
+  server.on('upgrade', (request, socket, head) => {
+    const pathname = (() => {
+      try {
+        return new URL(request.url ?? '/', 'http://clawmaster.local').pathname
+      } catch {
+        return null
+      }
+    })()
+    if (pathname !== '/api/logs/stream') {
+      return
+    }
+
+    if (isServiceAuthEnabled() && !isServiceRequestAuthorized(request)) {
+      rejectUnauthorizedSocket(socket)
+      return
+    }
+
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request)
+    })
+  })
+
   wss.on('connection', (ws: WebSocket) => {
     let lastLine = ''
     const tick = () => {
@@ -36,4 +62,9 @@ export function attachLogsWebSocket(server: Server): WebSocketServer {
     ws.on('close', () => clearInterval(interval))
   })
   return wss
+}
+
+function rejectUnauthorizedSocket(socket: Duplex) {
+  socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n')
+  socket.destroy()
 }

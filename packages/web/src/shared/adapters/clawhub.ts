@@ -4,7 +4,7 @@ import { fromPromise } from '@/shared/adapters/resultHelpers'
 import type { AdapterResult } from '@/shared/adapters/types'
 import { fail, ok } from '@/shared/adapters/types'
 import { execCommand, getIsTauri } from '@/shared/adapters/platform'
-import { webFetchJson } from '@/shared/adapters/webHttp'
+import { webFetch, webFetchJson } from '@/shared/adapters/webHttp'
 
 /** Same order as packages/backend/src/skillsCli.ts SKILL_CLI_ROOTS */
 const SKILL_CLI_ROOTS = ['skills', 'clawbot', 'clawhub'] as const
@@ -295,7 +295,7 @@ export async function installSkillResult(slug: string): Promise<AdapterResult<vo
   if (getIsTauri()) {
     return fromPromise(() => tauriOpenclawSkillsVoid(['install', slug]))
   }
-  const res = await fetch('/api/skills/install', {
+  const res = await webFetch('/api/skills/install', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ slug }),
@@ -328,7 +328,7 @@ export async function setSkillEnabledResult(
       await tauriInvoke('save_config', { config: updated })
     })
   }
-  const res = await fetch(`/api/config/${encodeURIComponent(`skills.entries.${key}.enabled`)}`, {
+  const res = await webFetch(`/api/config/${encodeURIComponent(`skills.entries.${key}.enabled`)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ value: enabled }),
@@ -354,7 +354,7 @@ export async function uninstallSkillResult(slug: string): Promise<AdapterResult<
   if (getIsTauri()) {
     return fromPromise(() => tauriOpenclawSkillsUninstall(slug))
   }
-  const res = await fetch('/api/skills/uninstall', {
+  const res = await webFetch('/api/skills/uninstall', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ slug }),
@@ -408,6 +408,18 @@ export async function installClawhubCliResult(): Promise<AdapterResult<ClawhubCl
 export async function scanInstalledSkillResult(skill: SkillInfo): Promise<AdapterResult<SkillGuardScanResult>> {
   const skillKey = skill.skillKey?.trim() || skill.name.trim() || skill.slug.trim()
   if (!skillKey) return fail('Missing skill key')
+
+  if (!getIsTauri()) {
+    return webFetchJson<SkillGuardScanResult>('/api/skills/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        skillKey,
+        name: skill.name,
+        slug: skill.slug,
+      }),
+    })
+  }
 
   return fromPromise(async () => {
     const payload = JSON.stringify({

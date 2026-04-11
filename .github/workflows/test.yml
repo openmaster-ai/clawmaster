@@ -81,8 +81,8 @@ jobs:
           HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/api/logs)
           echo "Logs endpoint: HTTP $HTTP_CODE"
 
-          echo "=== /api/shell-info ==="
-          curl -sf http://localhost:3001/api/shell-info | python3 -m json.tool
+          echo "=== /api/storage/status ==="
+          curl -sf http://localhost:3001/api/storage/status | python3 -m json.tool
 
           echo "All backend endpoints responding"
 

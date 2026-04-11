@@ -5,7 +5,10 @@
  */
 
 import { execCommand } from './platform'
+import { getIsTauri } from './platform'
+import { tauriInvoke } from './invoke'
 import { wrapAsync, type AdapterResult } from './types'
+import { webFetchJson } from './webHttp'
 
 // ─── 类型定义 ───
 
@@ -23,32 +26,58 @@ export interface OllamaStatus {
   models: OllamaModel[]
 }
 
-// ─── 检测与安装 ───
+async function tauriRunOllama(args: string[]): Promise<string> {
+  return tauriInvoke<string>('run_ollama_command', { args })
+}
 
-// Resolve ollama binary: system PATH or ~/.local/bin fallback
-async function resolveOllamaBin(): Promise<string> {
-  try {
-    await execCommand('ollama', ['--version'])
-    return 'ollama'
-  } catch {
-    try {
-      await execCommand('bash', ['-c', '~/.local/bin/ollama --version'])
-      return '~/.local/bin/ollama'
-    } catch {
-      throw new Error('ollama not found')
+async function detectTauriOllama(): Promise<{ installed: boolean; version?: string }> {
+  return tauriInvoke<{ installed: boolean; version?: string }>('detect_ollama_installation')
+}
+
+// ─── 检测与安装 ───
+async function resolveOllamaInstallation(): Promise<{ bin: string; version: string }> {
+  if (!getIsTauri()) {
+    const result = await webFetchJson<{ installed: boolean; version?: string }>('/api/ollama/detect')
+    if (!result.success || !result.data?.installed) {
+      throw new Error(result.error ?? 'ollama not found')
+    }
+    return { bin: 'ollama', version: result.data.version ?? '' }
+  }
+  const result = await detectTauriOllama()
+  if (!result.installed) {
+    throw new Error('ollama not found')
+  }
+  return {
+    bin: 'ollama',
+    version: result.version ?? '',
+  }
+}
+
+async function fetchOllamaTags(baseUrl: string, timeoutMs = 5000): Promise<{ models?: any[] }> {
+  if (!getIsTauri()) {
+    const query = new URLSearchParams({ baseUrl }).toString()
+    const result = await webFetchJson<OllamaModel[]>(`/api/ollama/models?${query}`)
+    if (!result.success) {
+      throw new Error(result.error ?? 'Failed to fetch Ollama tags')
+    }
+    return {
+      models: (result.data ?? []).map((model) => ({
+        name: model.name,
+        size: model.size,
+        modified_at: model.modifiedAt,
+        digest: model.digest,
+      })),
     }
   }
+  const raw = await execCommand('curl', ['-sf', '--max-time', String(Math.ceil(timeoutMs / 1000)), `${baseUrl}/api/tags`])
+  return JSON.parse(raw) as { models?: any[] }
 }
 
 export function detectOllama(): Promise<AdapterResult<{ installed: boolean; version?: string }>> {
   return wrapAsync(async () => {
     try {
-      const bin = await resolveOllamaBin()
-      const raw = bin === 'ollama'
-        ? await execCommand('ollama', ['--version'])
-        : await execCommand('bash', ['-c', `${bin} --version`])
-      const version = raw.trim().replace(/^ollama\s+version\s+/i, '')
-      return { installed: true, version }
+      const installation = await resolveOllamaInstallation()
+      return { installed: true, version: installation.version }
     } catch {
       return { installed: false }
     }
@@ -57,48 +86,16 @@ export function detectOllama(): Promise<AdapterResult<{ installed: boolean; vers
 
 export function installOllama(): Promise<AdapterResult<string>> {
   return wrapAsync(async () => {
-    // Windows: download and run the official installer
-    try {
-      // Detect Windows via uname (Git Bash returns MINGW*/MSYS*)
-      const uname = await execCommand('bash', ['-c', 'uname -s 2>/dev/null || echo Linux']).catch(() => 'Linux')
-      if (/MINGW|MSYS|Windows/i.test(uname)) {
-        const raw = await execCommand('bash', ['-c', [
-          'INSTALLER="${TMPDIR:-/tmp}/OllamaSetup.exe"',
-          'curl -fsSL -o "$INSTALLER" https://ollama.com/download/OllamaSetup.exe',
-          'echo "Downloaded OllamaSetup.exe. Running installer..."',
-          '"$INSTALLER" /SILENT /NORESTART',
-          'echo "Ollama installed on Windows"',
-        ].join(' && ')])
-        return raw.trim()
+    if (!getIsTauri()) {
+      const result = await webFetchJson<{ status: string }>('/api/ollama/install', {
+        method: 'POST',
+      })
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to install Ollama')
       }
-    } catch { /* not Windows or installer failed — fall through */ }
-
-    // Linux/macOS: try official install script (needs sudo)
-    try {
-      const raw = await execCommand('bash', [
-        '-c',
-        'curl -fsSL https://ollama.com/install.sh | sh 2>&1',
-      ])
-      return raw.trim()
-    } catch {
-      // Fallback: download tar.zst archive to ~/.local (no root needed)
-      const raw = await execCommand('bash', [
-        '-c',
-        [
-          'set -e',
-          'mkdir -p ~/.local/bin ~/.local/lib/ollama',
-          'ARCH=$(uname -m)',
-          'case $ARCH in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac',
-          'LATEST=$(curl -fsSI https://github.com/ollama/ollama/releases/latest 2>/dev/null | grep -i "^location:" | sed "s|.*/tag/||" | tr -d "\\r\\n")',
-          'URL="https://github.com/ollama/ollama/releases/download/${LATEST}/ollama-linux-${ARCH}.tar.zst"',
-          'echo "Downloading ${URL}..."',
-          'curl -fsSL "${URL}" | zstd -d | tar x -C ~/.local 2>&1',
-          'chmod +x ~/.local/bin/ollama',
-          'echo "Installed ollama ${LATEST} to ~/.local/bin/ollama"',
-        ].join(' && '),
-      ])
-      return raw.trim()
+      return result.data?.status ?? 'installed'
     }
+    return tauriInvoke<string>('install_ollama')
   })
 }
 
@@ -106,8 +103,16 @@ export function installOllama(): Promise<AdapterResult<string>> {
 
 export function isOllamaRunning(baseUrl = 'http://localhost:11434'): Promise<AdapterResult<boolean>> {
   return wrapAsync(async () => {
+    if (!getIsTauri()) {
+      const query = new URLSearchParams({ baseUrl }).toString()
+      const result = await webFetchJson<{ running: boolean }>(`/api/ollama/running?${query}`)
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to detect Ollama runtime')
+      }
+      return Boolean(result.data?.running)
+    }
     try {
-      await execCommand('curl', ['-sf', '--max-time', '3', `${baseUrl}/api/tags`])
+      await fetchOllamaTags(baseUrl, 3000)
       return true
     } catch {
       return false
@@ -117,18 +122,21 @@ export function isOllamaRunning(baseUrl = 'http://localhost:11434'): Promise<Ada
 
 export function startOllama(): Promise<AdapterResult<string>> {
   return wrapAsync(async () => {
-    const bin = await resolveOllamaBin()
-    // Fire-and-forget: start ollama serve in background
-    if (bin === 'ollama') {
-      execCommand('nohup', ['ollama', 'serve']).catch(() => {})
-    } else {
-      execCommand('bash', ['-c', `nohup ${bin} serve > /dev/null 2>&1 &`]).catch(() => {})
+    if (!getIsTauri()) {
+      const result = await webFetchJson<{ status: string }>('/api/ollama/start', {
+        method: 'POST',
+      })
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to start Ollama')
+      }
+      return result.data?.status ?? 'starting'
     }
+    await tauriInvoke<string>('start_ollama')
     // Wait a moment for it to start
     await new Promise((r) => setTimeout(r, 2000))
     // Verify it started
     try {
-      await execCommand('curl', ['-sf', '--max-time', '5', 'http://localhost:11434/api/tags'])
+      await fetchOllamaTags('http://localhost:11434', 5000)
       return 'started'
     } catch {
       return 'starting'
@@ -140,8 +148,7 @@ export function startOllama(): Promise<AdapterResult<string>> {
 
 export function listModels(baseUrl = 'http://localhost:11434'): Promise<AdapterResult<OllamaModel[]>> {
   return wrapAsync(async () => {
-    const raw = await execCommand('curl', ['-sf', '--max-time', '5', `${baseUrl}/api/tags`])
-    const data = JSON.parse(raw)
+    const data = await fetchOllamaTags(baseUrl, 5000)
     const models = data.models ?? []
     return models.map((m: any) => ({
       name: m.name ?? m.model ?? '',
@@ -154,20 +161,38 @@ export function listModels(baseUrl = 'http://localhost:11434'): Promise<AdapterR
 
 export function pullModel(name: string): Promise<AdapterResult<string>> {
   return wrapAsync(async () => {
-    const bin = await resolveOllamaBin()
-    const raw = bin === 'ollama'
-      ? await execCommand('ollama', ['pull', name])
-      : await execCommand('bash', ['-c', `${bin} pull ${name}`])
+    if (!getIsTauri()) {
+      await resolveOllamaInstallation()
+      const result = await webFetchJson<{ status: string }>('/api/ollama/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to pull Ollama model')
+      }
+      return result.data?.status ?? ''
+    }
+    const raw = await tauriRunOllama(['pull', name])
     return raw.trim()
   })
 }
 
 export function deleteModel(name: string): Promise<AdapterResult<string>> {
   return wrapAsync(async () => {
-    const bin = await resolveOllamaBin()
-    const raw = bin === 'ollama'
-      ? await execCommand('ollama', ['rm', name])
-      : await execCommand('bash', ['-c', `${bin} rm ${name}`])
+    if (!getIsTauri()) {
+      await resolveOllamaInstallation()
+      const result = await webFetchJson<{ status: string }>('/api/ollama/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to delete Ollama model')
+      }
+      return result.data?.status ?? ''
+    }
+    const raw = await tauriRunOllama(['rm', name])
     return raw.trim()
   })
 }
@@ -175,17 +200,18 @@ export function deleteModel(name: string): Promise<AdapterResult<string>> {
 // ─── 综合状态 ───
 
 export function getOllamaStatus(baseUrl = 'http://localhost:11434'): Promise<AdapterResult<OllamaStatus>> {
+  if (!getIsTauri()) {
+    const query = new URLSearchParams({ baseUrl }).toString()
+    return webFetchJson<OllamaStatus>(`/api/ollama/status?${query}`)
+  }
   return wrapAsync(async () => {
     // Check installed
     let installed = false
     let version: string | undefined
     try {
-      const bin = await resolveOllamaBin()
-      const raw = bin === 'ollama'
-        ? await execCommand('ollama', ['--version'])
-        : await execCommand('bash', ['-c', `${bin} --version`])
+      const installation = await resolveOllamaInstallation()
       installed = true
-      version = raw.trim().replace(/^ollama\s+version\s+/i, '')
+      version = installation.version
     } catch { /* not installed */ }
 
     // Check running + list models
@@ -193,9 +219,8 @@ export function getOllamaStatus(baseUrl = 'http://localhost:11434'): Promise<Ada
     let models: OllamaModel[] = []
     if (installed) {
       try {
-        const raw = await execCommand('curl', ['-sf', '--max-time', '3', `${baseUrl}/api/tags`])
+        const data = await fetchOllamaTags(baseUrl, 3000)
         running = true
-        const data = JSON.parse(raw)
         models = (data.models ?? []).map((m: any) => ({
           name: m.name ?? '',
           size: m.size ?? 0,

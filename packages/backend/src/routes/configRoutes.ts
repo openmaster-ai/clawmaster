@@ -31,7 +31,8 @@ export function registerConfigRoutes(app: express.Express): void {
       return res.status(204).end()
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error)
-      return res.status(500).type('text').send(msg)
+      const status = msg.startsWith('Unsafe config path segment:') ? 400 : 500
+      return res.status(status).type('text').send(msg)
     }
   })
 }

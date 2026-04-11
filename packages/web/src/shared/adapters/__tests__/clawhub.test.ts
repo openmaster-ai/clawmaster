@@ -12,6 +12,7 @@ vi.mock('../platform', () => ({
 
 vi.mock('../webHttp', () => ({
   webFetchJson: vi.fn(),
+  webFetch: vi.fn((input: string, init?: RequestInit) => fetch(input, init)),
 }))
 
 vi.mock('../invoke', () => ({
@@ -97,8 +98,10 @@ describe('clawhub adapter (web mode)', () => {
   })
 
   it('scanInstalledSkillResult runs SkillGuard via execCommand', async () => {
-    const { execCommand } = await import('../platform')
-    vi.mocked(execCommand).mockResolvedValue(JSON.stringify({
+    const { webFetchJson } = await import('../webHttp')
+    vi.mocked(webFetchJson).mockResolvedValue({
+      success: true,
+      data: {
       auditMetadata: { toolVersion: '0.1.0', timestamp: '2026-04-05T00:00:00.000Z', target: '/tmp/find-skills' },
       summary: { totalSkills: 1, byLevel: { A: 1, B: 0, C: 0, D: 0, F: 0 } },
       report: {
@@ -111,7 +114,9 @@ describe('clawhub adapter (web mode)', () => {
       },
       severityCounts: {},
       totalFindings: 0,
-    }))
+      },
+      error: null,
+    })
 
     const { scanInstalledSkillResult } = await import('../clawhub')
     const result = await scanInstalledSkillResult({
@@ -125,6 +130,8 @@ describe('clawhub adapter (web mode)', () => {
 
     expect(result.success).toBe(true)
     expect(result.data?.report?.skillName).toBe('find-skills')
-    expect(execCommand).toHaveBeenCalledWith('node', expect.arrayContaining(['-e']))
+    expect(webFetchJson).toHaveBeenCalledWith('/api/skills/scan', expect.objectContaining({
+      method: 'POST',
+    }))
   })
 })

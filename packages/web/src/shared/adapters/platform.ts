@@ -1,3 +1,5 @@
+import { webFetch } from '@/shared/adapters/webHttp'
+
 /**
  * 平台检测与命令执行 — 统一入口
  *
@@ -71,7 +73,7 @@ async function execViaTauri(cmd: string, args: string[]): Promise<string> {
 // ─── Web 执行路径 ───
 
 async function execViaWeb(cmd: string, args: string[]): Promise<string> {
-  const res = await fetch('/api/exec', {
+  const res = await webFetch('/api/exec', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ cmd, args }),

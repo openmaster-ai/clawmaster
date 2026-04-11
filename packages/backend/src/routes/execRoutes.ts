@@ -1,8 +1,7 @@
 import type { Express } from 'express'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { existsSync } from 'fs'
-import { homedir, tmpdir, platform } from 'os'
+import { homedir } from 'os'
 import path from 'path'
 import { getClawmasterRuntimeSelection } from '../clawmasterSettings.js'
 import { execOpenclaw } from '../execOpenclaw.js'
@@ -10,35 +9,14 @@ import { runClawprobeCommand } from '../execClawprobe.js'
 import { execWslCommand, resolveSelectedWslDistroSync, shouldUseWslRuntime } from '../wslRuntime.js'
 
 const execFileAsync = promisify(execFile)
-const IS_WINDOWS = platform() === 'win32'
 const INVALID_REQUEST_RE = /Missing cmd parameter|Args must be an array of strings|Command (?:path is not allowed|is not allowed)/
 const ALLOWED_COMMANDS = new Set([
-  'bash',
   'clawhub',
   'clawprobe',
-  'curl',
-  'mkdir',
-  'nohup',
-  'node',
   'npm',
   'ollama',
   'openclaw',
 ])
-
-function resolveShell(): string {
-  if (!IS_WINDOWS) return 'bash'
-  const candidates = [
-    path.join(process.env['ProgramFiles'] ?? 'C:\\Program Files', 'Git', 'bin', 'bash.exe'),
-    path.join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'bin', 'bash.exe'),
-    path.join(process.env['LOCALAPPDATA'] ?? '', 'Programs', 'Git', 'bin', 'bash.exe'),
-  ]
-  for (const p of candidates) {
-    if (existsSync(p)) return p
-  }
-  return 'bash'
-}
-
-const RESOLVED_SHELL = resolveShell()
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
@@ -70,9 +48,8 @@ export function normalizeExecRequest(
     throw new Error('Args must be an array of strings')
   }
   const normalizedArgs = options.useWslRuntime ? (args ?? []) : (args ?? []).map((arg) => expandHomeToken(arg))
-  const normalizedCmd = trimmedCmd === 'bash' && IS_WINDOWS && !options.useWslRuntime ? RESOLVED_SHELL : trimmedCmd
   return {
-    cmd: normalizedCmd,
+    cmd: trimmedCmd,
     args: normalizedArgs,
   }
 }
@@ -87,15 +64,6 @@ export function normalizeExecRequest(
  * are NOT supported without WSL2.
  */
 export function registerExecRoutes(app: Express): void {
-  app.get('/api/shell-info', (_req, res) => {
-    res.json({
-      shell: RESOLVED_SHELL,
-      tempDir: tmpdir(),
-      isWindows: IS_WINDOWS,
-      gitBashAvailable: IS_WINDOWS ? existsSync(RESOLVED_SHELL) : true,
-    })
-  })
-
   app.post('/api/exec', async (req, res) => {
     const body = req.body ?? {}
     const { cmd, args } = body

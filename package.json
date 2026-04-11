@@ -5,6 +5,17 @@
   "bin": {
     "clawmaster": "./bin/clawmaster.mjs"
   },
+  "files": [
+    "bin/clawmaster.mjs",
+    "packages/backend/dist/",
+    "packages/backend/package.json",
+    "packages/web/dist/",
+    "package.json",
+    "README.md",
+    "README_CN.md",
+    "README_JP.md",
+    "LICENSE"
+  ],
   "workspaces": [
     "packages/*"
   ],
@@ -13,10 +24,13 @@
     "dev:web": "npm run dev --workspace=@openclaw-manager/backend & npm run dev --workspace=@openclaw-manager/web",
     "dev:backend": "npm run dev --workspace=@openclaw-manager/backend",
     "build": "npm run build --workspace=@openclaw-manager/web",
+    "build:backend": "npm run build --workspace=@openclaw-manager/backend",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "test": "npm run test --workspace=@openclaw-manager/backend && npm run test --workspace=@openclaw-manager/web"
+    "prepack": "npm run build:backend && npm run build",
+    "test:cli": "node --test bin/*.test.mjs",
+    "test": "npm run test:cli && npm run test --workspace=@openclaw-manager/backend && npm run test --workspace=@openclaw-manager/web"
   },
   "keywords": [
     "openclaw",
@@ -31,6 +45,9 @@
     "js-yaml": "^4.1.1"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.10.1"
+    "@tauri-apps/api": "^2.10.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
   }
 }

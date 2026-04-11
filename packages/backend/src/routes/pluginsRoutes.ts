@@ -6,6 +6,7 @@ import {
   uninstallOpenclawPlugin,
 } from '../services/openclawPlugins.js'
 import { installSkillWithClawhub, searchClawhubSkills } from '../clawhubRegistry.js'
+import { scanInstalledSkill } from '../services/skillGuardService.js'
 import { runOpenclawSkillsChecked, runOpenclawSkillsUninstall } from '../skillsCli.js'
 import { mapSkillJson } from '../skillsParse.js'
 import { isRecord, sendOpenclawFailure } from '../serverUtils.js'
@@ -118,6 +119,22 @@ export function registerPluginsRoutes(app: express.Express): void {
     try {
       await runOpenclawSkillsUninstall(slug)
       res.status(204).end()
+    } catch (error: unknown) {
+      sendOpenclawFailure(res, error)
+    }
+  })
+
+  app.post('/api/skills/scan', async (req, res) => {
+    const body = req.body
+    if (!isRecord(body)) {
+      return res.status(400).type('text').send('Body must be JSON')
+    }
+    try {
+      res.json(await scanInstalledSkill({
+        skillKey: typeof body.skillKey === 'string' ? body.skillKey : undefined,
+        name: typeof body.name === 'string' ? body.name : undefined,
+        slug: typeof body.slug === 'string' ? body.slug : undefined,
+      }))
     } catch (error: unknown) {
       sendOpenclawFailure(res, error)
     }

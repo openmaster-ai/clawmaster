@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CAPABILITIES, type CapabilityId } from '@/modules/setup/types'
 import { getSetupAdapter } from '@/modules/setup/adapters'
@@ -36,6 +36,7 @@ export function CapabilityGuard({
   const [status, setStatus] = useState<'checking' | 'available' | 'unavailable'>('checking')
   const [installing, setInstalling] = useState(false)
   const [installError, setInstallError] = useState<string | null>(null)
+  const pendingCheckRef = useRef<Promise<boolean> | null>(null)
 
   const cap = CAPABILITIES.find((c) => c.id === capabilityId)
   const capName = cap?.name ? t(cap.name) : capabilityId
@@ -43,11 +44,61 @@ export function CapabilityGuard({
   // demo 模式下直接放行
   const isDemo = typeof window !== 'undefined' && !!new URLSearchParams(window.location.search).get('demo')
 
-  // 首次检测
-  useState(() => {
-    if (isDemo) { setStatus('available'); return }
-    checkAvailable().then((ok) => setStatus(ok ? 'available' : 'unavailable')).catch(() => setStatus('unavailable'))
-  })
+  const getAvailabilityPromise = useCallback(() => {
+    if (pendingCheckRef.current) {
+      return pendingCheckRef.current
+    }
+    const pending = Promise.resolve().then(() => checkAvailable())
+    pendingCheckRef.current = pending
+    void pending.finally(() => {
+      if (pendingCheckRef.current === pending) {
+        pendingCheckRef.current = null
+      }
+    })
+    return pending
+  }, [checkAvailable])
+
+  const runAvailabilityCheck = useCallback(async () => {
+    if (isDemo) {
+      setStatus('available')
+      return true
+    }
+
+    setStatus('checking')
+    try {
+      const ok = await getAvailabilityPromise()
+      setStatus(ok ? 'available' : 'unavailable')
+      return ok
+    } catch {
+      setStatus('unavailable')
+      return false
+    }
+  }, [getAvailabilityPromise, isDemo])
+
+  useEffect(() => {
+    let active = true
+    if (isDemo) {
+      setStatus('available')
+      return
+    }
+
+    setStatus('checking')
+    getAvailabilityPromise()
+      .then((ok) => {
+        if (active) {
+          setStatus(ok ? 'available' : 'unavailable')
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setStatus('unavailable')
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [getAvailabilityPromise, isDemo])
 
   if (status === 'checking') {
     return (
@@ -71,9 +122,8 @@ export function CapabilityGuard({
       const adapter = getSetupAdapter()
       await adapter.installCapabilities([capabilityId], () => {})
       // 安装完重新检测
-      const ok = await checkAvailable()
-      setStatus(ok ? 'available' : 'unavailable')
-      if (!ok) setInstallError('安装完成但能力检测仍失败，请检查配置')
+      const ok = await runAvailabilityCheck()
+      if (!ok) setInstallError(t('capability.installVerifyFailed', { name: capName }))
     } catch (err) {
       setInstallError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -102,7 +152,7 @@ export function CapabilityGuard({
           {installing ? t('capability.installing') : t('capability.install', { name: capName })}
         </button>
         <button
-          onClick={() => checkAvailable().then((ok) => setStatus(ok ? 'available' : 'unavailable'))}
+          onClick={() => { void runAvailabilityCheck() }}
           className="px-4 py-2 border border-border rounded-lg hover:bg-accent"
         >
           {t('capability.recheck')}

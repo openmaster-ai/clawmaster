@@ -153,4 +153,78 @@ describe('App', () => {
       expect(screen.getByText('Dashboard page')).toBeInTheDocument()
     })
   })
+
+  it('shows the service auth gate when web api requests are unauthorized', async () => {
+    mockDetectSystem.mockResolvedValue({
+      success: false,
+      error: 'CLAWMASTER_SERVICE_AUTH_REQUIRED',
+    })
+    mockGetConfig.mockResolvedValue({
+      success: false,
+      error: 'CLAWMASTER_SERVICE_AUTH_REQUIRED',
+    })
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'serviceAuth.title' })).toBeInTheDocument()
+    expect(screen.getByLabelText('serviceAuth.tokenLabel')).toBeInTheDocument()
+  })
+
+  it('stores the submitted service token and retries boot', async () => {
+    mockDetectSystem
+      .mockResolvedValueOnce({
+        success: false,
+        error: 'CLAWMASTER_SERVICE_AUTH_REQUIRED',
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          nodejs: { installed: true, version: '22.0.0' },
+          npm: { installed: true, version: '11.0.0' },
+          openclaw: {
+            installed: true,
+            version: '2026.4.7',
+            configPath: '/Users/test/.openclaw/openclaw.json',
+            existingConfigPaths: ['/Users/test/.openclaw/openclaw.json'],
+          },
+        },
+      })
+    mockGetConfig
+      .mockResolvedValueOnce({
+        success: false,
+        error: 'CLAWMASTER_SERVICE_AUTH_REQUIRED',
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          models: {
+            providers: {
+              siliconflow: {
+                apiKey: 'sk-test',
+                models: [{ id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3' }],
+              },
+            },
+          },
+        },
+      })
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const input = await screen.findByLabelText('serviceAuth.tokenLabel')
+    fireEvent.change(input, { target: { value: 'secret-token' } })
+    fireEvent.click(screen.getByRole('button', { name: 'serviceAuth.submit' }))
+
+    await waitFor(() => {
+      expect(localStorage.getItem('clawmaster-service-token')).toBe('secret-token')
+      expect(screen.getByText('Dashboard page')).toBeInTheDocument()
+    })
+  })
 })

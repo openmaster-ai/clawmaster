@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import {
   addMcpServer,
   checkMcpPackage,
@@ -9,8 +10,13 @@ import {
   toggleMcpServer,
 } from '../mcp'
 
+vi.mock('../invoke', () => ({
+  tauriInvoke: vi.fn(),
+}))
+
 vi.mock('../platform', () => ({
   execCommand: vi.fn(),
+  getIsTauri: vi.fn(() => false),
 }))
 
 vi.mock('../system', () => ({
@@ -30,40 +36,90 @@ vi.mock('../system', () => ({
   }),
 }))
 
+vi.mock('../openclaw', () => ({
+  getConfigResult: vi.fn(),
+  saveFullConfigResult: vi.fn(),
+  setConfigResult: vi.fn().mockResolvedValue({
+    success: true,
+    data: undefined,
+    error: null,
+  }),
+}))
+
+vi.mock('../webHttp', () => ({
+  webFetchJson: vi.fn(),
+  webFetchVoid: vi.fn(),
+}))
+
 describe('mcp adapter', () => {
   async function execMock() {
     const { execCommand } = await import('../platform')
     return vi.mocked(execCommand)
   }
 
+  async function tauriInvokeMock() {
+    const { tauriInvoke } = await import('../invoke')
+    return vi.mocked(tauriInvoke)
+  }
+
+  async function openclawMocks() {
+    const { getConfigResult, saveFullConfigResult, setConfigResult } = await import('../openclaw')
+    return {
+      getConfigResult: vi.mocked(getConfigResult),
+      saveFullConfigResult: vi.mocked(saveFullConfigResult),
+      setConfigResult: vi.mocked(setConfigResult),
+    }
+  }
+
+  async function webFetchJsonMock() {
+    const { webFetchJson } = await import('../webHttp')
+    return vi.mocked(webFetchJson)
+  }
+
+  async function webFetchVoidMock() {
+    const { webFetchVoid } = await import('../webHttp')
+    return vi.mocked(webFetchVoid)
+  }
+
   beforeEach(async () => {
     vi.clearAllMocks()
     ;(await execMock()).mockReset()
+    ;(await tauriInvokeMock()).mockReset()
+    ;(await webFetchJsonMock()).mockReset()
+    ;(await webFetchVoidMock()).mockReset()
+    const openclaw = await openclawMocks()
+    openclaw.getConfigResult.mockReset()
+    openclaw.saveFullConfigResult.mockReset()
+    openclaw.setConfigResult.mockReset()
+    openclaw.setConfigResult.mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
   })
 
-  it('parses stdio and remote configs from disk', async () => {
-    const mock = await execMock()
-    mock.mockResolvedValueOnce(JSON.stringify({
-      mcpServers: {
+  it('loads merged MCP servers through the dedicated backend route', async () => {
+    const mock = await webFetchJsonMock()
+    mock.mockResolvedValueOnce({
+      success: true,
+      data: {
         github: {
+          transport: 'stdio',
           command: 'npx',
           args: ['-y', '@modelcontextprotocol/server-github'],
           env: { GITHUB_PERSONAL_ACCESS_TOKEN: 'ghp_test' },
           enabled: false,
         },
-      },
-    }))
-    mock.mockResolvedValueOnce(JSON.stringify({
-      mcp: {
-        servers: {
-          context7: {
-            transport: 'streamable-http',
-            url: 'https://mcp.context7.com/mcp',
-            headers: { Authorization: 'Bearer sk-test' },
-          },
+        context7: {
+          transport: 'http',
+          url: 'https://mcp.context7.com/mcp',
+          headers: { Authorization: 'Bearer sk-test' },
+          env: {},
+          enabled: true,
         },
       },
-    }))
+      error: null,
+    })
 
     const result = await getMcpServers()
 
@@ -75,14 +131,19 @@ describe('mcp adapter', () => {
     }
     expect(result.data.github.env.GITHUB_PERSONAL_ACCESS_TOKEN).toBe('ghp_test')
     expect(result.data.github.enabled).toBe(false)
+    expect(mock).toHaveBeenCalledWith('/api/mcp/servers')
   })
 
-  it('lists import candidates from the local environment', async () => {
-    const mock = await execMock()
-    mock.mockResolvedValueOnce(JSON.stringify([
-      { id: 'project-mcp', format: 'json', path: '/repo/.mcp.json', exists: true },
-      { id: 'codex-user', format: 'toml', path: '/Users/test/.codex/config.toml', exists: false },
-    ]))
+  it('lists import candidates via the backend route', async () => {
+    const mock = await webFetchJsonMock()
+    mock.mockResolvedValueOnce({
+      success: true,
+      data: [
+        { id: 'project-mcp', format: 'json', path: '/repo/.mcp.json', exists: true },
+        { id: 'codex-user', format: 'toml', path: '/Users/test/.codex/config.toml', exists: false },
+      ],
+      error: null,
+    })
 
     const result = await listMcpImportCandidates()
 
@@ -91,32 +152,39 @@ describe('mcp adapter', () => {
       { id: 'project-mcp', format: 'json', path: '/repo/.mcp.json', exists: true },
       { id: 'codex-user', format: 'toml', path: '/Users/test/.codex/config.toml', exists: false },
     ])
+    expect(mock).toHaveBeenCalledWith('/api/mcp/import-candidates')
   })
 
-  it('imports servers and renames collisions', async () => {
-    const mock = await execMock()
+  it('imports servers and renames collisions before persisting through the backend route', async () => {
+    const mock = await webFetchJsonMock()
+    const writeMock = await webFetchVoidMock()
     mock
-      .mockResolvedValueOnce(JSON.stringify({
-        path: '/repo/.mcp.json',
-        content: JSON.stringify({
-          mcpServers: {
-            context7: { transport: 'http', url: 'https://remote/context7' },
-          },
-        }),
-      }))
-      .mockResolvedValueOnce(JSON.stringify({
-        mcpServers: {
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          path: '/repo/.mcp.json',
+          content: JSON.stringify({
+            mcpServers: {
+              context7: { transport: 'http', url: 'https://remote/context7' },
+            },
+          }),
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
           context7: {
             transport: 'http',
             url: 'https://existing/context7',
             enabled: true,
+            env: {},
+            headers: {},
           },
         },
-      }))
-      .mockResolvedValueOnce(JSON.stringify({ mcp: { servers: {} } }))
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValueOnce('synced')
+        error: null,
+      })
+    writeMock.mockResolvedValueOnce({ success: true, data: undefined, error: null })
 
     const result = await importMcpServers('/repo/.mcp.json')
 
@@ -125,17 +193,19 @@ describe('mcp adapter', () => {
       path: '/repo/.mcp.json',
       importedIds: ['context7-2'],
     })
+    expect(writeMock).toHaveBeenCalledWith('/api/mcp/servers', expect.objectContaining({
+      method: 'PUT',
+      body: expect.stringContaining('context7-2'),
+    }))
   })
 
   it('adds stdio servers and optionally installs the package', async () => {
-    const mock = await execMock()
-    mock
-      .mockResolvedValueOnce('added 1 package')
-      .mockRejectedValueOnce(new Error('missing config'))
-      .mockRejectedValueOnce(new Error('missing runtime config'))
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValueOnce('synced')
+    const exec = await execMock()
+    const jsonMock = await webFetchJsonMock()
+    const writeMock = await webFetchVoidMock()
+    exec.mockResolvedValueOnce('added 1 package')
+    jsonMock.mockResolvedValueOnce({ success: true, data: {}, error: null })
+    writeMock.mockResolvedValueOnce({ success: true, data: undefined, error: null })
 
     const result = await addMcpServer(
       'github',
@@ -151,124 +221,192 @@ describe('mcp adapter', () => {
 
     expect(result.success).toBe(true)
     expect(result.data).toBe('installed')
+    expect(exec).toHaveBeenCalledWith('npm', ['install', '-g', '@modelcontextprotocol/server-github'])
+    expect(writeMock).toHaveBeenCalledWith('/api/mcp/servers', expect.objectContaining({
+      method: 'PUT',
+      body: expect.stringContaining('"github"'),
+    }))
   })
 
   it('removes servers and best-effort uninstalls managed packages', async () => {
-    const mock = await execMock()
-    mock
-      .mockResolvedValueOnce(JSON.stringify({
-        mcpServers: {
-          github: {
-            command: 'npx',
-            args: ['-y', '@modelcontextprotocol/server-github'],
-            env: {},
-            enabled: true,
-          },
+    const exec = await execMock()
+    const jsonMock = await webFetchJsonMock()
+    const writeMock = await webFetchVoidMock()
+    jsonMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        github: {
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-github'],
+          env: {},
+          enabled: true,
         },
-      }))
-      .mockResolvedValueOnce(JSON.stringify({
-        mcp: {
-          servers: {
-            github: {
-              command: 'npx',
-              args: ['-y', '@modelcontextprotocol/server-github'],
-              env: {},
-            },
-          },
-        },
-      }))
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValueOnce('synced')
-      .mockResolvedValueOnce('removed')
+      },
+      error: null,
+    })
+    writeMock.mockResolvedValueOnce({ success: true, data: undefined, error: null })
+    exec.mockResolvedValueOnce('removed')
 
     const result = await removeMcpServer('github', '@modelcontextprotocol/server-github')
 
     expect(result.success).toBe(true)
     expect(result.data).toBe('removed')
+    expect(exec).toHaveBeenCalledWith('npm', ['uninstall', '-g', '@modelcontextprotocol/server-github'])
   })
 
   it('toggles enabled state and handles missing ids', async () => {
-    const mock = await execMock()
-    mock
-      .mockResolvedValueOnce(JSON.stringify({
-        mcpServers: {
-          github: {
-            command: 'npx',
-            args: [],
-            env: {},
-            enabled: true,
-          },
+    const jsonMock = await webFetchJsonMock()
+    const writeMock = await webFetchVoidMock()
+    jsonMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        github: {
+          command: 'npx',
+          args: [],
+          env: {},
+          enabled: true,
         },
-      }))
-      .mockResolvedValueOnce(JSON.stringify({
-        mcp: {
-          servers: {
-            github: {
-              command: 'npx',
-              args: [],
-              env: {},
-            },
-          },
-        },
-      }))
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValueOnce('synced')
+      },
+      error: null,
+    })
+    writeMock.mockResolvedValueOnce({ success: true, data: undefined, error: null })
 
     const enabledResult = await toggleMcpServer('github', false)
     expect(enabledResult.success).toBe(true)
     expect(enabledResult.data).toBe('disabled')
+    expect(writeMock).toHaveBeenCalledWith('/api/mcp/servers', expect.objectContaining({
+      method: 'PUT',
+    }))
 
-    mock.mockReset()
-    mock
-      .mockResolvedValueOnce(JSON.stringify({ mcpServers: {} }))
-      .mockResolvedValueOnce(JSON.stringify({ mcp: { servers: {} } }))
+    jsonMock.mockReset()
+    jsonMock.mockResolvedValueOnce({ success: true, data: {}, error: null })
 
     const missingResult = await toggleMcpServer('missing', true)
     expect(missingResult.success).toBe(true)
     expect(missingResult.data).toBe('not found')
   })
 
-  it('writes only enabled servers into openclaw config and maps http to streamable-http', async () => {
-    const mock = await execMock()
-    mock
-      .mockRejectedValueOnce(new Error('missing config'))
-      .mockRejectedValueOnce(new Error('missing runtime config'))
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValueOnce('synced')
-
-    const result = await addMcpServer('context7', {
-      transport: 'http',
-      url: 'https://mcp.context7.com/mcp',
-      headers: {},
-      env: {},
-      enabled: true,
-    })
-
-    expect(result.success).toBe(true)
-    const nodeWriteCall = mock.mock.calls.find(([command, args]) => (
-      command === 'node'
-      && Array.isArray(args)
-      && args[2] === '~/.openclaw/openclaw.json'
-    ))
-    expect(nodeWriteCall?.[1]?.[3]).toContain('"transport":"streamable-http"')
-  })
-
   it('checks whether a package is globally installed', async () => {
-    const mock = await execMock()
-    mock.mockResolvedValueOnce('{}')
+    const exec = await execMock()
+    exec.mockResolvedValueOnce('{}')
 
     const installed = await checkMcpPackage('@modelcontextprotocol/server-github')
     expect(installed.success).toBe(true)
     expect(installed.data).toBe(true)
 
-    mock.mockReset()
-    mock.mockRejectedValueOnce(new Error('not found'))
+    exec.mockReset()
+    exec.mockRejectedValueOnce(new Error('not found'))
 
     const missing = await checkMcpPackage('missing-package')
     expect(missing.success).toBe(true)
     expect(missing.data).toBe(false)
+  })
+
+  it('uses tauri commands instead of node when loading MCP state on desktop', async () => {
+    const { getIsTauri } = await import('../platform')
+    const invoke = await tauriInvokeMock()
+    const openclaw = await openclawMocks()
+    getIsTauri.mockReturnValue(true)
+    invoke.mockResolvedValueOnce({
+      exists: true,
+      content: JSON.stringify({
+        mcpServers: {
+          context7: {
+            transport: 'http',
+            url: 'https://mcp.context7.com/mcp',
+            enabled: false,
+            headers: {},
+            env: {},
+          },
+        },
+      }),
+    })
+    openclaw.getConfigResult.mockResolvedValueOnce({
+      success: true,
+      data: {
+        mcp: {
+          servers: {
+            context7: {
+              transport: 'streamable-http',
+              url: 'https://mcp.context7.com/mcp',
+            },
+          },
+        },
+      },
+      error: null,
+    })
+
+    const result = await getMcpServers()
+
+    expect(result.success).toBe(true)
+    expect(invoke).toHaveBeenCalledWith('read_runtime_text_file', {
+      pathInput: '~/.openclaw/mcp.json',
+    })
+    expect((await execMock())).not.toHaveBeenCalledWith('node', expect.anything())
+  })
+
+  it('uses tauri commands instead of node when listing import candidates on desktop', async () => {
+    const { getIsTauri } = await import('../platform')
+    const invoke = await tauriInvokeMock()
+    getIsTauri.mockReturnValue(true)
+    invoke.mockResolvedValueOnce([
+      { id: 'project-mcp', format: 'json', path: '/repo/.mcp.json', exists: true },
+    ])
+
+    const result = await listMcpImportCandidates()
+
+    expect(result.success).toBe(true)
+    expect(invoke).toHaveBeenCalledWith('list_mcp_import_candidates')
+    expect((await execMock())).not.toHaveBeenCalledWith('node', expect.anything())
+  })
+
+  it('uses tauri commands instead of node when importing and saving MCP state on desktop', async () => {
+    const { getIsTauri } = await import('../platform')
+    const invoke = await tauriInvokeMock()
+    const openclaw = await openclawMocks()
+    getIsTauri.mockReturnValue(true)
+
+    invoke
+      .mockResolvedValueOnce({
+        path: '/repo/.mcp.json',
+        content: JSON.stringify({
+          mcpServers: {
+            context7: {
+              transport: 'http',
+              url: 'https://mcp.context7.com/mcp',
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        content: JSON.stringify({ mcpServers: {} }),
+      })
+    openclaw.getConfigResult.mockResolvedValueOnce({
+      success: true,
+      data: {},
+      error: null,
+    })
+    openclaw.saveFullConfigResult.mockResolvedValueOnce({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    const result = await importMcpServers('/repo/.mcp.json')
+
+    expect(result.success).toBe(true)
+    expect(invoke).toHaveBeenNthCalledWith(1, 'read_required_runtime_text_file', {
+      pathInput: '/repo/.mcp.json',
+    })
+    expect(invoke).toHaveBeenCalledWith('read_runtime_text_file', {
+      pathInput: '~/.openclaw/mcp.json',
+    })
+    expect(invoke).toHaveBeenCalledWith('write_runtime_text_file', {
+      pathInput: '~/.openclaw/mcp.json',
+      content: expect.stringContaining('"context7"'),
+    })
+    expect(openclaw.saveFullConfigResult).toHaveBeenCalled()
+    expect((await execMock())).not.toHaveBeenCalledWith('node', expect.anything())
   })
 })

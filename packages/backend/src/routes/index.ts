@@ -13,6 +13,8 @@ import { registerLogsRoutes, attachLogsStreamServer as attachWs } from './logsRo
 import { registerMemoryRoutes } from './memoryRoutes.js'
 import { registerExecRoutes } from './execRoutes.js'
 import { registerStorageRoutes } from './storageRoutes.js'
+import { registerMcpRoutes } from './mcpRoutes.js'
+import { registerOllamaRoutes } from './ollamaRoutes.js'
 
 export function registerDomainRoutes(app: express.Express): void {
   registerSystemRoutes(app)
@@ -26,6 +28,8 @@ export function registerDomainRoutes(app: express.Express): void {
   registerClawprobeRoutes(app)
   registerLogsRoutes(app)
   registerMemoryRoutes(app)
+  registerMcpRoutes(app)
+  registerOllamaRoutes(app)
   registerExecRoutes(app)
   registerStorageRoutes(app)
 }

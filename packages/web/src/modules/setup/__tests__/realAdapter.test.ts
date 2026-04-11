@@ -13,8 +13,13 @@ vi.mock('@/shared/adapters/openclaw', () => ({
   setConfigResult: vi.fn(),
 }))
 
+vi.mock('@/shared/adapters/system', () => ({
+  probeHttpStatusResult: vi.fn(),
+}))
+
 import { execCommand } from '@/shared/adapters/platform'
 import { setConfigResult } from '@/shared/adapters/openclaw'
+import { probeHttpStatusResult } from '@/shared/adapters/system'
 import { realSetupAdapter } from '../adapters'
 import type { InstallProgress } from '../types'
 
@@ -22,6 +27,7 @@ describe('realSetupAdapter', () => {
   beforeEach(() => {
     vi.mocked(execCommand).mockReset()
     vi.mocked(setConfigResult).mockReset()
+    vi.mocked(probeHttpStatusResult).mockReset()
   })
 
   it('throws when a capability install fails', async () => {
@@ -106,6 +112,51 @@ describe('realSetupAdapter', () => {
         { id: 'ernie-4.5-turbo-128k-preview', name: 'ERNIE 4.5 Turbo' },
         { id: 'ernie-3.5-8k', name: 'ERNIE 3.5 8K' },
       ],
+    })
+  })
+
+  it('probes Ollama via the dedicated HTTP probe adapter', async () => {
+    vi.mocked(probeHttpStatusResult).mockResolvedValue({
+      success: true,
+      data: { ok: true, status: 200 },
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.testApiKey('ollama', '', 'http://localhost:11434/v1'),
+    ).resolves.toBe(true)
+
+    expect(probeHttpStatusResult).toHaveBeenCalledWith({
+      url: 'http://localhost:11434/api/tags',
+      method: 'GET',
+      timeoutMs: 5000,
+    })
+  })
+
+  it('probes provider chat completions via the dedicated HTTP probe adapter', async () => {
+    vi.mocked(probeHttpStatusResult).mockResolvedValue({
+      success: true,
+      data: { ok: true, status: 200 },
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.testApiKey('siliconflow', 'sk-test', 'https://api.siliconflow.cn/v1'),
+    ).resolves.toBe(true)
+
+    expect(probeHttpStatusResult).toHaveBeenCalledWith({
+      url: 'https://api.siliconflow.cn/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer sk-test',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'deepseek-ai/DeepSeek-V3',
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 1,
+      }),
+      timeoutMs: 10000,
     })
   })
 })

@@ -199,7 +199,9 @@ describe('CapabilitiesPage', () => {
     renderPage()
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Assistant Capabilities' })).toBeInTheDocument()
-    expect(screen.getAllByText('1 active · 1 configured').length).toBeGreaterThan(0)
+    await waitFor(() => {
+      expect(screen.getAllByText('1 active · 1 configured').length).toBeGreaterThan(0)
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
 

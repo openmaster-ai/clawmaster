@@ -64,6 +64,28 @@ npm run dev:web
 npm run tauri:dev
 ```
 
+### 方式三：安装服务 CLI
+
+```bash
+npm i -g clawmaster
+clawmaster doctor
+clawmaster serve --daemon
+clawmaster status
+```
+
+默认服务地址：
+- `http://127.0.0.1:3001`
+- `clawmaster serve` 会打印一枚服务令牌，浏览器访问 UI 时按提示输入即可。
+
+常用命令：
+- `clawmaster serve --host 127.0.0.1 --port 3001`
+- `clawmaster serve --host 127.0.0.1 --port 3001 --daemon`
+- `clawmaster serve --host 127.0.0.1 --port 3001 --token your-own-token`
+- `clawmaster status`
+- `clawmaster status --token your-own-token`
+- `clawmaster stop`
+- `clawmaster doctor`
+
 生产构建：
 
 ```bash

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import type { SystemInfo } from '@/lib/types'
+import { webFetch } from '@/shared/adapters/webHttp'
 
 interface StartupDetectorProps {
   onDetected: (info: SystemInfo) => void
@@ -22,7 +23,7 @@ async function detectTauri(): Promise<SystemInfo> {
 }
 
 async function detectWeb(): Promise<SystemInfo> {
-  const res = await fetch('/api/system/detect')
+  const res = await webFetch('/api/system/detect')
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }

@@ -9,9 +9,13 @@
  */
 
 import { execCommand } from './platform'
+import { getIsTauri } from './platform'
 import { detectSystemResult } from './system'
+import { tauriInvoke } from './invoke'
+import { getConfigResult, saveFullConfigResult, setConfigResult } from './openclaw'
 import { wrapAsync, type AdapterResult } from './types'
-import { parseImportedMcpServers, type McpImportCandidate, type McpImportFormat } from './mcpImport'
+import { parseImportedMcpServers, type McpImportCandidate } from './mcpImport'
+import { webFetchJson, webFetchVoid } from './webHttp'
 
 export type McpTransport = 'stdio' | 'http' | 'sse'
 export type McpServerSource = 'catalog' | 'manual' | 'import'
@@ -47,22 +51,6 @@ export interface McpImportSummary {
   path: string
   importedIds: string[]
 }
-
-const TEMP = '${TMPDIR:-/tmp}'
-
-const MCP_IMPORT_SOURCE_DEFINITIONS: Array<{
-  id: string
-  format: McpImportFormat
-  relativePath?: string
-  homePath?: string
-}> = [
-  { id: 'project-mcp', format: 'json', relativePath: '.mcp.json' },
-  { id: 'cursor', format: 'json', relativePath: '.cursor/mcp.json' },
-  { id: 'vscode', format: 'json', relativePath: '.vscode/mcp.json' },
-  { id: 'claude-user', format: 'json', homePath: '.claude.json' },
-  { id: 'codex-user', format: 'toml', homePath: '.codex/config.toml' },
-  { id: 'copilot-user', format: 'json', homePath: '.copilot/mcp-config.json' },
-]
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -156,10 +144,21 @@ function normalizeMcpServerMap(value: unknown): McpServersMap {
 }
 
 async function readJsonFile(path: string): Promise<unknown | null> {
+  if (!getIsTauri()) {
+    const result = await webFetchJson<{ path: string; content: string }>('/api/mcp/read-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    })
+    if (!result.success || !result.data?.content?.trim()) return null
+    return JSON.parse(result.data.content) as unknown
+  }
   try {
-    const raw = await execCommand('bash', ['-c', `cat ${path} 2>/dev/null`])
-    if (!raw.trim()) return null
-    return JSON.parse(raw) as unknown
+    const parsed = await tauriInvoke<{ exists?: boolean; content?: string }>('read_runtime_text_file', {
+      pathInput: path,
+    })
+    if (!parsed.exists || !parsed.content?.trim()) return null
+    return JSON.parse(parsed.content) as unknown
   } catch {
     return null
   }
@@ -201,6 +200,17 @@ async function readCurrentMcpConfig(): Promise<McpServersMap> {
   return mergeManagedAndRuntimeServers(managed, runtime)
 }
 
+async function loadCurrentMcpConfig(): Promise<McpServersMap> {
+  if (getIsTauri()) {
+    return readCurrentMcpConfig()
+  }
+  const result = await webFetchJson<McpServersMap>('/api/mcp/servers')
+  if (!result.success || !result.data) {
+    throw new Error(result.error ?? 'Failed to load MCP servers')
+  }
+  return result.data
+}
+
 async function getOpenclawRuntimePaths(): Promise<{ configPath: string; registryPath: string }> {
   const result = await detectSystemResult()
   const configPath = result.success && result.data?.openclaw.configPath
@@ -217,12 +227,22 @@ async function getOpenclawRuntimePaths(): Promise<{ configPath: string; registry
 }
 
 async function writeManagedMcpRegistry(servers: McpServersMap): Promise<void> {
+  if (!getIsTauri()) {
+    const result = await webFetchVoid('/api/mcp/servers', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(servers),
+    })
+    if (!result.success) {
+      throw new Error(result.error ?? 'Failed to persist MCP servers')
+    }
+    return
+  }
   const { registryPath } = await getOpenclawRuntimePaths()
-  const json = JSON.stringify({ mcpServers: servers }, null, 2)
-  return execCommand('bash', [
-    '-c',
-    `cat > ${registryPath} << 'MCPEOF'\n${json}\nMCPEOF`,
-  ]).then(() => {})
+  await tauriInvoke('write_runtime_text_file', {
+    pathInput: registryPath,
+    content: JSON.stringify({ mcpServers: servers }, null, 2),
+  })
 }
 
 function serializeEnabledServersForOpenClaw(servers: McpServersMap): Record<string, Record<string, unknown>> {
@@ -251,56 +271,48 @@ function serializeEnabledServersForOpenClaw(servers: McpServersMap): Record<stri
 }
 
 async function writeOpenClawConfig(servers: McpServersMap): Promise<void> {
-  const { configPath } = await getOpenclawRuntimePaths()
+  if (!getIsTauri()) {
+    return
+  }
   const runtimeServers = serializeEnabledServersForOpenClaw(servers)
-  const script = `
-const fs = require('node:fs')
-const path = require('node:path')
-const os = require('node:os')
-
-function isRecord(value) {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function expandHome(input) {
-  return String(input || '').replace(/^~(?=$|[\\\\/])/, os.homedir())
-}
-
-const target = expandHome(process.argv[1])
-const nextServers = JSON.parse(process.argv[2] || '{}')
-
-let config = {}
-try {
-  config = JSON.parse(fs.readFileSync(target, 'utf8'))
-} catch (error) {
-  if (!error || error.code !== 'ENOENT') throw error
-}
-
-if (!isRecord(config)) {
-  config = {}
-}
-
-if (Object.keys(nextServers).length > 0) {
-  const currentMcp = isRecord(config.mcp) ? config.mcp : {}
-  config.mcp = {
-    ...currentMcp,
-    servers: nextServers,
+  const configResult = await getConfigResult()
+  if (!configResult.success) {
+    throw new Error(configResult.error ?? 'Failed to load OpenClaw config')
   }
-} else if (isRecord(config.mcp)) {
-  delete config.mcp.servers
-  if (Object.keys(config.mcp).length === 0) {
-    delete config.mcp
+  const nextConfig = { ...(configResult.data ?? {}) } as Record<string, unknown>
+  const currentMcp = isRecord(nextConfig.mcp) ? { ...nextConfig.mcp } : {}
+  if (Object.keys(runtimeServers).length > 0) {
+    currentMcp.servers = runtimeServers
+    nextConfig.mcp = currentMcp
+  } else if (Object.keys(currentMcp).length > 0) {
+    delete currentMcp.servers
+    if (Object.keys(currentMcp).length > 0) {
+      nextConfig.mcp = currentMcp
+    } else {
+      delete nextConfig.mcp
+    }
+  } else {
+    delete nextConfig.mcp
   }
-}
 
-fs.mkdirSync(path.dirname(target), { recursive: true })
-fs.writeFileSync(target, JSON.stringify(config, null, 2) + '\\n')
-  `.trim()
-
-  return execCommand('node', ['-e', script, configPath, JSON.stringify(runtimeServers)]).then(() => {})
+  const saveResult = await saveFullConfigResult(nextConfig)
+  if (!saveResult.success) {
+    throw new Error(saveResult.error ?? 'Failed to save OpenClaw config')
+  }
 }
 
 async function persistMcpConfig(servers: McpServersMap): Promise<void> {
+  if (!getIsTauri()) {
+    const result = await webFetchVoid('/api/mcp/servers', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(servers),
+    })
+    if (!result.success) {
+      throw new Error(result.error ?? 'Failed to persist MCP servers')
+    }
+    return
+  }
   await writeManagedMcpRegistry(servers)
   await writeOpenClawConfig(servers)
   await syncToBridge(servers)
@@ -329,16 +341,13 @@ async function syncToBridge(servers: McpServersMap): Promise<void> {
     }
   }
 
-  const batchJson = JSON.stringify([{
-    path: 'plugins.entries.openclaw-mcp-bridge.config',
-    value: { servers: bridgeServers },
-  }])
-
   try {
-    await execCommand('bash', [
-      '-c',
-      `cat > ${TEMP}/.openclaw-mcp-bridge.json << 'CLAWEOF'\n${batchJson}\nCLAWEOF\nopenclaw config set --batch-file ${TEMP}/.openclaw-mcp-bridge.json --strict-json && rm -f ${TEMP}/.openclaw-mcp-bridge.json`,
-    ])
+    const result = await setConfigResult('plugins.entries.openclaw-mcp-bridge.config', {
+      servers: bridgeServers,
+    })
+    if (!result.success) {
+      throw new Error(result.error ?? 'Failed to sync MCP bridge config')
+    }
   } catch {
     // Bridge plugin not installed. Skip silently.
   }
@@ -349,19 +358,20 @@ function writeMcpConfig(servers: McpServersMap): Promise<void> {
 }
 
 async function readTextFile(pathInput: string): Promise<{ path: string; content: string }> {
-  const script = `
-const fs = require('node:fs')
-const path = require('node:path')
-const os = require('node:os')
-const input = process.argv[1] || ''
-const expanded = input.replace(/^~(?=$|[\\\\/])/, os.homedir())
-const resolved = path.isAbsolute(expanded) ? expanded : path.resolve(process.cwd(), expanded)
-const content = fs.readFileSync(resolved, 'utf8')
-console.log(JSON.stringify({ path: resolved, content }))
-  `.trim()
-
-  const raw = await execCommand('node', ['-e', script, pathInput])
-  return JSON.parse(raw) as { path: string; content: string }
+  if (!getIsTauri()) {
+    const result = await webFetchJson<{ path: string; content: string }>('/api/mcp/read-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: pathInput }),
+    })
+    if (!result.success || !result.data) {
+      throw new Error(result.error ?? 'Failed to read MCP import file')
+    }
+    return result.data
+  }
+  return tauriInvoke<{ path: string; content: string }>('read_required_runtime_text_file', {
+    pathInput,
+  })
 }
 
 function mergeImportedServers(current: McpServersMap, imported: McpServersMap): { merged: McpServersMap; importedIds: string[] } {
@@ -384,44 +394,27 @@ function mergeImportedServers(current: McpServersMap, imported: McpServersMap): 
 }
 
 export function getMcpServers(): Promise<AdapterResult<McpServersMap>> {
+  if (!getIsTauri()) {
+    return webFetchJson<McpServersMap>('/api/mcp/servers')
+  }
   return wrapAsync(async () => readCurrentMcpConfig())
 }
 
 export function listMcpImportCandidates(): Promise<AdapterResult<McpImportCandidate[]>> {
-  return wrapAsync(async () => {
-    const script = `
-const fs = require('node:fs')
-const path = require('node:path')
-const os = require('node:os')
-const cwd = process.cwd()
-const home = os.homedir()
-const defs = ${JSON.stringify(MCP_IMPORT_SOURCE_DEFINITIONS)}
-const candidates = defs.map((def) => {
-  const fullPath = def.relativePath ? path.join(cwd, def.relativePath) : path.join(home, def.homePath)
-  return {
-    id: def.id,
-    format: def.format,
-    path: fullPath,
-    exists: fs.existsSync(fullPath),
+  if (!getIsTauri()) {
+    return webFetchJson<McpImportCandidate[]>('/api/mcp/import-candidates')
   }
-})
-console.log(JSON.stringify(candidates))
-    `.trim()
-
-    const raw = await execCommand('node', ['-e', script])
-    return JSON.parse(raw) as McpImportCandidate[]
-  })
+  return wrapAsync(async () => tauriInvoke<McpImportCandidate[]>('list_mcp_import_candidates'))
 }
 
 export function importMcpServers(pathInput: string): Promise<AdapterResult<McpImportSummary>> {
   return wrapAsync(async () => {
     const { path, content } = await readTextFile(pathInput)
     const imported = parseImportedMcpServers(content, path, path.endsWith('.toml') ? 'toml' : 'json')
-    const current = await readCurrentMcpConfig()
-    const { merged, importedIds } = mergeImportedServers(current, imported)
+    const currentServers = await loadCurrentMcpConfig()
+    const { merged, importedIds } = mergeImportedServers(currentServers, imported)
 
     await writeMcpConfig(merged)
-    await syncToBridge(merged)
 
     return {
       path,
@@ -465,20 +458,18 @@ export function addMcpServer(
       await execCommand('npm', ['install', '-g', pkg])
     }
 
-    const current = await readCurrentMcpConfig()
-    current[id] = config
-    await writeMcpConfig(current)
-    await syncToBridge(current)
+    const currentServers = await loadCurrentMcpConfig()
+    currentServers[id] = config
+    await writeMcpConfig(currentServers)
     return 'installed'
   })
 }
 
 export function removeMcpServer(id: string, pkg?: string): Promise<AdapterResult<string>> {
   return wrapAsync(async () => {
-    const current = await readCurrentMcpConfig()
-    delete current[id]
-    await writeMcpConfig(current)
-    await syncToBridge(current)
+    const currentServers = await loadCurrentMcpConfig()
+    delete currentServers[id]
+    await writeMcpConfig(currentServers)
 
     if (pkg) {
       try {
@@ -494,11 +485,10 @@ export function removeMcpServer(id: string, pkg?: string): Promise<AdapterResult
 
 export function toggleMcpServer(id: string, enabled: boolean): Promise<AdapterResult<string>> {
   return wrapAsync(async () => {
-    const current = await readCurrentMcpConfig()
-    if (!current[id]) return 'not found'
-    current[id].enabled = enabled
-    await writeMcpConfig(current)
-    await syncToBridge(current)
+    const currentServers = await loadCurrentMcpConfig()
+    if (!currentServers[id]) return 'not found'
+    currentServers[id].enabled = enabled
+    await writeMcpConfig(currentServers)
     return enabled ? 'enabled' : 'disabled'
   })
 }

@@ -16,6 +16,7 @@ import { getLogsResult } from '@/shared/adapters/logs'
 import { platformResults } from '@/shared/adapters/platformResults'
 import type { AdapterResult } from '@/shared/adapters/types'
 import { getIsTauri } from '@/shared/adapters/platform'
+import { createAuthedWebSocketUrl } from '@/shared/adapters/webHttp'
 
 function unwrap<T>(r: AdapterResult<T>, emptyFallback?: T): T {
   if (!r.success) {
@@ -128,9 +129,7 @@ export function createLegacyPlatformAdapter(): PlatformAdapter {
         }, 2000)
         return () => window.clearInterval(interval)
       }
-      const ws = new WebSocket(
-        `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/logs/stream`
-      )
+      const ws = new WebSocket(createAuthedWebSocketUrl('/api/logs/stream'))
       ws.onmessage = (e) => callback(JSON.parse(e.data) as LogEntry)
       return () => ws.close()
     },

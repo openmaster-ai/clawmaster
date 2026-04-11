@@ -768,6 +768,140 @@ fn resolve_system_command_path(cmd: &str) -> PathBuf {
     resolved
 }
 
+#[cfg(not(target_os = "macos"))]
+const OLLAMA_USER_LOCAL_INSTALL_SCRIPT: &str = concat!(
+    "set -e && ",
+    "mkdir -p ~/.local/bin ~/.local/lib/ollama && ",
+    "ARCH=$(uname -m) && ",
+    "case $ARCH in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac && ",
+    "LATEST=$(curl -fsSI https://github.com/ollama/ollama/releases/latest 2>/dev/null | grep -i '^location:' | sed 's|.*/tag/||' | tr -d '\\r\\n') && ",
+    "URL=\"https://github.com/ollama/ollama/releases/download/${LATEST}/ollama-linux-${ARCH}.tar.zst\" && ",
+    "echo \"Downloading ${URL}...\" && ",
+    "curl -fsSL \"${URL}\" | zstd -d | tar x -C ~/.local 2>&1 && ",
+    "chmod +x ~/.local/bin/ollama && ",
+    "echo \"Installed ollama ${LATEST} to ~/.local/bin/ollama\""
+);
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OllamaInstallationInfo {
+    installed: bool,
+    version: Option<String>,
+}
+
+fn normalize_ollama_version(raw: &str) -> String {
+    raw.trim()
+        .trim_start_matches("ollama version ")
+        .trim()
+        .to_string()
+}
+
+fn host_ollama_candidates() -> Vec<PathBuf> {
+    let mut candidates = vec![resolve_system_command_path("ollama")];
+    if let Some(home_dir) = dirs::home_dir() {
+        let local_bin = home_dir.join(".local").join("bin").join(if cfg!(target_os = "windows") {
+            "ollama.exe"
+        } else {
+            "ollama"
+        });
+        if !candidates.iter().any(|candidate| candidate == &local_bin) {
+            candidates.push(local_bin);
+        }
+    }
+    candidates
+}
+
+fn resolve_ollama_installation_host() -> Result<(PathBuf, String), String> {
+    for candidate in host_ollama_candidates() {
+        let output = Command::new(&candidate)
+            .arg("--version")
+            .output()
+            .map_err(|e| cmd_err_d("OLLAMA_CMD_SPAWN_FAILED", e));
+        let Ok(output) = output else {
+            continue;
+        };
+        if output.status.success() {
+            return Ok((
+                candidate,
+                normalize_ollama_version(&String::from_utf8_lossy(&output.stdout)),
+            ));
+        }
+    }
+    Err(cmd_err("OLLAMA_NOT_FOUND"))
+}
+
+fn run_host_command_with_input(
+    program: &str,
+    args: &[&str],
+    input: &str,
+) -> Result<std::process::Output, String> {
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| cmd_err_d("OLLAMA_CMD_SPAWN_FAILED", e))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(input.as_bytes())
+            .map_err(|e| cmd_err_d("OLLAMA_CMD_STDIN_WRITE_FAILED", e))?;
+    }
+
+    child
+        .wait_with_output()
+        .map_err(|e| cmd_err_d("OLLAMA_CMD_WAIT_FAILED", e))
+}
+
+fn download_text_via_curl(url: &str) -> Result<String, String> {
+    let output = Command::new(resolve_system_command_path("curl"))
+        .args(["-fsSL", url])
+        .output()
+        .map_err(|e| cmd_err_d("OLLAMA_INSTALL_DOWNLOAD_FAILED", e))?;
+    if !output.status.success() {
+        return Err(cmd_err_stderr(
+            "OLLAMA_INSTALL_DOWNLOAD_FAILED",
+            &String::from_utf8_lossy(&output.stderr),
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn download_file_via_curl(url: &str, target: &Path) -> Result<(), String> {
+    let output = Command::new(resolve_system_command_path("curl"))
+        .args(["-fsSL", "-o"])
+        .arg(target)
+        .arg(url)
+        .output()
+        .map_err(|e| cmd_err_d("OLLAMA_INSTALL_DOWNLOAD_FAILED", e))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(cmd_err_stderr(
+            "OLLAMA_INSTALL_DOWNLOAD_FAILED",
+            &String::from_utf8_lossy(&output.stderr),
+        ))
+    }
+}
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+fn run_host_ollama_fallback_install() -> Result<String, String> {
+    let output = Command::new(resolve_bash_command_path())
+        .args(["-lc", OLLAMA_USER_LOCAL_INSTALL_SCRIPT])
+        .output()
+        .map_err(|e| cmd_err_d("OLLAMA_CMD_SPAWN_FAILED", e))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(cmd_err_stderr(
+            "OLLAMA_INSTALL_FAILED",
+            &String::from_utf8_lossy(&output.stderr),
+        ))
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn join_posix(base: &str, child: &str) -> String {
     let normalized_base = base.trim_end_matches('/');
@@ -1043,6 +1177,30 @@ fn write_text_file_in_wsl(distro: &str, path: &str, content: &str) -> Result<(),
             output.stderr.trim().to_string(),
         ))
     }
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_ollama_installation_wsl(distro: &str) -> Result<(String, String), String> {
+    let mut candidates = Vec::new();
+    if let Ok(output) = run_wsl_shell(distro, "command -v ollama", None) {
+        let resolved = output.stdout.trim();
+        if output.code == 0 && !resolved.is_empty() {
+            candidates.push(resolved.to_string());
+        }
+    }
+    let local_bin = format!("{}/.local/bin/ollama", get_wsl_home_dir(distro).trim_end_matches('/'));
+    if !candidates.iter().any(|candidate| candidate == &local_bin) {
+        candidates.push(local_bin);
+    }
+
+    for candidate in candidates {
+        let output = exec_wsl_command(distro, &candidate, &["--version"])?;
+        if output.code == 0 {
+            return Ok((candidate, normalize_ollama_version(&output.stdout)));
+        }
+    }
+
+    Err(cmd_err("OLLAMA_NOT_FOUND"))
 }
 
 // OpenClaw config file path
@@ -1403,6 +1561,82 @@ fn write_active_openclaw_text_file(path: &Path, content: &str) -> Result<(), Str
         fs::create_dir_all(parent).map_err(|e| cmd_err_d("IO_ERROR", e))?;
     }
     fs::write(path, content).map_err(|e| cmd_err_d("IO_ERROR", e))
+}
+
+fn resolve_runtime_input_path(input: &str) -> Result<PathBuf, String> {
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let script = format!(
+            "value={}\n{}",
+            shell_escape_posix_arg(input),
+            r#"
+resolve_path() {
+  local value="$1"
+  case "$value" in
+    "~")
+      value="$HOME"
+      ;;
+    "~/"*)
+      value="$HOME/${value#~/}"
+      ;;
+  esac
+  if [ -z "$value" ]; then
+    realpath -m "$PWD"
+    return
+  fi
+  if [ "${value#/}" != "$value" ]; then
+    realpath -m "$value"
+    return
+  fi
+  realpath -m "$PWD/$value"
+}
+resolve_path "$value"
+"#
+        );
+        let output = run_wsl_shell(&distro, script.trim(), None)?;
+        if output.code != 0 {
+            return Err(cmd_err_d(
+                "RUNTIME_PATH_RESOLVE_FAILED",
+                output.stderr.trim().to_string(),
+            ));
+        }
+        let resolved = output.stdout.trim();
+        if resolved.is_empty() {
+            return Err(cmd_err("RUNTIME_PATH_RESOLVE_FAILED"));
+        }
+        return Ok(PathBuf::from(resolved));
+    }
+
+    let expanded = expand_home_path(input);
+    if expanded.is_absolute() {
+        return Ok(expanded);
+    }
+    let cwd = std::env::current_dir().map_err(|e| cmd_err_d("RUNTIME_PATH_RESOLVE_FAILED", e))?;
+    Ok(cwd.join(expanded))
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeTextFileDto {
+    path: String,
+    exists: bool,
+    content: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RequiredRuntimeTextFileDto {
+    path: String,
+    content: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct McpImportCandidateDto {
+    id: String,
+    format: String,
+    path: String,
+    exists: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3257,6 +3491,65 @@ fn remove_openclaw_data(confirm: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn read_runtime_text_file(path_input: String) -> Result<RuntimeTextFileDto, String> {
+    let path = resolve_runtime_input_path(&path_input)?;
+    let content = read_active_openclaw_text_file(&path)?;
+    Ok(RuntimeTextFileDto {
+        path: path.to_string_lossy().to_string(),
+        exists: content.is_some(),
+        content: content.unwrap_or_default(),
+    })
+}
+
+#[tauri::command]
+fn read_required_runtime_text_file(path_input: String) -> Result<RequiredRuntimeTextFileDto, String> {
+    let path = resolve_runtime_input_path(&path_input)?;
+    let content = read_active_openclaw_text_file(&path)?
+        .ok_or_else(|| cmd_err_p("RUNTIME_FILE_NOT_FOUND", serde_json::json!({ "path": path.to_string_lossy() })))?;
+    Ok(RequiredRuntimeTextFileDto {
+        path: path.to_string_lossy().to_string(),
+        content,
+    })
+}
+
+#[tauri::command]
+fn write_runtime_text_file(path_input: String, content: String) -> Result<String, String> {
+    let path = resolve_runtime_input_path(&path_input)?;
+    write_active_openclaw_text_file(&path, &content)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn list_mcp_import_candidates() -> Result<Vec<McpImportCandidateDto>, String> {
+    let definitions = vec![
+        ("project-mcp", "json", Some(".mcp.json"), None),
+        ("cursor", "json", Some(".cursor/mcp.json"), None),
+        ("vscode", "json", Some(".vscode/mcp.json"), None),
+        ("claude-user", "json", None, Some(".claude.json")),
+        ("codex-user", "toml", None, Some(".codex/config.toml")),
+        ("copilot-user", "json", None, Some(".copilot/mcp-config.json")),
+    ];
+
+    let mut out = Vec::new();
+    for (id, format, relative_path, home_path) in definitions {
+        let input = if let Some(relative_path) = relative_path {
+            relative_path.to_string()
+        } else {
+            format!("~/{}", home_path.unwrap_or_default())
+        };
+        let path = resolve_runtime_input_path(&input)?;
+        let exists = read_active_openclaw_text_file(&path)?.is_some();
+        out.push(McpImportCandidateDto {
+            id: id.to_string(),
+            format: format.to_string(),
+            path: path.to_string_lossy().to_string(),
+            exists,
+        });
+    }
+    Ok(out)
+}
+
 fn expand_log_file_path(f: &str) -> PathBuf {
     let t = f.trim();
     if let Some(rest) = t.strip_prefix("~/") {
@@ -3499,6 +3792,171 @@ fn run_clawprobe_command(args: Vec<String>) -> Result<String, String> {
     }
 }
 
+fn resolve_ollama_installation() -> Result<(String, String), String> {
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        return resolve_ollama_installation_wsl(&distro);
+    }
+
+    let (path, version) = resolve_ollama_installation_host()?;
+    Ok((path.to_string_lossy().to_string(), version))
+}
+
+fn install_ollama_host() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let installer_path = std::env::temp_dir().join("OllamaSetup.exe");
+        download_file_via_curl("https://ollama.com/download/OllamaSetup.exe", &installer_path)?;
+        let output = Command::new(&installer_path)
+            .args(["/SILENT", "/NORESTART"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| cmd_err_d("OLLAMA_INSTALL_FAILED", e))?;
+        if output.status.success() {
+            return Ok("Ollama installed on Windows".to_string());
+        }
+        return Err(cmd_err_stderr(
+            "OLLAMA_INSTALL_FAILED",
+            &String::from_utf8_lossy(&output.stderr),
+        ));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let script = download_text_via_curl("https://ollama.com/install.sh")?;
+        let output = run_host_command_with_input("/bin/sh", &["-s"], &script)?;
+        if output.status.success() {
+            return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            if stderr.trim().is_empty() {
+                return Err(cmd_err("OLLAMA_INSTALL_FAILED"));
+            }
+            return Err(cmd_err_stderr("OLLAMA_INSTALL_FAILED", &stderr));
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            match run_host_ollama_fallback_install() {
+                Ok(status) => Ok(status),
+                Err(fallback_error) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                    if stderr.trim().is_empty() {
+                        Err(fallback_error)
+                    } else {
+                        Err(cmd_err_stderr("OLLAMA_INSTALL_FAILED", &stderr))
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn install_ollama_wsl(distro: &str) -> Result<String, String> {
+    let script = download_text_via_curl("https://ollama.com/install.sh")?;
+    let primary = run_wsl_shell(distro, "sh -s", Some(&script))?;
+    if primary.code == 0 {
+        return Ok(primary.stdout.trim().to_string());
+    }
+
+    let fallback = run_wsl_shell(distro, OLLAMA_USER_LOCAL_INSTALL_SCRIPT, None)?;
+    if fallback.code == 0 {
+        return Ok(fallback.stdout.trim().to_string());
+    }
+
+    if !fallback.stderr.trim().is_empty() {
+        Err(cmd_err_stderr("OLLAMA_INSTALL_FAILED", &fallback.stderr))
+    } else {
+        Err(cmd_err_stderr("OLLAMA_INSTALL_FAILED", &primary.stderr))
+    }
+}
+
+#[tauri::command]
+fn detect_ollama_installation() -> Result<OllamaInstallationInfo, String> {
+    match resolve_ollama_installation() {
+        Ok((_path, version)) => Ok(OllamaInstallationInfo {
+            installed: true,
+            version: Some(version),
+        }),
+        Err(_) => Ok(OllamaInstallationInfo {
+            installed: false,
+            version: None,
+        }),
+    }
+}
+
+#[tauri::command]
+fn run_ollama_command(args: Vec<String>) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let (bin, _version) = resolve_ollama_installation_wsl(&distro)?;
+        let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+        let output = exec_wsl_command(&distro, &bin, &arg_refs)?;
+        if output.code == 0 {
+            return Ok(output.stdout);
+        }
+        return Err(cmd_err_stderr("OLLAMA_CMD_FAILED", &output.stderr));
+    }
+
+    let (bin, _version) = resolve_ollama_installation()?;
+    let output = Command::new(&bin)
+        .args(&args)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| cmd_err_d("OLLAMA_CMD_SPAWN_FAILED", e))?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        Err(cmd_err_stderr(
+            "OLLAMA_CMD_FAILED",
+            &String::from_utf8_lossy(&output.stderr),
+        ))
+    }
+}
+
+#[tauri::command]
+fn install_ollama() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        return install_ollama_wsl(&distro);
+    }
+
+    install_ollama_host()
+}
+
+#[tauri::command]
+fn start_ollama() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let (bin, _version) = resolve_ollama_installation_wsl(&distro)?;
+        let output = run_wsl_shell(
+            &distro,
+            &format!("nohup {} serve >/dev/null 2>&1 &", shell_escape_posix_arg(&bin)),
+            None,
+        )?;
+        if output.code == 0 {
+            return Ok("starting".to_string());
+        }
+        return Err(cmd_err_stderr("OLLAMA_CMD_FAILED", &output.stderr));
+    }
+
+    let (bin, _version) = resolve_ollama_installation()?;
+    Command::new(&bin)
+        .arg("serve")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| cmd_err_d("OLLAMA_CMD_SPAWN_FAILED", e))?;
+    Ok("starting".to_string())
+}
+
 fn is_allowed_system_command(cmd: &str) -> bool {
     matches!(
         cmd,
@@ -3643,6 +4101,10 @@ pub fn run() {
             list_openclaw_backups,
             restore_openclaw_backup,
             remove_openclaw_data,
+            read_runtime_text_file,
+            read_required_runtime_text_file,
+            write_runtime_text_file,
+            list_mcp_import_candidates,
             get_logs,
             run_openclaw_command,
             run_openclaw_command_captured,
@@ -3653,6 +4115,10 @@ pub fn run() {
             search_openclaw_memory_fallback,
             run_openclaw_command_stdin,
             run_clawprobe_command,
+            detect_ollama_installation,
+            run_ollama_command,
+            install_ollama,
+            start_ollama,
             run_system_command,
         ])
         .setup(|app| {

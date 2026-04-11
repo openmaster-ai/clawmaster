@@ -9,6 +9,8 @@ import {
   writeTextFileInWslSync,
 } from './wslRuntime.js'
 
+const FORBIDDEN_CONFIG_PATH_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype'])
+
 /**
  * Same behavior as web `unwrapDoubleNestedModelsInRoot`: fix when the whole `{"models":{...}}`
  * block was pasted into the models editor by mistake.
@@ -129,6 +131,11 @@ export function setConfigAtPath(
 ): void {
   const keys = pathStr.split('.').filter(Boolean)
   if (keys.length === 0) return
+  for (const key of keys) {
+    if (FORBIDDEN_CONFIG_PATH_SEGMENTS.has(key)) {
+      throw new Error(`Unsafe config path segment: ${key}`)
+    }
+  }
   let obj: Record<string, unknown> = root
   for (let i = 0; i < keys.length - 1; i++) {
     const k = keys[i]

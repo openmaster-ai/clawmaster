@@ -9,6 +9,7 @@
 import { execCommand } from '@/shared/adapters/platform'
 import { startGatewayResult, getGatewayStatusResult } from '@/shared/adapters/gateway'
 import { setConfigResult } from '@/shared/adapters/openclaw'
+import { probeHttpStatusResult } from '@/shared/adapters/system'
 import {
   CAPABILITIES,
   PROVIDERS,
@@ -63,8 +64,12 @@ const realOnboardingAdapter: OnboardingAdapter = {
     if (provider === 'ollama') {
       const ollamaBase = (baseUrl || cfg?.baseUrl || 'http://localhost:11434/v1').replace(/\/v1\/?$/, '')
       try {
-        await execCommand('curl', ['-sf', '--max-time', '5', `${ollamaBase}/api/tags`])
-        return true
+        const result = await probeHttpStatusResult({
+          url: `${ollamaBase}/api/tags`,
+          method: 'GET',
+          timeoutMs: 5000,
+        })
+        return result.success && result.data?.ok === true
       } catch {
         return false
       }
@@ -73,15 +78,17 @@ const realOnboardingAdapter: OnboardingAdapter = {
     const endpoint = baseUrl || cfg?.baseUrl || 'https://api.openai.com/v1'
     const model = cfg?.models?.[0]?.id ?? 'gpt-4o-mini'
     try {
-      const output = await execCommand('curl', [
-        '-sf', '-o', '/dev/null', '-w', '%{http_code}',
-        '-H', `Authorization: Bearer ${apiKey}`,
-        '-H', 'Content-Type: application/json',
-        '-d', JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }),
-        '--max-time', '10',
-        `${endpoint}/chat/completions`,
-      ])
-      return output.trim() === '200'
+      const result = await probeHttpStatusResult({
+        url: `${endpoint}/chat/completions`,
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }),
+        timeoutMs: 10000,
+      })
+      return result.success && result.data?.status === 200
     } catch {
       return false
     }

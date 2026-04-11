@@ -1604,6 +1604,16 @@ function OllamaSetupPanel({
     await checkStatus()
   }
 
+  async function handlePullModel(modelId: string) {
+    await pullTask.run(async () => {
+      const result = await pullModel(modelId)
+      if (!result.success) {
+        throw new Error(result.error ?? t('ollama.installFailed'))
+      }
+    })
+    await checkStatus()
+  }
+
   function handleProceed() {
     updateOnboard({ apiKey: 'ollama' })
     onSubmit()
@@ -1717,7 +1727,7 @@ function OllamaSetupPanel({
                 return (
                   <button
                     key={m}
-                    onClick={() => { pullTask.run(async () => { const r = await pullModel(m); if (!r.success) throw new Error(r.error) }); checkStatus() }}
+                    onClick={() => { void handlePullModel(m) }}
                     className="px-3 py-1 text-xs border border-border rounded-lg hover:bg-accent flex items-center gap-1"
                   >
                     <Download className="w-3 h-3" />

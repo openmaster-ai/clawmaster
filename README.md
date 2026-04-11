@@ -64,6 +64,28 @@ npm run dev:web
 npm run tauri:dev
 ```
 
+### Option 3: Install the Service CLI
+
+```bash
+npm i -g clawmaster
+clawmaster doctor
+clawmaster serve --daemon
+clawmaster status
+```
+
+Default service URL:
+- `http://127.0.0.1:3001`
+- `clawmaster serve` prints a service token. Enter that token in the browser UI when prompted.
+
+Useful commands:
+- `clawmaster serve --host 127.0.0.1 --port 3001`
+- `clawmaster serve --host 127.0.0.1 --port 3001 --daemon`
+- `clawmaster serve --host 127.0.0.1 --port 3001 --token your-own-token`
+- `clawmaster status`
+- `clawmaster status --token your-own-token`
+- `clawmaster stop`
+- `clawmaster doctor`
+
 Production builds:
 
 ```bash
