@@ -5,7 +5,13 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 
 import { getClawmasterRuntimeSelection } from '../clawmasterSettings.js'
-import { execWslCommand, requireSelectedWslDistroSync, runWslShellSync, shouldUseWslRuntime } from '../wslRuntime.js'
+import {
+  execWslCommand,
+  requireSelectedWslDistroSync,
+  runWslShellSync,
+  shellEscapePosixArg,
+  shouldUseWslRuntime,
+} from '../wslRuntime.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -92,6 +98,10 @@ function uniqueTokens(values: Array<string | undefined>): string[] {
   return out
 }
 
+export function buildWslSkillCandidateArrayForTest(candidates: string[]): string {
+  return candidates.map((token) => shellEscapePosixArg(token)).join(' ')
+}
+
 function resolveSkillDirHost(payload: SkillGuardScanRequest): string | null {
   const roots = SKILL_CLI_ROOTS.map((relativePath) => path.join(os.homedir(), relativePath))
   const candidates = uniqueTokens([
@@ -143,7 +153,7 @@ function resolveSkillDirWsl(payload: SkillGuardScanRequest): string | null {
   ])
   const script = `
 set -eu
-candidates=(${candidates.map((token) => JSON.stringify(token)).join(' ')})
+candidates=(${buildWslSkillCandidateArrayForTest(candidates)})
 roots=(
   "$HOME/.openclaw/skills"
   "$HOME/.openclaw/workspace/skills"

@@ -1,7 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { getHostCommandExecOptionsForTest, resolveHostCommandPathForTest } from './skillGuardService.js'
+import {
+  buildWslSkillCandidateArrayForTest,
+  getHostCommandExecOptionsForTest,
+  resolveHostCommandPathForTest,
+} from './skillGuardService.js'
 
 test('resolveHostCommandPathForTest keeps non-Windows commands unchanged', () => {
   assert.equal(
@@ -47,5 +51,12 @@ test('getHostCommandExecOptionsForTest keeps direct exec on non-Windows hosts', 
       shell: false,
       windowsHide: true,
     },
+  )
+})
+
+test('buildWslSkillCandidateArrayForTest shell-quotes untrusted skill tokens', () => {
+  assert.equal(
+    buildWslSkillCandidateArrayForTest(['$(touch /tmp/pwn)', `o'hai`]),
+    `'$(touch /tmp/pwn)' 'o'"'"'hai'`,
   )
 })
