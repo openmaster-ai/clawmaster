@@ -4,10 +4,10 @@ import path from 'node:path'
 
 import { getClawmasterRuntimeSelection } from './clawmasterSettings.js'
 import {
+  execWslCommandSync,
   fileExistsInWslSync,
   readTextFileInWslSync,
   requireSelectedWslDistroSync,
-  runWslShellSync,
   shouldUseWslRuntime,
   writeTextFileInWslSync,
 } from './wslRuntime.js'
@@ -37,7 +37,6 @@ function resolveHostPath(input: string): string {
 
 function resolveWslPathSync(distro: string, input: string): string {
   const script = `
-input=${JSON.stringify(input)}
 resolve_path() {
   local value="$1"
   case "$value" in
@@ -58,9 +57,9 @@ resolve_path() {
   fi
   realpath -m "$PWD/$value"
 }
-resolve_path "$input"
+resolve_path "$1"
   `.trim()
-  const out = runWslShellSync(distro, script)
+  const out = execWslCommandSync(distro, 'bash', ['-lc', script, '--', input])
   if (out.code !== 0) {
     throw new Error(out.stderr.trim() || out.stdout.trim() || 'Failed to resolve WSL path')
   }

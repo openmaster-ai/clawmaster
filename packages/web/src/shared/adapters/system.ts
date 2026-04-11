@@ -101,22 +101,33 @@ export async function probeHttpStatusResult(
 ): Promise<AdapterResult<HttpProbeOutput>> {
   if (getIsTauri()) {
     return fromPromise(async () => {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), input.timeoutMs ?? 5000)
-      try {
-        const response = await fetch(input.url, {
-          method: input.method === 'POST' ? 'POST' : 'GET',
-          headers: input.headers,
-          body: input.method === 'POST' ? input.body : undefined,
-          redirect: 'manual',
-          signal: controller.signal,
-        })
-        return {
-          ok: response.ok,
-          status: response.status,
-        }
-      } finally {
-        clearTimeout(timer)
+      const args = [
+        '-sS',
+        '-o',
+        '/dev/null',
+        '-w',
+        '%{http_code}',
+        '-X',
+        input.method === 'POST' ? 'POST' : 'GET',
+        '--max-time',
+        String(Math.ceil((input.timeoutMs ?? 5000) / 1000)),
+      ]
+      for (const [key, value] of Object.entries(input.headers ?? {})) {
+        args.push('-H', `${key}: ${value}`)
+      }
+      if (input.method === 'POST' && input.body !== undefined) {
+        args.push('--data-raw', input.body)
+      }
+      args.push(input.url)
+
+      const raw = await tauriInvoke<string>('run_system_command', {
+        cmd: 'curl',
+        args,
+      })
+      const status = Number.parseInt(raw.trim(), 10)
+      return {
+        ok: Number.isFinite(status) && status >= 200 && status < 300,
+        status: Number.isFinite(status) ? status : 0,
       }
     })
   }

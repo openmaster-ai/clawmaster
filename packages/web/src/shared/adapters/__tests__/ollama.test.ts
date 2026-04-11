@@ -16,6 +16,14 @@ describe('ollama adapter', () => {
     vi.mocked(webFetchJson).mockResolvedValue({ success: true, data: payload, error: null })
   }
 
+  async function platformMocks() {
+    const { execCommand, getIsTauri } = await import('../platform')
+    return {
+      execCommand: vi.mocked(execCommand),
+      getIsTauri: vi.mocked(getIsTauri),
+    }
+  }
+
   async function mockWebFetchFail(msg: string) {
     const { webFetchJson } = await import('../webHttp')
     vi.mocked(webFetchJson).mockResolvedValue({ success: false, data: undefined, error: msg })
@@ -34,8 +42,10 @@ describe('ollama adapter', () => {
     }
   }
 
-  beforeEach(() => {
-    vi.clearAllMocks()
+  beforeEach(async () => {
+    vi.resetAllMocks()
+    const { getIsTauri } = await import('../platform')
+    vi.mocked(getIsTauri).mockReturnValue(false)
   })
 
   describe('detectOllama', () => {
@@ -52,6 +62,19 @@ describe('ollama adapter', () => {
       const result = await detectOllama()
       expect(result.success).toBe(true)
       expect(result.data!.installed).toBe(false)
+    })
+
+    it('uses tauri-safe system commands instead of node helpers', async () => {
+      const { execCommand, getIsTauri } = await platformMocks()
+      getIsTauri.mockReturnValue(true)
+      execCommand.mockResolvedValue('ollama version 0.19.0')
+
+      const result = await detectOllama()
+
+      expect(result.success).toBe(true)
+      expect(result.data?.installed).toBe(true)
+      expect(execCommand).toHaveBeenCalledWith('ollama', ['--version'])
+      expect(execCommand).not.toHaveBeenCalledWith('node', expect.anything())
     })
   })
 
@@ -112,6 +135,21 @@ describe('ollama adapter', () => {
       const result = await pullModel('llama3.2')
       expect(result.success).toBe(true)
       expect(result.data).toContain('success')
+    })
+
+    it('pulls models through tauri-safe ollama commands', async () => {
+      const { execCommand, getIsTauri } = await platformMocks()
+      getIsTauri.mockReturnValue(true)
+      execCommand
+        .mockResolvedValueOnce('ollama version 0.19.0')
+        .mockResolvedValueOnce('ollama version 0.19.0')
+        .mockResolvedValueOnce('pulling manifest... success')
+
+      const result = await pullModel('llama3.2')
+
+      expect(result.success).toBe(true)
+      expect(execCommand).toHaveBeenLastCalledWith('ollama', ['pull', 'llama3.2'])
+      expect(execCommand).not.toHaveBeenCalledWith('node', expect.anything())
     })
   })
 
