@@ -6,6 +6,7 @@
 
 import { execCommand } from './platform'
 import { getIsTauri } from './platform'
+import { tauriInvoke } from './invoke'
 import { wrapAsync, type AdapterResult } from './types'
 import { webFetchJson } from './webHttp'
 
@@ -25,27 +26,12 @@ export interface OllamaStatus {
   models: OllamaModel[]
 }
 
-async function execTauriOllama(bin: string, args: string[]): Promise<string> {
-  if (bin === 'ollama') {
-    return execCommand('ollama', args)
-  }
-  return execCommand('bash', [
-    '-lc',
-    'bin="$1"; shift; "$bin" "$@"',
-    '--',
-    bin,
-    ...args,
-  ])
+async function tauriRunOllama(args: string[]): Promise<string> {
+  return tauriInvoke<string>('run_ollama_command', { args })
 }
 
-async function resolveTauriOllamaBin(): Promise<string> {
-  try {
-    await execCommand('ollama', ['--version'])
-    return 'ollama'
-  } catch {
-    await execTauriOllama('~/.local/bin/ollama', ['--version'])
-    return '~/.local/bin/ollama'
-  }
+async function detectTauriOllama(): Promise<{ installed: boolean; version?: string }> {
+  return tauriInvoke<{ installed: boolean; version?: string }>('detect_ollama_installation')
 }
 
 // ─── 检测与安装 ───
@@ -57,11 +43,13 @@ async function resolveOllamaInstallation(): Promise<{ bin: string; version: stri
     }
     return { bin: 'ollama', version: result.data.version ?? '' }
   }
-  const bin = await resolveTauriOllamaBin()
-  const raw = await execTauriOllama(bin, ['--version'])
+  const result = await detectTauriOllama()
+  if (!result.installed) {
+    throw new Error('ollama not found')
+  }
   return {
-    bin,
-    version: raw.trim().replace(/^ollama\s+version\s+/i, ''),
+    bin: 'ollama',
+    version: result.version ?? '',
   }
 }
 
@@ -107,43 +95,7 @@ export function installOllama(): Promise<AdapterResult<string>> {
       }
       return result.data?.status ?? 'installed'
     }
-    try {
-      const uname = await execCommand('bash', ['-c', 'uname -s 2>/dev/null || echo Linux']).catch(() => 'Linux')
-      if (/MINGW|MSYS|Windows/i.test(uname)) {
-        const raw = await execCommand('bash', ['-c', [
-          'INSTALLER="${TMPDIR:-/tmp}/OllamaSetup.exe"',
-          'curl -fsSL -o "$INSTALLER" https://ollama.com/download/OllamaSetup.exe',
-          'echo "Downloaded OllamaSetup.exe. Running installer..."',
-          '"$INSTALLER" /SILENT /NORESTART',
-          'echo "Ollama installed on Windows"',
-        ].join(' && ')])
-        return raw.trim()
-      }
-    } catch {
-      // fall through
-    }
-
-    try {
-      const raw = await execCommand('bash', ['-c', 'curl -fsSL https://ollama.com/install.sh | sh 2>&1'])
-      return raw.trim()
-    } catch {
-      const raw = await execCommand('bash', [
-        '-c',
-        [
-          'set -e',
-          'mkdir -p ~/.local/bin ~/.local/lib/ollama',
-          'ARCH=$(uname -m)',
-          'case $ARCH in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac',
-          'LATEST=$(curl -fsSI https://github.com/ollama/ollama/releases/latest 2>/dev/null | grep -i "^location:" | sed "s|.*/tag/||" | tr -d "\\r\\n")',
-          'URL="https://github.com/ollama/ollama/releases/download/${LATEST}/ollama-linux-${ARCH}.tar.zst"',
-          'echo "Downloading ${URL}..."',
-          'curl -fsSL "${URL}" | zstd -d | tar x -C ~/.local 2>&1',
-          'chmod +x ~/.local/bin/ollama',
-          'echo "Installed ollama ${LATEST} to ~/.local/bin/ollama"',
-        ].join(' && '),
-      ])
-      return raw.trim()
-    }
+    return tauriInvoke<string>('install_ollama')
   })
 }
 
@@ -179,18 +131,7 @@ export function startOllama(): Promise<AdapterResult<string>> {
       }
       return result.data?.status ?? 'starting'
     }
-    const bin = await resolveTauriOllamaBin()
-    if (bin === 'ollama') {
-      execCommand('nohup', ['ollama', 'serve']).catch(() => {})
-    } else {
-      execCommand('bash', [
-        '-lc',
-        'bin="$1"; shift; nohup "$bin" "$@" > /dev/null 2>&1 &',
-        '--',
-        bin,
-        'serve',
-      ]).catch(() => {})
-    }
+    await tauriInvoke<string>('start_ollama')
     // Wait a moment for it to start
     await new Promise((r) => setTimeout(r, 2000))
     // Verify it started
@@ -232,8 +173,7 @@ export function pullModel(name: string): Promise<AdapterResult<string>> {
       }
       return result.data?.status ?? ''
     }
-    const bin = await resolveTauriOllamaBin()
-    const raw = await execTauriOllama(bin, ['pull', name])
+    const raw = await tauriRunOllama(['pull', name])
     return raw.trim()
   })
 }
@@ -252,8 +192,7 @@ export function deleteModel(name: string): Promise<AdapterResult<string>> {
       }
       return result.data?.status ?? ''
     }
-    const bin = await resolveTauriOllamaBin()
-    const raw = await execTauriOllama(bin, ['rm', name])
+    const raw = await tauriRunOllama(['rm', name])
     return raw.trim()
   })
 }

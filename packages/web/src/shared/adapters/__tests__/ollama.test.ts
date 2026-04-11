@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { detectOllama, isOllamaRunning, listModels, pullModel, deleteModel, getOllamaStatus, formatModelSize } from '../ollama'
+import { detectOllama, installOllama, isOllamaRunning, listModels, pullModel, deleteModel, getOllamaStatus, formatModelSize, startOllama } from '../ollama'
 
 vi.mock('../platform', () => ({
   execCommand: vi.fn(),
   getIsTauri: vi.fn(() => false),
+}))
+
+vi.mock('../invoke', () => ({
+  tauriInvoke: vi.fn(),
 }))
 
 vi.mock('../webHttp', () => ({
@@ -18,9 +22,11 @@ describe('ollama adapter', () => {
 
   async function platformMocks() {
     const { execCommand, getIsTauri } = await import('../platform')
+    const { tauriInvoke } = await import('../invoke')
     return {
       execCommand: vi.mocked(execCommand),
       getIsTauri: vi.mocked(getIsTauri),
+      tauriInvoke: vi.mocked(tauriInvoke),
     }
   }
 
@@ -65,16 +71,17 @@ describe('ollama adapter', () => {
     })
 
     it('uses tauri-safe system commands instead of node helpers', async () => {
-      const { execCommand, getIsTauri } = await platformMocks()
+      const { execCommand, getIsTauri, tauriInvoke } = await platformMocks()
       getIsTauri.mockReturnValue(true)
-      execCommand.mockResolvedValue('ollama version 0.19.0')
+      tauriInvoke.mockResolvedValue({ installed: true, version: '0.19.0' })
 
       const result = await detectOllama()
 
       expect(result.success).toBe(true)
       expect(result.data?.installed).toBe(true)
-      expect(execCommand).toHaveBeenCalledWith('ollama', ['--version'])
+      expect(tauriInvoke).toHaveBeenCalledWith('detect_ollama_installation')
       expect(execCommand).not.toHaveBeenCalledWith('node', expect.anything())
+      expect(execCommand).not.toHaveBeenCalledWith('bash', expect.anything())
     })
   })
 
@@ -138,18 +145,16 @@ describe('ollama adapter', () => {
     })
 
     it('pulls models through tauri-safe ollama commands', async () => {
-      const { execCommand, getIsTauri } = await platformMocks()
+      const { execCommand, getIsTauri, tauriInvoke } = await platformMocks()
       getIsTauri.mockReturnValue(true)
-      execCommand
-        .mockResolvedValueOnce('ollama version 0.19.0')
-        .mockResolvedValueOnce('ollama version 0.19.0')
-        .mockResolvedValueOnce('pulling manifest... success')
+      tauriInvoke.mockResolvedValue('pulling manifest... success')
 
       const result = await pullModel('llama3.2')
 
       expect(result.success).toBe(true)
-      expect(execCommand).toHaveBeenLastCalledWith('ollama', ['pull', 'llama3.2'])
+      expect(tauriInvoke).toHaveBeenCalledWith('run_ollama_command', { args: ['pull', 'llama3.2'] })
       expect(execCommand).not.toHaveBeenCalledWith('node', expect.anything())
+      expect(execCommand).not.toHaveBeenCalledWith('bash', expect.anything())
     })
   })
 
@@ -161,6 +166,39 @@ describe('ollama adapter', () => {
       )
       const result = await deleteModel('llama3.2')
       expect(result.success).toBe(true)
+    })
+  })
+
+  describe('desktop tauri commands', () => {
+    it('installs ollama through a native tauri command', async () => {
+      const { getIsTauri, tauriInvoke, execCommand } = await platformMocks()
+      getIsTauri.mockReturnValue(true)
+      tauriInvoke.mockResolvedValue('installed')
+
+      const result = await installOllama()
+
+      expect(result.success).toBe(true)
+      expect(tauriInvoke).toHaveBeenCalledWith('install_ollama')
+      expect(execCommand).not.toHaveBeenCalledWith('bash', expect.anything())
+    })
+
+    it('starts ollama through a native tauri command', async () => {
+      const { getIsTauri, tauriInvoke, execCommand } = await platformMocks()
+      getIsTauri.mockReturnValue(true)
+      tauriInvoke
+        .mockResolvedValueOnce('started')
+        .mockResolvedValueOnce('{"models":[]}')
+      execCommand.mockResolvedValue('{"models":[]}')
+
+      const result = await startOllama()
+
+      expect(result.success).toBe(true)
+      expect(tauriInvoke).toHaveBeenCalledWith('start_ollama')
+      expect(execCommand).toHaveBeenCalledWith(
+        'curl',
+        expect.arrayContaining(['-sf', '--max-time', '5', 'http://localhost:11434/api/tags'])
+      )
+      expect(execCommand).not.toHaveBeenCalledWith('bash', expect.anything())
     })
   })
 
