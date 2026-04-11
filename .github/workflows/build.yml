@@ -1,6 +1,8 @@
 name: Desktop Bundles
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
     tags: ['v*']
@@ -62,6 +64,7 @@ jobs:
   bundle:
     name: Bundle (${{ matrix.label }})
     needs: verify
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
