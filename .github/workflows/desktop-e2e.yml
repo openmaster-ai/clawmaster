@@ -94,12 +94,14 @@ jobs:
         run: xvfb-run -a npm run test:desktop
         env:
           CLAWMASTER_DESKTOP_ARTIFACT_DIR: ${{ runner.temp }}/clawmaster-desktop-artifacts
+          CLAWMASTER_DESKTOP_SEED_PROFILE: '1'
 
       - name: Run desktop smoke
         if: runner.os == 'Windows'
         run: npm run test:desktop
         env:
           CLAWMASTER_DESKTOP_ARTIFACT_DIR: ${{ runner.temp }}/clawmaster-desktop-artifacts
+          CLAWMASTER_DESKTOP_SEED_PROFILE: '1'
 
       - name: Run desktop smoke
         if: runner.os == 'macOS'
@@ -107,6 +109,7 @@ jobs:
         env:
           CLAWMASTER_DESKTOP_SMOKE_MODE: launch
           CLAWMASTER_DESKTOP_ARTIFACT_DIR: ${{ runner.temp }}/clawmaster-desktop-artifacts
+          CLAWMASTER_DESKTOP_SEED_PROFILE: '1'
 
       - name: Upload desktop smoke artifacts
         if: always()

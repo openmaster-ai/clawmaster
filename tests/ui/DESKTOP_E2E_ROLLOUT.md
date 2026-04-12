@@ -14,6 +14,7 @@ Current slice status:
 - macOS CI uses launch smoke only
 - Linux and Windows native smoke now covers command palette page jump, section deep-link, and sidebar navigation
 - desktop smoke artifacts are uploaded in CI for screenshots/logs
+- CI seeds a temporary minimal OpenClaw profile so Linux/Windows can reach the main app shell
 
 ## Principles
 

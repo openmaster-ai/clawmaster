@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
-import { access, mkdir, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { Builder, By, Capabilities, Key, until } from 'selenium-webdriver'
 
@@ -20,6 +20,36 @@ const NAVIGATION_TIMEOUT_MS = 15_000
 const ARTIFACT_DIR = process.env.CLAWMASTER_DESKTOP_ARTIFACT_DIR
   ? path.resolve(process.env.CLAWMASTER_DESKTOP_ARTIFACT_DIR)
   : path.join(os.tmpdir(), 'clawmaster-desktop-artifacts')
+const SEEDED_OPENCLAW_CONFIG = {
+  models: {
+    providers: {
+      desktopSmoke: {
+        apiKey: 'desktop-smoke-token',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        models: [
+          {
+            id: 'desktop-smoke-model',
+            name: 'Desktop Smoke Model',
+          },
+        ],
+      },
+    },
+  },
+  agents: {
+    defaults: {
+      model: {
+        primary: 'desktopSmoke/desktop-smoke-model',
+      },
+    },
+    list: [
+      {
+        id: 'desktop-smoke',
+        name: 'Desktop Smoke',
+        model: 'desktopSmoke/desktop-smoke-model',
+      },
+    ],
+  },
+}
 
 function resolveCommand(name) {
   return process.platform === 'win32' ? `${name}.cmd` : name
@@ -42,6 +72,30 @@ async function pathExists(targetPath) {
 async function ensureArtifactDir() {
   await mkdir(ARTIFACT_DIR, { recursive: true })
   return ARTIFACT_DIR
+}
+
+async function seedDesktopSmokeProfile() {
+  if (process.env.CLAWMASTER_DESKTOP_SEED_PROFILE !== '1') {
+    return async () => {}
+  }
+
+  const configDir = path.join(os.homedir(), '.openclaw')
+  const configPath = path.join(configDir, 'openclaw.json')
+  const hadExistingConfig = await pathExists(configPath)
+  const existingConfig = hadExistingConfig ? await readFile(configPath, 'utf8') : null
+
+  await mkdir(configDir, { recursive: true })
+  await writeFile(`${configPath}.desktop-smoke-backup`, existingConfig ?? '', 'utf8')
+  await writeFile(`${configPath}`, `${JSON.stringify(SEEDED_OPENCLAW_CONFIG, null, 2)}\n`, 'utf8')
+
+  return async () => {
+    if (hadExistingConfig && existingConfig !== null) {
+      await writeFile(configPath, existingConfig, 'utf8')
+    } else {
+      await rm(configPath, { force: true })
+    }
+    await rm(`${configPath}.desktop-smoke-backup`, { force: true })
+  }
 }
 
 function runCommand(command, args, options = {}) {
@@ -513,12 +567,17 @@ async function persistTextArtifacts(name, payload) {
 }
 
 export async function runDesktopSmoke() {
+  const restoreSeedProfile = await seedDesktopSmokeProfile()
   const binaryPath = await ensureDesktopBinary()
   const mode = getSmokeMode()
 
-  if (mode === 'launch') {
-    return runLaunchSmoke(binaryPath)
-  }
+  try {
+    if (mode === 'launch') {
+      return runLaunchSmoke(binaryPath)
+    }
 
-  return runWebdriverSmoke(binaryPath)
+    return runWebdriverSmoke(binaryPath)
+  } finally {
+    await restoreSeedProfile()
+  }
 }
