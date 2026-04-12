@@ -55,6 +55,15 @@ interface OpenclawMemoryStatusEntry {
   workspaceDir?: string
 }
 
+export interface OpenclawWorkspaceMemoryDocument {
+  id: string
+  agentId: string
+  workspaceDir: string
+  sourcePath: string
+  title: string
+  content: string
+}
+
 function normalizeHit(item: unknown, index: number): OpenclawMemoryHit | null {
   if (!isRecord(item)) return null
   const content = String(
@@ -108,6 +117,13 @@ function parseOpenclawMemoryStatusEntries(data: unknown): OpenclawMemoryStatusEn
     entries.push({ agentId, workspaceDir })
   }
   return entries
+}
+
+function titleFromWorkspaceMemoryFile(sourcePath: string, content: string): string {
+  const heading = content.match(/^\s*#\s+(.+)$/m)?.[1]?.trim()
+  if (heading) return heading
+  const baseName = path.basename(sourcePath).replace(/\.[^.]+$/, '')
+  return baseName || 'Imported OpenClaw memory'
 }
 
 function hasStructuredOpenclawMemorySearchPayload(value: unknown): boolean {
@@ -189,6 +205,38 @@ async function resolveWorkspaceDirs(agent?: string): Promise<string[]> {
   return [path.join(getOpenclawDataDir(), 'workspace')]
 }
 
+async function resolveWorkspaceStatusEntries(agent?: string): Promise<Array<{
+  agentId: string
+  workspaceDir: string
+}>> {
+  let matches: Array<{ agentId: string; workspaceDir: string }> = []
+  try {
+    const status = await getOpenclawMemoryStatusPayload()
+    const entries = parseOpenclawMemoryStatusEntries(status.data)
+    matches = entries
+      .filter((entry) => !agent || entry.agentId === agent)
+      .filter((entry): entry is { agentId: string; workspaceDir: string } => Boolean(entry.workspaceDir))
+      .map((entry) => ({ agentId: entry.agentId, workspaceDir: entry.workspaceDir! }))
+  } catch {
+    matches = []
+  }
+
+  if (matches.length > 0) {
+    const deduped = new Map<string, { agentId: string; workspaceDir: string }>()
+    for (const item of matches) {
+      deduped.set(`${item.agentId}:${item.workspaceDir}`, item)
+    }
+    return Array.from(deduped.values())
+  }
+
+  return [
+    {
+      agentId: agent?.trim() || 'main',
+      workspaceDir: path.join(getOpenclawDataDir(), 'workspace'),
+    },
+  ]
+}
+
 export async function searchWorkspaceMemoryFiles(
   query: string,
   workspaceDirs: string[],
@@ -231,6 +279,47 @@ export async function searchWorkspaceMemoryFiles(
 
   hits.sort((a, b) => b.rank - a.rank || a.path!.localeCompare(b.path!, 'en'))
   return hits.slice(0, max).map(({ rank: _rank, ...hit }) => hit)
+}
+
+export async function listWorkspaceMemoryDocuments(
+  options?: { agent?: string }
+): Promise<OpenclawWorkspaceMemoryDocument[]> {
+  const workspaceEntries = await resolveWorkspaceStatusEntries(options?.agent?.trim() || undefined)
+  const documents: OpenclawWorkspaceMemoryDocument[] = []
+
+  for (const entry of workspaceEntries) {
+    const markdownFiles: string[] = []
+    const rootMemoryFile = path.join(entry.workspaceDir, 'MEMORY.md')
+    try {
+      const stat = await fs.stat(rootMemoryFile)
+      if (stat.isFile()) markdownFiles.push(rootMemoryFile)
+    } catch {
+      /* ignore */
+    }
+    await collectMarkdownFiles(path.join(entry.workspaceDir, 'memory'), markdownFiles)
+
+    const dedupedPaths = Array.from(new Set(markdownFiles)).sort((a, b) => a.localeCompare(b, 'en'))
+    for (const sourcePath of dedupedPaths) {
+      let content = ''
+      try {
+        content = await fs.readFile(sourcePath, 'utf8')
+      } catch {
+        continue
+      }
+      const trimmed = content.trim()
+      if (!trimmed) continue
+      documents.push({
+        id: `${entry.agentId}:${sourcePath}`,
+        agentId: entry.agentId,
+        workspaceDir: entry.workspaceDir,
+        sourcePath,
+        title: titleFromWorkspaceMemoryFile(sourcePath, trimmed),
+        content: trimmed,
+      })
+    }
+  }
+
+  return documents
 }
 
 export async function searchOpenclawMemoryFallback(

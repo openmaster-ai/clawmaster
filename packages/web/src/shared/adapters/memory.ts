@@ -1,4 +1,5 @@
 import type {
+  ManagedMemoryImportStatusPayload,
   ManagedMemoryListPayload,
   ManagedMemoryRecord,
   ManagedMemorySearchHit,
@@ -159,6 +160,18 @@ export async function managedMemoryStatusResult(): Promise<AdapterResult<Managed
 export async function managedMemoryStatsResult(): Promise<AdapterResult<ManagedMemoryStatsPayload>> {
   if (getIsTauri()) return desktopManagedMemoryUnavailable()
   return webFetchJson<ManagedMemoryStatsPayload>('/api/memory/managed/stats')
+}
+
+export async function managedMemoryImportStatusResult(): Promise<AdapterResult<ManagedMemoryImportStatusPayload>> {
+  if (getIsTauri()) return desktopManagedMemoryUnavailable()
+  return webFetchJson<ManagedMemoryImportStatusPayload>('/api/memory/managed/import/status')
+}
+
+export async function importOpenclawManagedMemoryResult(): Promise<AdapterResult<ManagedMemoryImportStatusPayload>> {
+  if (getIsTauri()) return desktopManagedMemoryUnavailable()
+  return webFetchJson<ManagedMemoryImportStatusPayload>('/api/memory/managed/import/openclaw', {
+    method: 'POST',
+  })
 }
 
 export async function managedMemoryListResult(options?: {
