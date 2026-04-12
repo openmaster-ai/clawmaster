@@ -14,6 +14,8 @@ export interface CommandEntry {
   keywords: string[]
   badge: string
   shortcutHint?: string
+  targetPath?: string
+  targetHash?: string
   execute: () => void
 }
 
@@ -188,6 +190,9 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
                   type="button"
                   role="option"
                   aria-selected={active}
+                  data-command-id={command.id}
+                  data-command-path={command.targetPath ?? ''}
+                  data-command-hash={command.targetHash ?? ''}
                   className={cn('command-palette-item', active && 'command-palette-item-active')}
                   onFocus={() => setActiveIndex(index)}
                   onMouseEnter={() => setActiveIndex(index)}

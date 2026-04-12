@@ -673,6 +673,11 @@ async function openCommandPalette(driver) {
   return { panel, input }
 }
 
+function getPaletteTargetSelector(expectedPath, expectedHash) {
+  const normalizedHash = expectedHash ? expectedHash.replace(/^#/, '') : ''
+  return `.command-palette-item[data-command-path="${expectedPath}"][data-command-hash="${normalizedHash}"]`
+}
+
 async function waitForLocation(driver, expectedPath, expectedHash) {
   await driver.wait(async () => {
     const location = await driver.executeScript(() => ({
@@ -727,7 +732,13 @@ async function runPaletteNavigation(driver, options) {
 
   const { panel, input } = await openCommandPalette(driver)
   await input.clear()
-  await input.sendKeys(query, Key.ENTER)
+  await input.sendKeys(query)
+  const targetSelector = getPaletteTargetSelector(expectedPath, expectedHash)
+  const targetCommand = await driver.wait(
+    until.elementLocated(By.css(targetSelector)),
+    NAVIGATION_TIMEOUT_MS,
+  )
+  await targetCommand.click()
   await driver.wait(async () => {
     const panels = await driver.findElements(By.css('.command-palette-panel'))
     return panels.length === 0

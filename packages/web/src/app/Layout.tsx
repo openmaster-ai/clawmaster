@@ -336,6 +336,8 @@ export default function Layout({ children }: LayoutProps) {
             t('layout.darkMode.toLight'),
           ],
           badge: t('command.badge.action'),
+          targetPath: undefined,
+          targetHash: undefined,
           execute: toggleDarkMode,
         }
       }
@@ -349,6 +351,8 @@ export default function Layout({ children }: LayoutProps) {
           description: t(command.descriptionKey),
           keywords: command.keywords,
           badge: t('command.badge.section'),
+          targetPath: command.path,
+          targetHash: command.hash,
           execute: () => runCommandTarget(command.path, command.hash),
         }
       }
@@ -361,6 +365,8 @@ export default function Layout({ children }: LayoutProps) {
         description: t(command.descriptionKey),
         keywords: command.keywords,
         badge: t('command.badge.page'),
+        targetPath: command.path,
+        targetHash: undefined,
         execute: () => runCommandTarget(command.path),
       }
     })
