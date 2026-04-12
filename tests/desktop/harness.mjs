@@ -828,10 +828,33 @@ async function runPaletteNavigation(driver, options) {
 }
 
 async function clickSidebarLink(driver, href) {
-  const link = await driver.wait(
-    until.elementLocated(By.css(`.app-sidebar .app-nav-link[href="${href}"]`)),
-    NAVIGATION_TIMEOUT_MS,
-  )
+  const selector = `.app-sidebar .app-nav-link[href="${href}"]`
+
+  const findVisibleLink = async () => {
+    const links = await driver.findElements(By.css(selector))
+    for (const link of links) {
+      if (await link.isDisplayed()) {
+        return link
+      }
+    }
+    return null
+  }
+
+  let link = await findVisibleLink()
+  if (!link) {
+    const menuButton = await driver.wait(
+      until.elementLocated(By.css('.app-topbar > div > button.app-icon-button')),
+      NAVIGATION_TIMEOUT_MS,
+    )
+    await menuButton.click()
+    await driver.wait(async () => (await findVisibleLink()) !== null, NAVIGATION_TIMEOUT_MS)
+    link = await findVisibleLink()
+  }
+
+  if (!link) {
+    throw new Error(`Unable to find a visible sidebar link for ${href}`)
+  }
+
   await link.click()
 }
 
