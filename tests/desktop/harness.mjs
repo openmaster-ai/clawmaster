@@ -607,7 +607,7 @@ async function runWebdriverSmoke(binaryPath) {
       await waitForLocation(driver, '/gateway')
       await driver.wait(until.elementLocated(By.id('gateway-runtime')), NAVIGATION_TIMEOUT_MS)
 
-      const titleText = await readTopbarTitle(driver)
+      const titleText = await readPageTitle(driver)
       assert.match(titleText, /(Gateway|网关|ゲートウェイ)/)
       await captureDriverArtifacts(driver, 'desktop-shell-validated', {
         mode: 'webdriver',
@@ -662,7 +662,7 @@ async function runWebdriverSmoke(binaryPath) {
       await waitForLocation(driver, '/gateway')
       await driver.wait(until.elementLocated(By.id('gateway-runtime')), NAVIGATION_TIMEOUT_MS)
 
-      const titleText = await readTopbarTitle(driver)
+      const titleText = await readPageTitle(driver)
       assert.match(titleText, /(Gateway|网关|ゲートウェイ)/)
       await captureDriverArtifacts(driver, 'desktop-shell-validated', {
         mode: 'webdriver',
@@ -745,16 +745,32 @@ async function readLocation(driver) {
   }))
 }
 
-async function readTopbarTitle(driver) {
-  const title = await driver.wait(
-    until.elementLocated(By.css('.app-topbar-title')),
-    NAVIGATION_TIMEOUT_MS,
-  )
+async function readPageTitle(driver) {
+  const selectors = ['.app-topbar-title', '.page-title', '.fullscreen-shell h1']
+
   await driver.wait(async () => {
-    const text = await title.getText()
-    return text.trim().length > 0
+    for (const selector of selectors) {
+      const elements = await driver.findElements(By.css(selector))
+      for (const element of elements) {
+        if ((await element.getText()).trim().length > 0) {
+          return true
+        }
+      }
+    }
+    return false
   }, NAVIGATION_TIMEOUT_MS)
-  return title.getText()
+
+  for (const selector of selectors) {
+    const elements = await driver.findElements(By.css(selector))
+    for (const element of elements) {
+      const text = (await element.getText()).trim()
+      if (text.length > 0) {
+        return text
+      }
+    }
+  }
+
+  throw new Error('Unable to resolve a non-empty page title')
 }
 
 async function dismissCommandPaletteHintIfPresent(driver) {
@@ -826,8 +842,8 @@ async function runPaletteNavigation(driver, options) {
     stage = 'waiting for expected location'
     await waitForLocation(driver, expectedPath, expectedHash)
 
-    stage = 'reading topbar title'
-    const titleText = await readTopbarTitle(driver)
+    stage = 'reading page title'
+    const titleText = await readPageTitle(driver)
     assert.match(titleText, expectedTitle)
 
     if (expectedAnchorId) {
