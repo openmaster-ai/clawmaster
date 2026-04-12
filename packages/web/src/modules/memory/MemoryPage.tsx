@@ -15,6 +15,10 @@ import {
 import { useTranslation } from 'react-i18next'
 import { platformResults } from '@/adapters'
 import type {
+  ManagedMemoryListPayload,
+  ManagedMemorySearchHit,
+  ManagedMemoryStatsPayload,
+  ManagedMemoryStatusPayload,
   OpenclawMemoryFileEntry,
   OpenclawMemoryFilesPayload,
   OpenclawMemorySearchCapabilityPayload,
@@ -22,6 +26,7 @@ import type {
 } from '@/lib/types'
 import { ActionBanner } from '@/shared/components/ActionBanner'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
+import { getIsTauri } from '@/shared/adapters/platform'
 import type { OpenclawMemoryHit } from '@/shared/memoryOpenclawParse'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
 
@@ -96,6 +101,15 @@ function isKnownFtsWarning(message: string): boolean {
 
 export default function MemoryPage() {
   const { t } = useTranslation()
+  const isDesktopRuntime = getIsTauri()
+  const [managedUserId, setManagedUserId] = useState('')
+  const [managedAgentId, setManagedAgentId] = useState('')
+  const [managedQuery, setManagedQuery] = useState('')
+  const [managedContent, setManagedContent] = useState('')
+  const [managedHits, setManagedHits] = useState<ManagedMemorySearchHit[] | null>(null)
+  const [managedSearchLoading, setManagedSearchLoading] = useState(false)
+  const [managedSearchErr, setManagedSearchErr] = useState<string | null>(null)
+  const [managedMutationLoading, setManagedMutationLoading] = useState(false)
   const [agentFilter, setAgentFilter] = useState('')
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<OpenclawMemoryHit[] | null>(null)
@@ -106,9 +120,33 @@ export default function MemoryPage() {
   const [reindexLoading, setReindexLoading] = useState(false)
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
 
+  const managedStatusFetcher = useCallback(async () => platformResults.managedMemoryStatus(), [])
+  const managedStatsFetcher = useCallback(async () => platformResults.managedMemoryStats(), [])
+  const managedListFetcher = useCallback(async () => platformResults.managedMemoryList({ limit: 8 }), [])
   const statusFetcher = useCallback(async () => platformResults.openclawMemoryStatus(), [])
   const searchCapabilityFetcher = useCallback(async () => platformResults.openclawMemorySearchCapability(), [])
   const filesFetcher = useCallback(async () => platformResults.openclawMemoryFiles(), [])
+
+  const {
+    data: managedStatus,
+    loading: managedStatusLoading,
+    error: managedStatusErr,
+    refetch: refetchManagedStatus,
+  } = useAdapterCall<ManagedMemoryStatusPayload>(managedStatusFetcher)
+
+  const {
+    data: managedStats,
+    loading: managedStatsLoading,
+    error: managedStatsErr,
+    refetch: refetchManagedStats,
+  } = useAdapterCall<ManagedMemoryStatsPayload>(managedStatsFetcher)
+
+  const {
+    data: managedList,
+    loading: managedListLoading,
+    error: managedListErr,
+    refetch: refetchManagedList,
+  } = useAdapterCall<ManagedMemoryListPayload>(managedListFetcher)
 
   const {
     data: statusPayload,
@@ -156,6 +194,11 @@ export default function MemoryPage() {
     if (!stderr || isKnownFtsWarning(stderr)) return null
     return stderr
   }, [statusPayload?.stderr])
+
+  const managedSectionError = managedStatusErr || managedStatsErr || managedListErr
+  const managedRuntimeNote = managedStatus?.provisioned
+    ? t('memory.managedProvisionedNote')
+    : t('memory.managedUnprovisionedNote')
 
   async function handleReindex() {
     setReindexLoading(true)
@@ -206,6 +249,81 @@ export default function MemoryPage() {
     setFeedback({ tone: 'success', message: t('memory.fileDeleteSuccess') })
     await refetchFiles()
     await refetchStatus()
+  }
+
+  async function refreshManagedSection() {
+    await Promise.all([refetchManagedStatus(), refetchManagedStats(), refetchManagedList()])
+  }
+
+  async function runManagedSearch() {
+    const trimmed = managedQuery.trim()
+    if (!trimmed) {
+      setManagedHits([])
+      setManagedSearchErr(null)
+      return
+    }
+    setManagedSearchLoading(true)
+    setManagedSearchErr(null)
+    const result = await platformResults.managedMemorySearch(trimmed, {
+      userId: managedUserId.trim() || undefined,
+      agentId: managedAgentId.trim() || undefined,
+      limit: 12,
+    })
+    setManagedSearchLoading(false)
+    if (!result.success) {
+      setManagedHits(null)
+      setManagedSearchErr(result.error ?? t('memory.managedSearchFailed'))
+      return
+    }
+    setManagedHits(result.data ?? [])
+  }
+
+  async function handleAddManagedMemory() {
+    const content = managedContent.trim()
+    if (!content) {
+      setFeedback({ tone: 'error', message: t('memory.managedAddFailed') })
+      return
+    }
+
+    setManagedMutationLoading(true)
+    const result = await platformResults.addManagedMemory({
+      content,
+      userId: managedUserId.trim() || undefined,
+      agentId: managedAgentId.trim() || undefined,
+    })
+    setManagedMutationLoading(false)
+
+    if (!result.success) {
+      setFeedback({ tone: 'error', message: result.error ?? t('memory.managedAddFailed') })
+      return
+    }
+
+    setManagedContent('')
+    setFeedback({ tone: 'success', message: t('memory.managedAddSuccess') })
+    await refreshManagedSection()
+  }
+
+  async function handleDeleteManagedMemory(memoryId: string) {
+    setManagedMutationLoading(true)
+    const result = await platformResults.deleteManagedMemory(memoryId)
+    setManagedMutationLoading(false)
+    if (!result.success) {
+      setFeedback({ tone: 'error', message: result.error ?? t('memory.managedDeleteFailed') })
+      return
+    }
+    if (!result.data?.deleted) {
+      setFeedback({ tone: 'error', message: t('memory.managedDeleteMissing') })
+      await refreshManagedSection()
+      if (managedQuery.trim()) {
+        await runManagedSearch()
+      }
+      return
+    }
+    setFeedback({ tone: 'success', message: t('memory.managedDeleteSuccess') })
+    await refreshManagedSection()
+    if (managedQuery.trim()) {
+      await runManagedSearch()
+    }
   }
 
   const summaryCards = [
@@ -293,6 +411,207 @@ export default function MemoryPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,1fr)]">
         <div className="space-y-4">
+          <div className="surface-card space-y-4" id="memory-managed">
+            <div className="section-heading">
+              <div>
+                <h3 className="section-title">{t('memory.managedFoundationTitle')}</h3>
+                <p className="text-sm text-muted-foreground">{t('memory.managedFoundationHelp')}</p>
+              </div>
+              <button type="button" onClick={() => void refreshManagedSection()} className="button-secondary">
+                <RefreshCw className="h-4 w-4" />
+                <span>{t('common.refresh')}</span>
+              </button>
+            </div>
+
+            {isDesktopRuntime ? (
+              <div className="rounded-[1.15rem] border border-border/70 bg-muted/30 px-4 py-3">
+                <p className="text-sm text-muted-foreground">{t('memory.managedDesktopUnavailable')}</p>
+              </div>
+            ) : managedStatusLoading || managedStatsLoading || managedListLoading ? (
+              <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+            ) : managedSectionError ? (
+              <div className="space-y-2">
+                <p className="text-sm text-red-500">{managedSectionError}</p>
+                <p className="text-xs text-muted-foreground">{t('memory.managedFoundationUnavailable')}</p>
+              </div>
+            ) : managedStatus && managedStats && managedList ? (
+              <>
+                <div className="rounded-[1.15rem] border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          <span>{t('memory.managedReadyBadge')}</span>
+                        </span>
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                          {managedStats.engine}
+                        </span>
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                          {managedStats.storageType}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{managedRuntimeNote}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-3 text-xs text-muted-foreground md:grid-cols-3">
+                    <p>
+                      {t('memory.managedProfileLabel')}: <span className="font-mono">{managedStatus.profileKey}</span>
+                    </p>
+                    <p>
+                      {t('memory.managedRuntimeRootLabel')}:{' '}
+                      <span className="font-mono break-all">{managedStatus.runtimeRoot}</span>
+                    </p>
+                    <p>
+                      {t('memory.managedDbPathLabel')}: <span className="font-mono break-all">{managedStatus.dbPath}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="section-subcard">
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedStatsTotal')}</p>
+                    <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{managedStats.totalMemories}</p>
+                  </div>
+                  <div className="section-subcard">
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedStatsUsers')}</p>
+                    <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{managedStats.userCount}</p>
+                  </div>
+                  <div className="section-subcard">
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedStatsStorage')}</p>
+                    <p className="mt-3 text-sm font-medium text-foreground">{managedStats.storageType}</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-2 md:grid-cols-2">
+                  <input
+                    type="text"
+                    placeholder={t('memory.managedUserPlaceholder')}
+                    value={managedUserId}
+                    onChange={(event) => setManagedUserId(event.target.value)}
+                    className="control-input"
+                  />
+                  <input
+                    type="text"
+                    placeholder={t('memory.managedAgentPlaceholder')}
+                    value={managedAgentId}
+                    onChange={(event) => setManagedAgentId(event.target.value)}
+                    className="control-input"
+                  />
+                </div>
+
+                <textarea
+                  placeholder={t('memory.managedContentPlaceholder')}
+                  value={managedContent}
+                  onChange={(event) => setManagedContent(event.target.value)}
+                  className="control-input min-h-28 resize-y"
+                />
+
+                <div className="flex flex-col gap-2 lg:flex-row">
+                  <input
+                    type="text"
+                    placeholder={t('memory.managedSearchPlaceholder')}
+                    value={managedQuery}
+                    onChange={(event) => setManagedQuery(event.target.value)}
+                    className="control-input flex-1"
+                  />
+                  <button
+                    type="button"
+                    disabled={managedMutationLoading}
+                    onClick={() => void handleAddManagedMemory()}
+                    className="button-primary shrink-0 disabled:opacity-50"
+                  >
+                    {managedMutationLoading ? t('memory.managedAdding') : t('memory.managedAdd')}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={managedSearchLoading}
+                    onClick={() => void runManagedSearch()}
+                    className="button-secondary shrink-0 disabled:opacity-50"
+                  >
+                    {managedSearchLoading ? t('memory.searching') : t('memory.search')}
+                  </button>
+                </div>
+
+                {managedSearchErr ? <p className="text-sm text-red-500">{managedSearchErr}</p> : null}
+                {managedHits && managedHits.length > 0 ? (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-foreground">{t('memory.managedSearchTitle')}</h4>
+                    <ul className="space-y-3">
+                      {managedHits.map((hit) => (
+                        <li key={hit.memoryId} className="list-card bg-background/70 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {hit.score !== undefined && Number.isFinite(hit.score) ? (
+                              <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
+                                score: {hit.score.toFixed(3)}
+                              </span>
+                            ) : null}
+                            {hit.userId ? (
+                              <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                user: {hit.userId}
+                              </span>
+                            ) : null}
+                            {hit.agentId ? (
+                              <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                agent: {hit.agentId}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap">{hit.content}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : managedHits && managedHits.length === 0 && managedQuery.trim() ? (
+                  <p className="text-sm text-muted-foreground">{t('memory.managedSearchEmpty')}</p>
+                ) : null}
+
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-foreground">{t('memory.managedRecentTitle')}</h4>
+                  {managedList.memories.length > 0 ? (
+                    <ul className="space-y-3">
+                      {managedList.memories.map((memory) => (
+                        <li key={memory.memoryId} className="list-card bg-background/70 text-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {memory.userId ? (
+                                  <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                    user: {memory.userId}
+                                  </span>
+                                ) : null}
+                                {memory.agentId ? (
+                                  <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                    agent: {memory.agentId}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="mt-2 whitespace-pre-wrap">{memory.content}</p>
+                              {memory.updatedAt ? (
+                                <p className="mt-2 text-xs text-muted-foreground">{new Date(memory.updatedAt).toLocaleString()}</p>
+                              ) : null}
+                            </div>
+                            <button
+                              type="button"
+                              disabled={managedMutationLoading}
+                              onClick={() => void handleDeleteManagedMemory(memory.memoryId)}
+                              className="button-danger shrink-0 px-2 py-1 text-xs"
+                              aria-label={`${t('common.delete')} ${memory.memoryId}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t('memory.managedEmpty')}</p>
+                  )}
+                </div>
+              </>
+            ) : null}
+          </div>
+
           <div className="surface-card space-y-4">
             <div className="section-heading">
               <div>

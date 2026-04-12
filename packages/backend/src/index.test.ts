@@ -169,6 +169,14 @@ test('createApp rejects destructive settings actions without the danger header i
           body: JSON.stringify({ tarPath: '' }),
         })
         assert.equal(restoreResponse.status, 403)
+
+        const managedResetResponse = await fetch(`${baseUrl}/api/memory/managed/reset`, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer secret-token',
+          },
+        })
+        assert.equal(managedResetResponse.status, 403)
       } finally {
         if (server.listening) {
           await new Promise<void>((resolve, reject) => {

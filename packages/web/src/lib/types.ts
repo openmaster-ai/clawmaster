@@ -193,6 +193,60 @@ export interface OpenclawMemoryFilesPayload {
   files: OpenclawMemoryFileEntry[]
 }
 
+export interface ManagedMemoryRecord {
+  id: string
+  memoryId: string
+  content: string
+  userId?: string
+  agentId?: string
+  metadata: Record<string, unknown>
+  createdAt?: string
+  updatedAt?: string
+  accessCount?: number
+}
+
+export interface ManagedMemorySearchHit {
+  memoryId: string
+  content: string
+  score?: number
+  userId?: string
+  agentId?: string
+  metadata: Record<string, unknown>
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ManagedMemoryStoreContext {
+  implementation: 'powermem'
+  engine: 'powermem-sqlite'
+  profileKey: string
+  dataRoot: string
+  runtimeRoot: string
+  dbPath: string
+}
+
+export interface ManagedMemoryStatusPayload extends ManagedMemoryStoreContext {
+  available: true
+  backend: 'service'
+  storageType: string
+  provisioned: boolean
+}
+
+export interface ManagedMemoryStatsPayload extends ManagedMemoryStoreContext {
+  storageType: string
+  totalMemories: number
+  userCount: number
+  oldestMemory: string | null
+  newestMemory: string | null
+}
+
+export interface ManagedMemoryListPayload {
+  memories: ManagedMemoryRecord[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export interface ChannelInfo {
   id: string
   name: string
