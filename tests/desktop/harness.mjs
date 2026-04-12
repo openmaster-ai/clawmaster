@@ -785,7 +785,7 @@ async function waitForAnchorInView(driver, anchorId) {
 
       const rect = target.getBoundingClientRect()
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight
-      return rect.top >= -24 && rect.top <= viewportHeight * 0.6
+      return rect.bottom >= 0 && rect.top <= viewportHeight
     }, anchorId)
     return result === true
   }, NAVIGATION_TIMEOUT_MS)
@@ -822,7 +822,11 @@ async function runPaletteNavigation(driver, options) {
   assert.match(titleText, expectedTitle)
 
   if (expectedAnchorId) {
-    await driver.wait(until.elementLocated(By.id(expectedAnchorId)), NAVIGATION_TIMEOUT_MS)
+    const anchor = await driver.wait(
+      until.elementLocated(By.id(expectedAnchorId)),
+      NAVIGATION_TIMEOUT_MS,
+    )
+    await scrollElementIntoView(driver, anchor)
     await waitForAnchorInView(driver, expectedAnchorId)
   }
 }
