@@ -73,6 +73,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Install OpenClaw CLI
+        run: npm install -g openclaw
+
       - name: Install tauri-driver
         if: matrix.smokeMode == 'webdriver'
         run: cargo install tauri-driver --locked
