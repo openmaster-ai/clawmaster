@@ -626,25 +626,51 @@ async function runWebdriverSmoke(binaryPath) {
     const resumedFromSetup = await tryContinueFromSetupWizard(driver)
     if (resumedFromSetup) {
       await driver.wait(until.elementLocated(By.css('.app-shell')), NAVIGATION_TIMEOUT_MS)
-      setStep('opening settings after setup continuation')
+      const resumedLocation = await readLocation(driver)
+      if (resumedLocation.pathname !== '/settings') {
+        setStep('opening settings from sidebar after setup continuation')
+        await clickSidebarLink(driver, '/settings')
+        await waitForLocation(driver, '/settings')
+      } else {
+        setStep('using settings page opened by setup continuation')
+      }
+      setStep('jumping to settings profile section after setup continuation')
       await runPaletteNavigation(driver, {
-        query: 'settings',
+        query: 'profile',
         expectedPath: '/settings',
+        expectedHash: '#settings-profile',
         expectedTitle: /(Settings|设置|設定)/,
+        expectedAnchorId: 'settings-profile',
       })
       setStep('verifying desktop local data controls after setup continuation')
       await verifyDesktopSettingsSurface(driver)
       setStep('verifying danger confirmation dialog after setup continuation')
       await verifyDangerZoneConfirmation(driver)
+      setStep('opening capability runtime from palette after setup continuation')
+      await runPaletteNavigation(driver, {
+        query: 'verify',
+        expectedPath: '/capabilities',
+        expectedHash: '#capability-runtime',
+        expectedTitle: /(Capability Center|能力中心|機能センター)/,
+        expectedAnchorId: 'capability-runtime',
+      })
+      setStep('opening gateway from sidebar after setup continuation')
+      await clickSidebarLink(driver, '/gateway')
+      await waitForLocation(driver, '/gateway')
+      await driver.wait(until.elementLocated(By.id('gateway-runtime')), NAVIGATION_TIMEOUT_MS)
+
+      const titleText = await readTopbarTitle(driver)
+      assert.match(titleText, /(Gateway|网关|ゲートウェイ)/)
       await captureDriverArtifacts(driver, 'desktop-shell-validated', {
         mode: 'webdriver',
-        page: 'settings',
+        page: 'gateway',
         resumedFromSetup: true,
+        title: titleText,
       })
 
       return {
         mode: 'webdriver',
-        details: 'continued from setup wizard into desktop shell and validated settings gating',
+        details: `continued from setup wizard into desktop shell and validated settings gating (${titleText})`,
         logs: tauriDriver.getLogs(),
       }
     }
@@ -704,12 +730,16 @@ function getPaletteTargetSelector(expectedPath, expectedHash) {
 
 async function waitForLocation(driver, expectedPath, expectedHash) {
   await driver.wait(async () => {
-    const location = await driver.executeScript(() => ({
-      pathname: window.location.pathname,
-      hash: window.location.hash,
-    }))
+    const location = await readLocation(driver)
     return location.pathname === expectedPath && (expectedHash == null || location.hash === expectedHash)
   }, NAVIGATION_TIMEOUT_MS)
+}
+
+async function readLocation(driver) {
+  return driver.executeScript(() => ({
+    pathname: window.location.pathname,
+    hash: window.location.hash,
+  }))
 }
 
 async function readTopbarTitle(driver) {
