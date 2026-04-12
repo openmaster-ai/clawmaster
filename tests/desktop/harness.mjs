@@ -574,6 +574,8 @@ async function runWebdriverSmoke(binaryPath) {
 
     const appShell = await driver.findElements(By.css('.app-shell'))
     if (appShell.length > 0) {
+      setStep('dismissing command shortcut hint')
+      await dismissCommandPaletteHintIfPresent(driver)
       setStep('opening settings from palette')
       await runPaletteNavigation(driver, {
         query: 'settings',
@@ -626,6 +628,8 @@ async function runWebdriverSmoke(binaryPath) {
     const resumedFromSetup = await tryContinueFromSetupWizard(driver)
     if (resumedFromSetup) {
       await driver.wait(until.elementLocated(By.css('.app-shell')), NAVIGATION_TIMEOUT_MS)
+      setStep('dismissing command shortcut hint after setup continuation')
+      await dismissCommandPaletteHintIfPresent(driver)
       const resumedLocation = await readLocation(driver)
       if (resumedLocation.pathname !== '/settings') {
         setStep('opening settings from sidebar after setup continuation')
@@ -752,6 +756,18 @@ async function readTopbarTitle(driver) {
     return text.trim().length > 0
   }, NAVIGATION_TIMEOUT_MS)
   return title.getText()
+}
+
+async function dismissCommandPaletteHintIfPresent(driver) {
+  const buttons = await driver.findElements(By.css('.app-command-hint .button-secondary'))
+  if (buttons.length === 0) {
+    return false
+  }
+
+  const hint = await driver.findElement(By.css('.app-command-hint'))
+  await buttons[0].click()
+  await driver.wait(until.stalenessOf(hint), NAVIGATION_TIMEOUT_MS)
+  return true
 }
 
 async function scrollElementIntoView(driver, element) {
