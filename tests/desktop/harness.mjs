@@ -796,11 +796,22 @@ async function runPaletteNavigation(driver, options) {
   await targetCommand.click()
   await driver.wait(async () => {
     const panels = await driver.findElements(By.css('.command-palette-panel'))
-    return panels.length === 0
-  }, NAVIGATION_TIMEOUT_MS).catch(async () => {
-    await input.sendKeys(Key.ESCAPE)
-    await driver.wait(until.stalenessOf(panel), NAVIGATION_TIMEOUT_MS)
-  })
+    if (panels.length === 0) {
+      return true
+    }
+    const location = await readLocation(driver)
+    return location.pathname === expectedPath && (expectedHash == null || location.hash === expectedHash)
+  }, NAVIGATION_TIMEOUT_MS)
+
+  const remainingPanels = await driver.findElements(By.css('.command-palette-panel'))
+  if (remainingPanels.length > 0) {
+    await input.sendKeys(Key.ESCAPE).catch(() => {})
+    await driver.wait(async () => {
+      const panels = await driver.findElements(By.css('.command-palette-panel'))
+      return panels.length === 0
+    }, 3_000).catch(() => {})
+  }
+
   await waitForLocation(driver, expectedPath, expectedHash)
 
   const titleText = await readTopbarTitle(driver)
