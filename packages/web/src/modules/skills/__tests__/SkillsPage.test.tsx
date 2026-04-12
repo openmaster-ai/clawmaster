@@ -15,6 +15,8 @@ const mockInstallSkillResult = vi.fn()
 const mockUninstallSkillResult = vi.fn()
 const mockSetSkillEnabledResult = vi.fn()
 const mockScanInstalledSkillResult = vi.fn()
+const mockPreviewPaddleOcrResult = vi.fn()
+const mockClearPaddleOcrResult = vi.fn()
 const mockGetPaddleOcrStatusResult = vi.fn()
 const mockSetupPaddleOcrResult = vi.fn()
 
@@ -30,7 +32,9 @@ vi.mock('@/shared/adapters/clawhub', () => ({
 }))
 
 vi.mock('@/shared/adapters/paddleocr', () => ({
+  clearPaddleOcrResult: (...args: any[]) => mockClearPaddleOcrResult(...args),
   getPaddleOcrStatusResult: (...args: any[]) => mockGetPaddleOcrStatusResult(...args),
+  previewPaddleOcrResult: (...args: any[]) => mockPreviewPaddleOcrResult(...args),
   setupPaddleOcrResult: (...args: any[]) => mockSetupPaddleOcrResult(...args),
 }))
 
@@ -95,6 +99,40 @@ describe('SkillsPage', () => {
         },
       },
     })
+    mockPreviewPaddleOcrResult.mockResolvedValue({
+      success: true,
+      data: {
+        moduleId: PADDLEOCR_TEXT_SKILL_ID,
+        apiUrl: 'https://demo.paddleocr.com/ocr',
+        latencyMs: 120,
+        pageCount: 1,
+        textLineCount: 2,
+        extractedText: 'preview text',
+        responsePreview: '{"ok":true}',
+      },
+    })
+    mockClearPaddleOcrResult.mockResolvedValue({
+      success: true,
+      data: {
+        configured: false,
+        enabledModules: [],
+        missingModules: [],
+        textRecognition: {
+          configured: false,
+          enabled: false,
+          missing: false,
+          apiUrlConfigured: false,
+          accessTokenConfigured: false,
+        },
+        docParsing: {
+          configured: false,
+          enabled: false,
+          missing: false,
+          apiUrlConfigured: false,
+          accessTokenConfigured: false,
+        },
+      },
+    })
     mockScanInstalledSkillResult.mockResolvedValue({
       success: true,
       data: {
@@ -145,7 +183,7 @@ describe('SkillsPage', () => {
     fireEvent.change(screen.getByLabelText('API Key / Access Token'), {
       target: { value: 'tok_text_123' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Verify & Enable' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save & verify' }))
 
     expect(mockSetupPaddleOcrResult).toHaveBeenCalledWith({
       moduleId: PADDLEOCR_TEXT_SKILL_ID,

@@ -6,6 +6,12 @@ import {
   CATEGORY_COLORS,
   FEATURED_SKILLS,
 } from '../catalog'
+import {
+  PADDLEOCR_DOC_SKILL_ID,
+  PADDLEOCR_DOC_SKILL_NAME,
+  PADDLEOCR_TEXT_SKILL_ID,
+  PADDLEOCR_TEXT_SKILL_NAME,
+} from '@/shared/paddleocr'
 import en from '@/i18n/en.json'
 
 describe('Skills catalog', () => {
@@ -55,6 +61,13 @@ describe('Skills catalog', () => {
       name: 'Image Generate',
       category: 'productivity',
     })
+  })
+
+  it('keeps PaddleOCR skill names aligned with official ClawHub entries', () => {
+    expect(SKILL_CATALOG.find((skill) => skill.slug === PADDLEOCR_DOC_SKILL_ID)?.name)
+      .toBe(PADDLEOCR_DOC_SKILL_NAME)
+    expect(SKILL_CATALOG.find((skill) => skill.slug === PADDLEOCR_TEXT_SKILL_ID)?.name)
+      .toBe(PADDLEOCR_TEXT_SKILL_NAME)
   })
 
   it('CATEGORY_ORDER covers all used categories', () => {
