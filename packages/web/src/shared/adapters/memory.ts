@@ -1,4 +1,9 @@
 import type {
+  ManagedMemoryListPayload,
+  ManagedMemoryRecord,
+  ManagedMemorySearchHit,
+  ManagedMemoryStatsPayload,
+  ManagedMemoryStatusPayload,
   OpenclawMemoryFilesPayload,
   OpenclawMemoryReindexPayload,
   OpenclawMemorySearchCapabilityPayload,
@@ -7,9 +12,9 @@ import type {
 import { tauriInvoke } from '@/shared/adapters/invoke'
 import { fromPromise } from '@/shared/adapters/resultHelpers'
 import type { AdapterResult } from '@/shared/adapters/types'
-import { ok } from '@/shared/adapters/types'
+import { fail, ok } from '@/shared/adapters/types'
 import { getIsTauri } from '@/shared/adapters/platform'
-import { webFetchJson, webFetchVoid } from '@/shared/adapters/webHttp'
+import { createDangerousActionHeaders, webFetchJson, webFetchVoid } from '@/shared/adapters/webHttp'
 import { parseOpenclawMemorySearchJson, type OpenclawMemoryHit } from '@/shared/memoryOpenclawParse'
 
 function parseStdoutJsonLoose(stdout: string): unknown {
@@ -40,6 +45,10 @@ function hasStructuredOpenclawMemorySearchPayload(value: unknown): boolean {
 function hasFtsUnavailableError(message: string): boolean {
   const lower = message.toLowerCase()
   return lower.includes('fts5') && lower.includes('no such module')
+}
+
+function desktopManagedMemoryUnavailable<T>(): AdapterResult<T> {
+  return fail('Managed powermem memory is available in web/backend mode first. Desktop integration lands in a later PR.')
 }
 
 async function tauriOpenclawMemoryStatus(): Promise<OpenclawMemoryStatusPayload> {
@@ -139,5 +148,85 @@ export async function deleteOpenclawMemoryFileResult(relativePath: string): Prom
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ relativePath }),
+  })
+}
+
+export async function managedMemoryStatusResult(): Promise<AdapterResult<ManagedMemoryStatusPayload>> {
+  if (getIsTauri()) return desktopManagedMemoryUnavailable()
+  return webFetchJson<ManagedMemoryStatusPayload>('/api/memory/managed/status')
+}
+
+export async function managedMemoryStatsResult(): Promise<AdapterResult<ManagedMemoryStatsPayload>> {
+  if (getIsTauri()) return desktopManagedMemoryUnavailable()
+  return webFetchJson<ManagedMemoryStatsPayload>('/api/memory/managed/stats')
+}
+
+export async function managedMemoryListResult(options?: {
+  userId?: string
+  agentId?: string
+  limit?: number
+  offset?: number
+}): Promise<AdapterResult<ManagedMemoryListPayload>> {
+  if (getIsTauri()) return desktopManagedMemoryUnavailable()
+  const params = new URLSearchParams()
+  if (options?.userId) params.set('userId', options.userId)
+  if (options?.agentId) params.set('agentId', options.agentId)
+  if (options?.limit) params.set('limit', String(options.limit))
+  if (options?.offset) params.set('offset', String(options.offset))
+  const suffix = params.size > 0 ? `?${params}` : ''
+  return webFetchJson<ManagedMemoryListPayload>(`/api/memory/managed/list${suffix}`)
+}
+
+export async function managedMemorySearchResult(
+  query: string,
+  options?: {
+    userId?: string
+    agentId?: string
+    limit?: number
+  },
+): Promise<AdapterResult<ManagedMemorySearchHit[]>> {
+  const trimmed = query.trim()
+  if (!trimmed) return ok([])
+  if (getIsTauri()) return desktopManagedMemoryUnavailable()
+  return webFetchJson<ManagedMemorySearchHit[]>('/api/memory/managed/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: trimmed,
+      userId: options?.userId,
+      agentId: options?.agentId,
+      limit: options?.limit,
+    }),
+  })
+}
+
+export async function addManagedMemoryResult(input: {
+  content: string
+  userId?: string
+  agentId?: string
+  metadata?: Record<string, unknown>
+}): Promise<AdapterResult<ManagedMemoryRecord>> {
+  if (getIsTauri()) return desktopManagedMemoryUnavailable()
+  return webFetchJson<ManagedMemoryRecord>('/api/memory/managed/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteManagedMemoryResult(memoryId: string): Promise<AdapterResult<{ deleted: boolean }>> {
+  if (getIsTauri()) return desktopManagedMemoryUnavailable()
+  return webFetchJson<{ deleted: boolean }>('/api/memory/managed/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ memoryId }),
+  })
+}
+
+export async function resetManagedMemoryResult(): Promise<AdapterResult<ManagedMemoryStatsPayload>> {
+  if (getIsTauri()) return desktopManagedMemoryUnavailable()
+  return webFetchJson<ManagedMemoryStatsPayload>('/api/memory/managed/reset', {
+    method: 'POST',
+    headers: createDangerousActionHeaders(),
   })
 }

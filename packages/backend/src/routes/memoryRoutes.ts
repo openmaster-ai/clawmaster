@@ -1,4 +1,14 @@
 import express from 'express'
+import { requireDangerousServiceAuth } from '../serviceAuth.js'
+import {
+  addManagedMemory,
+  deleteManagedMemory,
+  getManagedMemoryStatsPayload,
+  getManagedMemoryStatusPayload,
+  listManagedMemories,
+  resetManagedMemory,
+  searchManagedMemories,
+} from '../services/managedMemory.js'
 import {
   deleteOpenclawMemoryFile,
   getOpenclawMemorySearchCapability,
@@ -15,7 +25,119 @@ function parseLimit(v: unknown, fallback: number): number {
   return Math.min(200, n)
 }
 
+function sendManagedMemoryFailure(res: express.Response, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error)
+  res.status(500).type('text').send(message)
+}
+
 export function registerMemoryRoutes(app: express.Express): void {
+  app.get('/api/memory/managed/status', async (_req, res) => {
+    try {
+      const payload = await getManagedMemoryStatusPayload()
+      res.json(payload)
+    } catch (error: unknown) {
+      sendManagedMemoryFailure(res, error)
+    }
+  })
+
+  app.get('/api/memory/managed/stats', async (_req, res) => {
+    try {
+      const payload = await getManagedMemoryStatsPayload()
+      res.json(payload)
+    } catch (error: unknown) {
+      sendManagedMemoryFailure(res, error)
+    }
+  })
+
+  app.get('/api/memory/managed/list', async (req, res) => {
+    try {
+      const payload = await listManagedMemories({
+        userId: typeof req.query.userId === 'string' ? req.query.userId : undefined,
+        agentId: typeof req.query.agentId === 'string' ? req.query.agentId : undefined,
+        limit: parseLimit(req.query.limit, 20),
+        offset:
+          typeof req.query.offset === 'string' && Number.isFinite(Number.parseInt(req.query.offset, 10))
+            ? Math.max(0, Number.parseInt(req.query.offset, 10))
+            : 0,
+      })
+      res.json(payload)
+    } catch (error: unknown) {
+      sendManagedMemoryFailure(res, error)
+    }
+  })
+
+  app.post('/api/memory/managed/search', express.json(), async (req, res) => {
+    const body = req.body as {
+      query?: string
+      userId?: string
+      agentId?: string
+      limit?: number
+    }
+    const query = typeof body?.query === 'string' ? body.query.trim() : ''
+    if (!query) {
+      return res.status(400).type('text').send('Body must be JSON: { "query": string }')
+    }
+
+    try {
+      const payload = await searchManagedMemories(query, {
+        userId: typeof body.userId === 'string' ? body.userId : undefined,
+        agentId: typeof body.agentId === 'string' ? body.agentId : undefined,
+        limit: parseLimit(body.limit, 20),
+      })
+      res.json(payload)
+    } catch (error: unknown) {
+      sendManagedMemoryFailure(res, error)
+    }
+  })
+
+  app.post('/api/memory/managed/add', express.json(), async (req, res) => {
+    const body = req.body as {
+      content?: string
+      userId?: string
+      agentId?: string
+      metadata?: Record<string, unknown>
+    }
+    const content = typeof body?.content === 'string' ? body.content.trim() : ''
+    if (!content) {
+      return res.status(400).type('text').send('Body must be JSON: { "content": string }')
+    }
+
+    try {
+      const payload = await addManagedMemory({
+        content,
+        userId: typeof body.userId === 'string' ? body.userId : undefined,
+        agentId: typeof body.agentId === 'string' ? body.agentId : undefined,
+        metadata: body.metadata,
+      })
+      res.json(payload)
+    } catch (error: unknown) {
+      sendManagedMemoryFailure(res, error)
+    }
+  })
+
+  app.post('/api/memory/managed/delete', express.json(), async (req, res) => {
+    const memoryId = (req.body as { memoryId?: string })?.memoryId
+    if (!memoryId || typeof memoryId !== 'string') {
+      return res.status(400).type('text').send('Body must be JSON: { "memoryId": string }')
+    }
+
+    try {
+      const deleted = await deleteManagedMemory(memoryId)
+      res.json({ deleted })
+    } catch (error: unknown) {
+      sendManagedMemoryFailure(res, error)
+    }
+  })
+
+  app.post('/api/memory/managed/reset', requireDangerousServiceAuth, async (_req, res) => {
+    try {
+      const payload = await resetManagedMemory()
+      res.json(payload)
+    } catch (error: unknown) {
+      sendManagedMemoryFailure(res, error)
+    }
+  })
+
   app.get('/api/memory/openclaw/status', async (_req, res) => {
     try {
       const payload = await getOpenclawMemoryStatusPayload()

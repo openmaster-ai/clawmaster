@@ -3,6 +3,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { changeLanguage } from '@/i18n'
 import MemoryPage from '../MemoryPage'
 
+const mockGetIsTauri = vi.fn(() => false)
+const mockManagedMemoryStatus = vi.fn()
+const mockManagedMemoryStats = vi.fn()
+const mockManagedMemoryList = vi.fn()
+const mockManagedMemorySearch = vi.fn()
+const mockAddManagedMemory = vi.fn()
+const mockDeleteManagedMemory = vi.fn()
 const mockOpenclawMemoryStatus = vi.fn()
 const mockOpenclawMemorySearchCapability = vi.fn()
 const mockOpenclawMemorySearch = vi.fn()
@@ -10,8 +17,18 @@ const mockOpenclawMemoryFiles = vi.fn()
 const mockReindexOpenclawMemory = vi.fn()
 const mockDeleteOpenclawMemoryFile = vi.fn()
 
+vi.mock('@/shared/adapters/platform', () => ({
+  getIsTauri: (...args: any[]) => mockGetIsTauri(...args),
+}))
+
 vi.mock('@/adapters', () => ({
   platformResults: {
+    managedMemoryStatus: (...args: any[]) => mockManagedMemoryStatus(...args),
+    managedMemoryStats: (...args: any[]) => mockManagedMemoryStats(...args),
+    managedMemoryList: (...args: any[]) => mockManagedMemoryList(...args),
+    managedMemorySearch: (...args: any[]) => mockManagedMemorySearch(...args),
+    addManagedMemory: (...args: any[]) => mockAddManagedMemory(...args),
+    deleteManagedMemory: (...args: any[]) => mockDeleteManagedMemory(...args),
     openclawMemoryStatus: (...args: any[]) => mockOpenclawMemoryStatus(...args),
     openclawMemorySearchCapability: (...args: any[]) => mockOpenclawMemorySearchCapability(...args),
     openclawMemorySearch: (...args: any[]) => mockOpenclawMemorySearch(...args),
@@ -25,6 +42,80 @@ describe('MemoryPage', () => {
   beforeEach(async () => {
     vi.resetAllMocks()
     await changeLanguage('en')
+    mockGetIsTauri.mockReturnValue(false)
+    mockManagedMemoryStatus.mockResolvedValue({
+      success: true,
+      data: {
+        available: true,
+        implementation: 'powermem',
+        engine: 'powermem-sqlite',
+        profileKey: 'default',
+        dataRoot: '/tmp/.clawmaster/data/default',
+        runtimeRoot: '/tmp/.clawmaster/data/default/memory/powermem',
+        dbPath: '/tmp/.clawmaster/data/default/memory/powermem/powermem.sqlite',
+        backend: 'service',
+        storageType: 'sqlite',
+        provisioned: true,
+      },
+    })
+    mockManagedMemoryStats.mockResolvedValue({
+      success: true,
+      data: {
+        implementation: 'powermem',
+        engine: 'powermem-sqlite',
+        profileKey: 'default',
+        dataRoot: '/tmp/.clawmaster/data/default',
+        runtimeRoot: '/tmp/.clawmaster/data/default/memory/powermem',
+        dbPath: '/tmp/.clawmaster/data/default/memory/powermem/powermem.sqlite',
+        storageType: 'sqlite',
+        totalMemories: 1,
+        userCount: 1,
+        oldestMemory: '2026-04-12T17:00:00.000Z',
+        newestMemory: '2026-04-12T17:00:00.000Z',
+      },
+    })
+    mockManagedMemoryList.mockResolvedValue({
+      success: true,
+      data: {
+        memories: [
+          {
+            id: 'managed-1',
+            memoryId: 'managed-1',
+            content: 'Alice prefers espresso after lunch.',
+            userId: 'alice',
+            agentId: 'planner',
+            metadata: {},
+            createdAt: '2026-04-12T17:00:00.000Z',
+            updatedAt: '2026-04-12T17:00:00.000Z',
+            accessCount: 0,
+          },
+        ],
+        total: 1,
+        limit: 8,
+        offset: 0,
+      },
+    })
+    mockManagedMemorySearch.mockResolvedValue({
+      success: true,
+      data: [],
+    })
+    mockAddManagedMemory.mockResolvedValue({
+      success: true,
+      data: {
+        id: 'managed-2',
+        memoryId: 'managed-2',
+        content: 'New managed memory',
+        userId: 'alice',
+        agentId: 'planner',
+        metadata: {},
+        createdAt: '2026-04-12T17:05:00.000Z',
+        updatedAt: '2026-04-12T17:05:00.000Z',
+      },
+    })
+    mockDeleteManagedMemory.mockResolvedValue({
+      success: true,
+      data: { deleted: true },
+    })
     mockOpenclawMemoryStatus.mockResolvedValue({
       success: true,
       data: {
@@ -101,6 +192,8 @@ describe('MemoryPage', () => {
     render(<MemoryPage />)
 
     expect(await screen.findByRole('heading', { name: 'Memory Management' })).toBeInTheDocument()
+    expect(await screen.findByText('powermem foundation')).toBeInTheDocument()
+    expect(screen.getByText('Alice prefers espresso after lunch.')).toBeInTheDocument()
     expect(await screen.findByText('Memory Overview')).toBeInTheDocument()
     expect(screen.getAllByText('Storage Files').length).toBeGreaterThan(0)
     expect(screen.getByText('/tmp/openclaw/memory')).toBeInTheDocument()
@@ -130,7 +223,7 @@ describe('MemoryPage', () => {
 
     fireEvent.change(screen.getByPlaceholderText('Agent ID (optional)'), { target: { value: 'main' } })
     fireEvent.change(screen.getByPlaceholderText('Search memories...'), { target: { value: 'semantic cache' } })
-    fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[1]!)
 
     await waitFor(() => {
       expect(mockOpenclawMemorySearch).toHaveBeenCalledWith('semantic cache', {
@@ -150,7 +243,7 @@ describe('MemoryPage', () => {
     expect(await screen.findByRole('heading', { name: 'Memory Management' })).toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('Search memories...'), { target: { value: 'missing note' } })
-    fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[1]!)
 
     await waitFor(() => {
       expect(mockOpenclawMemorySearch).toHaveBeenCalledWith('missing note', {
@@ -160,6 +253,65 @@ describe('MemoryPage', () => {
     })
 
     expect(await screen.findByText('No results')).toBeInTheDocument()
+  })
+
+  it('adds and searches managed powermem memories', async () => {
+    mockManagedMemorySearch.mockResolvedValueOnce({
+      success: true,
+      data: [
+        {
+          memoryId: 'managed-1',
+          content: 'Alice prefers espresso after lunch.',
+          userId: 'alice',
+          agentId: 'planner',
+          metadata: {},
+          score: 0.9942,
+          createdAt: '2026-04-12T17:00:00.000Z',
+          updatedAt: '2026-04-12T17:00:00.000Z',
+        },
+      ],
+    })
+
+    render(<MemoryPage />)
+
+    expect(await screen.findByText('powermem foundation')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText('User ID for managed memory (optional)'), {
+      target: { value: 'alice' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Agent ID for managed memory (optional)'), {
+      target: { value: 'planner' },
+    })
+    fireEvent.change(
+      screen.getByPlaceholderText('Store a stable fact, preference, or reusable note in managed powermem memory...'),
+      { target: { value: 'Alice prefers espresso after lunch.' } },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Add memory' }))
+
+    await waitFor(() => {
+      expect(mockAddManagedMemory).toHaveBeenCalledWith({
+        content: 'Alice prefers espresso after lunch.',
+        userId: 'alice',
+        agentId: 'planner',
+      })
+    })
+    expect(await screen.findByText('Managed powermem memory saved.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText('Search managed powermem memories...'), {
+      target: { value: 'espresso lunch' },
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0])
+
+    await waitFor(() => {
+      expect(mockManagedMemorySearch).toHaveBeenCalledWith('espresso lunch', {
+        userId: 'alice',
+        agentId: 'planner',
+        limit: 12,
+      })
+    })
+
+    expect(await screen.findByText('Managed search results')).toBeInTheDocument()
+    expect(screen.getByText('score: 0.994')).toBeInTheDocument()
   })
 
   it('retries after a status failure', async () => {
@@ -280,5 +432,87 @@ describe('MemoryPage', () => {
       expect(mockDeleteOpenclawMemoryFile).toHaveBeenCalledWith('main.sqlite')
     })
     expect(await screen.findByText('No memory files found yet')).toBeInTheDocument()
+  })
+
+  it('deletes a managed memory entry from the recent list', async () => {
+    mockManagedMemoryList
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          memories: [
+            {
+              id: 'managed-1',
+              memoryId: 'managed-1',
+              content: 'Alice prefers espresso after lunch.',
+              userId: 'alice',
+              agentId: 'planner',
+              metadata: {},
+              createdAt: '2026-04-12T17:00:00.000Z',
+              updatedAt: '2026-04-12T17:00:00.000Z',
+              accessCount: 0,
+            },
+          ],
+          total: 1,
+          limit: 8,
+          offset: 0,
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          memories: [],
+          total: 0,
+          limit: 8,
+          offset: 0,
+        },
+      })
+
+    render(<MemoryPage />)
+
+    expect(await screen.findByText('Recent managed memories')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete managed-1' }))
+
+    await waitFor(() => {
+      expect(mockDeleteManagedMemory).toHaveBeenCalledWith('managed-1')
+    })
+    expect(await screen.findByText('No managed memories stored yet.')).toBeInTheDocument()
+  })
+
+  it('shows an error when a managed memory delete becomes stale', async () => {
+    mockDeleteManagedMemory.mockResolvedValueOnce({
+      success: true,
+      data: { deleted: false },
+    })
+
+    render(<MemoryPage />)
+
+    expect(await screen.findByText('Recent managed memories')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete managed-1' }))
+
+    await waitFor(() => {
+      expect(mockDeleteManagedMemory).toHaveBeenCalledWith('managed-1')
+    })
+    expect(await screen.findByText('That managed memory was already removed.')).toBeInTheDocument()
+  })
+
+  it('shows a neutral desktop placeholder instead of a managed-memory error', async () => {
+    mockGetIsTauri.mockReturnValue(true)
+    mockManagedMemoryStatus.mockResolvedValueOnce({
+      success: false,
+      error: 'Managed powermem memory is available in web/backend mode first.',
+    })
+    mockManagedMemoryStats.mockResolvedValueOnce({
+      success: false,
+      error: 'Managed powermem memory is available in web/backend mode first.',
+    })
+    mockManagedMemoryList.mockResolvedValueOnce({
+      success: false,
+      error: 'Managed powermem memory is available in web/backend mode first.',
+    })
+
+    render(<MemoryPage />)
+
+    expect(await screen.findByText('Managed powermem memory will arrive in desktop mode in a later PR. Native OpenClaw memory tools below remain available now.')).toBeInTheDocument()
+    expect(screen.queryByText('Managed powermem memory is available in web/backend mode first.')).not.toBeInTheDocument()
   })
 })
