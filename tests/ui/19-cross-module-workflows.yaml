@@ -2,6 +2,7 @@ suite: cross-module-workflows
 name: 跨模块主流程
 description: |
   验证跨模块的真实使用路径，而不是单页静态渲染：
+  0. 已完成 profile 在桌面壳内直接进入主界面，不误回退到 setup
   1. onboarding → 模型 → 网关 → OpenClaw WebUI 首次对话
   2. 通道配置 → 上下文日志排障
   3. 技能 / 插件 / MCP 在 ClawMaster 中变更后，于 OpenClaw WebUI 生效
@@ -14,6 +15,25 @@ preconditions:
 viewport: { width: 1440, height: 960 }
 
 cases:
+  - id: flow-00
+    name: 已完成 profile 在桌面壳内直接进入主界面
+    preconditions:
+      - 当前 host 上 `openclaw --version` 可正常返回
+      - 当前 profile 已存在 openclaw.json，且至少配置了一个 provider 与默认模型
+      - 若验证桌面版，必须从原生 Tauri 壳启动而非纯浏览器 URL
+    steps:
+      - action: navigate
+        url: "{BASE_URL}"
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: flow-desktop-ready-shell
+    assertions:
+      - 应直接进入主界面或概览页，而不是安装向导
+      - 页面中显示的 OpenClaw 版本与 host `openclaw --version` 一致
+      - 页面中显示的 config path 指向当前 profile，而非空路径或默认错误路径
+      - 不允许出现"未安装"与实际 host 状态矛盾的 setup 卡片
+
   - id: flow-01
     name: Onboarding 到模型配置完成首个可用 provider
     preconditions:

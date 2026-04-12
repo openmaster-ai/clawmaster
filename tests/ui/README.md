@@ -109,6 +109,11 @@ page.screenshot({ path: '/tmp/observe-refreshed.png' })
 - No 500 errors in browser console (`page.evaluate(() => performance.getEntriesByType('resource').filter(r => r.name.includes('api') && r.responseStatus >= 500))`)
 - Responsive check: `page.setViewportSize({ width: 375, height: 812 })` + screenshot
 
+**Extra checks for runtime-sensitive flows:**
+- If the profile is already configured, verify the app lands in the main shell rather than setup/onboarding.
+- Compare the UI-reported OpenClaw version and config path against the real host output of `openclaw --version` and the active profile path.
+- For desktop verification, treat any native shell that silently falls back to browser `/api` behavior as a regression even if the page still renders.
+
 **When to run:**
 - After any UI component change
 - After i18n key additions/modifications
