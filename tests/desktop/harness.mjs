@@ -17,6 +17,7 @@ const APP_READY_TIMEOUT_MS = 45_000
 const MAC_LAUNCH_SMOKE_MS = 5_000
 const CLEANUP_TIMEOUT_MS = 10_000
 const NAVIGATION_TIMEOUT_MS = 15_000
+const CAPABILITIES_TITLE_PATTERN = /(Capability Center|Assistant Capabilities|能力中心|助手能力|機能センター|アシスタント機能)/
 const ARTIFACT_DIR = process.env.CLAWMASTER_DESKTOP_ARTIFACT_DIR
   ? path.resolve(process.env.CLAWMASTER_DESKTOP_ARTIFACT_DIR)
   : path.join(os.tmpdir(), 'clawmaster-desktop-artifacts')
@@ -599,7 +600,7 @@ async function runWebdriverSmoke(binaryPath) {
         query: 'verify',
         expectedPath: '/capabilities',
         expectedHash: '#capability-runtime',
-        expectedTitle: /(Capability Center|能力中心|機能センター)/,
+        expectedTitle: CAPABILITIES_TITLE_PATTERN,
         expectedAnchorId: 'capability-runtime',
       })
       setStep('opening gateway from sidebar')
@@ -654,7 +655,7 @@ async function runWebdriverSmoke(binaryPath) {
         query: 'verify',
         expectedPath: '/capabilities',
         expectedHash: '#capability-runtime',
-        expectedTitle: /(Capability Center|能力中心|機能センター)/,
+        expectedTitle: CAPABILITIES_TITLE_PATTERN,
         expectedAnchorId: 'capability-runtime',
       })
       setStep('opening gateway from sidebar after setup continuation')
