@@ -131,7 +131,12 @@ Local verification:
 ```bash
 npm test
 npm run build
+npm run test:desktop
 ```
+
+`npm run test:desktop` behaves differently by platform:
+- macOS: real Tauri build + launch smoke
+- Linux / Windows: native desktop WebDriver smoke
 
 What the repository CI covers:
 - TypeScript check and unit tests

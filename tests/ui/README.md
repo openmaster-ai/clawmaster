@@ -70,6 +70,16 @@ cases:
 | Cypress | E2E 测试 |
 | 手动 | 截图对照检查 |
 
+## Native Desktop E2E Track
+
+桌面原生 E2E 单独跟踪于 [#29](https://github.com/clawmaster-ai/clawmaster/issues/29)，规划文档见 [DESKTOP_E2E_ROLLOUT.md](/Users/haili/workspaces/clawmaster/tests/ui/DESKTOP_E2E_ROLLOUT.md)。
+
+当前建议：
+- 日常 UI 改动继续优先使用 `dev-browser` + YAML 描述流做快速验证
+- Linux / Windows 的 Tauri 原生冒烟覆盖单独建设，不与浏览器描述流混用
+- 在原生 E2E 落地前，发布验证仍以 `19-cross-module-workflows.yaml` 为主
+- 本地 macOS 开发机可先运行 `npm run test:desktop`，执行真实 Tauri 构建 + 启动冒烟
+
 ## dev-browser Quick Verification (Recommended)
 
 During development, use headless Playwright via `dev-browser` for rapid visual + functional checks:
@@ -98,6 +108,11 @@ page.screenshot({ path: '/tmp/observe-refreshed.png' })
 - Text extraction shows expected content (no missing i18n keys like `mcp.title`)
 - No 500 errors in browser console (`page.evaluate(() => performance.getEntriesByType('resource').filter(r => r.name.includes('api') && r.responseStatus >= 500))`)
 - Responsive check: `page.setViewportSize({ width: 375, height: 812 })` + screenshot
+
+**Extra checks for runtime-sensitive flows:**
+- If the profile is already configured, verify the app lands in the main shell rather than setup/onboarding.
+- Compare the UI-reported OpenClaw version and config path against the real host output of `openclaw --version` and the active profile path.
+- For desktop verification, treat any native shell that silently falls back to browser `/api` behavior as a regression even if the page still renders.
 
 **When to run:**
 - After any UI component change

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import type { SystemInfo } from '@/lib/types'
 import { webFetch } from '@/shared/adapters/webHttp'
+import { isTauri as isDesktopTauri } from '@/shared/adapters/platform'
 
 interface StartupDetectorProps {
   onDetected: (info: SystemInfo) => void
@@ -11,7 +12,7 @@ interface StartupDetectorProps {
 }
 
 async function invokeTauri<T>(cmd: string, args?: Record<string, any>): Promise<T> {
-  if (typeof window !== 'undefined' && '__TAURI__' in window) {
+  if (isDesktopTauri()) {
     const { invoke } = await import('@tauri-apps/api/core')
     return invoke(cmd, args)
   }
@@ -36,7 +37,7 @@ export default function StartupDetector({ onDetected, onNewInstall, onError }: S
   const [isTauriDetected, setIsTauriDetected] = useState<boolean | null>(null)
 
   useEffect(() => {
-    const inTauri = typeof window !== 'undefined' && '__TAURI__' in window
+    const inTauri = isDesktopTauri()
     setIsTauriDetected(inTauri)
     detect()
   }, [])
@@ -46,7 +47,7 @@ export default function StartupDetector({ onDetected, onNewInstall, onError }: S
       setMessage(t('startup.detecting'))
       setStatus('checking')
 
-      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+      if (isDesktopTauri()) {
         setMessage(t('startup.detectingTauri'))
         const info = await detectTauri()
         setSystemInfo(info)

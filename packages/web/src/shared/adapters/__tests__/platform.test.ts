@@ -1,13 +1,26 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { detectCommandVersion, isTauri } from '../platform'
 
 // Mock the web fetch path that execCommand uses internally
 vi.stubGlobal('fetch', vi.fn())
 
 describe('platform utilities', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
   describe('isTauri', () => {
     it('returns false in test environment', () => {
       expect(isTauri()).toBe(false)
+    })
+
+    it('detects tauri v2 internals without global __TAURI__', () => {
+      vi.stubGlobal('window', {
+        __TAURI_INTERNALS__: {},
+      })
+
+      expect(isTauri()).toBe(true)
     })
   })
 

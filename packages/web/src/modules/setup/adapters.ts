@@ -9,7 +9,7 @@
 import { execCommand } from '@/shared/adapters/platform'
 import { startGatewayResult, getGatewayStatusResult } from '@/shared/adapters/gateway'
 import { setConfigResult } from '@/shared/adapters/openclaw'
-import { probeHttpStatusResult } from '@/shared/adapters/system'
+import { detectSystemResult, probeHttpStatusResult } from '@/shared/adapters/system'
 import {
   CAPABILITIES,
   PROVIDERS,
@@ -168,9 +168,28 @@ export const realSetupAdapter: SetupAdapter = {
   onboarding: realOnboardingAdapter,
 
   async detectCapabilities(onUpdate) {
+    const systemResult = await detectSystemResult()
+    const detectedOpenclaw = systemResult.success ? systemResult.data?.openclaw : null
+    const detectedOpenclawInstalled = Boolean(detectedOpenclaw?.installed)
+    const detectedOpenclawVersion = detectedOpenclaw?.version?.trim() || undefined
+
     return Promise.all(
       CAPABILITIES.map(async (cap) => {
         onUpdate({ id: cap.id, name: cap.name, status: 'checking' })
+
+        if (
+          (cap.id === 'engine' || cap.id === 'memory' || cap.id === 'agent') &&
+          detectedOpenclawInstalled
+        ) {
+          const status: CapabilityStatus = {
+            id: cap.id,
+            name: cap.name,
+            status: 'installed',
+            version: detectedOpenclawVersion,
+          }
+          onUpdate(status)
+          return status
+        }
 
         try {
           const status = await execCommand(cap.detectCmd, cap.detectArgs).then((output) => {

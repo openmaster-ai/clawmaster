@@ -176,8 +176,10 @@ describe('CapabilitiesPage', () => {
     renderPage()
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Assistant Capabilities' })).toBeInTheDocument()
-    expect(screen.getByText('0 active entries across 3 configured systems')).toBeInTheDocument()
-    expect(screen.getByText('4 areas need review')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('0 active entries across 3 configured systems')).toBeInTheDocument()
+      expect(screen.getByText('4 areas need review')).toBeInTheDocument()
+    })
   })
 
   it('keeps last successful summaries visible after a refresh error', async () => {

@@ -14,12 +14,13 @@ vi.mock('@/shared/adapters/openclaw', () => ({
 }))
 
 vi.mock('@/shared/adapters/system', () => ({
+  detectSystemResult: vi.fn(),
   probeHttpStatusResult: vi.fn(),
 }))
 
 import { execCommand } from '@/shared/adapters/platform'
 import { setConfigResult } from '@/shared/adapters/openclaw'
-import { probeHttpStatusResult } from '@/shared/adapters/system'
+import { detectSystemResult, probeHttpStatusResult } from '@/shared/adapters/system'
 import { realSetupAdapter } from '../adapters'
 import type { InstallProgress } from '../types'
 
@@ -27,7 +28,13 @@ describe('realSetupAdapter', () => {
   beforeEach(() => {
     vi.mocked(execCommand).mockReset()
     vi.mocked(setConfigResult).mockReset()
+    vi.mocked(detectSystemResult).mockReset()
     vi.mocked(probeHttpStatusResult).mockReset()
+    vi.mocked(detectSystemResult).mockResolvedValue({
+      success: false,
+      data: null,
+      error: 'unavailable',
+    })
   })
 
   it('throws when a capability install fails', async () => {
@@ -62,6 +69,43 @@ describe('realSetupAdapter', () => {
       id: 'memory',
       status: 'installed',
       version: '2026.3.11',
+    })
+  })
+
+  it('uses detectSystem as the source of truth for engine readiness', async () => {
+    vi.mocked(detectSystemResult).mockResolvedValue({
+      success: true,
+      data: {
+        openclaw: {
+          installed: true,
+          version: '2026.4.2',
+        },
+      },
+      error: null,
+    } as any)
+    vi.mocked(execCommand).mockImplementation(async (cmd) => {
+      if (cmd === 'openclaw') {
+        throw new Error('tauri bridge probe failed')
+      }
+      throw new Error('missing optional dependency')
+    })
+
+    const result = await realSetupAdapter.detectCapabilities(() => {})
+
+    expect(result.find((item) => item.id === 'engine')).toMatchObject({
+      id: 'engine',
+      status: 'installed',
+      version: '2026.4.2',
+    })
+    expect(result.find((item) => item.id === 'memory')).toMatchObject({
+      id: 'memory',
+      status: 'installed',
+      version: '2026.4.2',
+    })
+    expect(result.find((item) => item.id === 'agent')).toMatchObject({
+      id: 'agent',
+      status: 'installed',
+      version: '2026.4.2',
     })
   })
 

@@ -30,6 +30,7 @@
     "tauri:build": "tauri build",
     "prepack": "npm run build:backend && npm run build",
     "test:cli": "node --test bin/*.test.mjs",
+    "test:desktop": "node --test tests/desktop/smoke.test.mjs",
     "test": "npm run test:cli && npm run test --workspace=@openclaw-manager/backend && npm run test --workspace=@openclaw-manager/web"
   },
   "keywords": [
@@ -42,7 +43,8 @@
   "license": "MIT",
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.1",
-    "js-yaml": "^4.1.1"
+    "js-yaml": "^4.1.1",
+    "selenium-webdriver": "^4.34.0"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

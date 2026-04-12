@@ -1,0 +1,134 @@
+name: Desktop Smoke
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22.13.0'
+  PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+  PKG_CONFIG_PATH_x86_64_unknown_linux_gnu: /usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+
+concurrency:
+  group: desktop-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Desktop Smoke (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            label: Linux
+            smokeMode: webdriver
+          - os: windows-latest
+            label: Windows
+            smokeMode: webdriver
+          - os: macos-14
+            label: macOS
+            smokeMode: launch
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: desktop-smoke-${{ runner.os }}
+
+      - name: Install Linux desktop test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            webkit2gtk-driver \
+            xvfb
+
+      - run: npm ci
+
+      - name: Install OpenClaw CLI
+        run: npm install -g openclaw
+
+      - name: Add npm global bin to PATH
+        if: runner.os != 'Windows'
+        run: echo "$(npm config get prefix)/bin" >> "$GITHUB_PATH"
+
+      - name: Add npm global bin to PATH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $prefix = npm config get prefix
+          $prefix | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install tauri-driver
+        if: matrix.smokeMode == 'webdriver'
+        run: cargo install tauri-driver --locked
+
+      - name: Install matching Edge WebDriver
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool --locked
+          $driverDir = Join-Path $env:RUNNER_TEMP 'msedgedriver'
+          New-Item -ItemType Directory -Force -Path $driverDir | Out-Null
+          Push-Location $driverDir
+          msedgedriver-tool
+          Pop-Location
+          $driverDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Run desktop smoke
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:desktop
+        env:
+          CLAWMASTER_DESKTOP_ARTIFACT_DIR: ${{ runner.temp }}/clawmaster-desktop-artifacts
+          CLAWMASTER_DESKTOP_SEED_PROFILE: '1'
+
+      - name: Run desktop smoke
+        if: runner.os == 'Windows'
+        run: npm run test:desktop
+        env:
+          CLAWMASTER_DESKTOP_ARTIFACT_DIR: ${{ runner.temp }}/clawmaster-desktop-artifacts
+          CLAWMASTER_DESKTOP_SEED_PROFILE: '1'
+
+      - name: Run desktop smoke
+        if: runner.os == 'macOS'
+        run: npm run test:desktop
+        env:
+          CLAWMASTER_DESKTOP_SMOKE_MODE: launch
+          CLAWMASTER_DESKTOP_ARTIFACT_DIR: ${{ runner.temp }}/clawmaster-desktop-artifacts
+          CLAWMASTER_DESKTOP_SEED_PROFILE: '1'
+
+      - name: Upload desktop smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-smoke-${{ matrix.label }}
+          path: ${{ runner.temp }}/clawmaster-desktop-artifacts
+          if-no-files-found: ignore

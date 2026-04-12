@@ -26,7 +26,25 @@ cases:
       - 3 列网格：Node.js、npm、OpenClaw
       - 已安装的显示绿色版本号
       - 未安装的显示红色"未安装"
+      - OpenClaw 卡片中的版本、配置路径与当前实际 host profile 一致，而不是回退到空状态
       - 无 JS 错误（无"Cannot read""undefined"文字）
+
+  - id: dash-01b
+    name: 已完成 profile 不应误回到安装向导
+    preconditions:
+      - 当前 profile 已存在 openclaw.json，且至少配置了一个 provider 与默认模型
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/"
+      - action: wait
+        duration: 2500ms
+      - action: screenshot
+        name: dashboard-ready-profile
+    assertions:
+      - 应直接进入主界面 Layout，而不是显示安装向导
+      - 页面不应出现"核心引擎未安装""安装核心引擎""进入管理大师"这类 setup copy
+      - 概览页的 OpenClaw 卡片显示真实版本号与配置路径
+      - 若当前 shell 执行 `openclaw --version` 成功，页面不得把 OpenClaw 标为未安装
 
   - id: dash-02
     name: 网关状态卡片

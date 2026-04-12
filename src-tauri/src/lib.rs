@@ -205,6 +205,13 @@ struct OpenclawConfigResolution {
 /// GUI processes (especially when launched from Finder on macOS) often lack nvm/fnm global bins in PATH,
 /// so `openclaw` may differ from Terminal or be missing. Resolve via login shell `command -v openclaw`.
 fn openclaw_executable_path() -> PathBuf {
+    if let Some(override_path) = std::env::var_os("CLAWMASTER_OPENCLAW_BIN") {
+        let path = PathBuf::from(override_path);
+        if path.exists() {
+            return path;
+        }
+    }
+
     OPENCLAW_EXE
         .get_or_init(|| {
             try_resolve_openclaw_via_login_shell().unwrap_or_else(|| PathBuf::from("openclaw"))
@@ -799,11 +806,14 @@ fn normalize_ollama_version(raw: &str) -> String {
 fn host_ollama_candidates() -> Vec<PathBuf> {
     let mut candidates = vec![resolve_system_command_path("ollama")];
     if let Some(home_dir) = dirs::home_dir() {
-        let local_bin = home_dir.join(".local").join("bin").join(if cfg!(target_os = "windows") {
-            "ollama.exe"
-        } else {
-            "ollama"
-        });
+        let local_bin = home_dir
+            .join(".local")
+            .join("bin")
+            .join(if cfg!(target_os = "windows") {
+                "ollama.exe"
+            } else {
+                "ollama"
+            });
         if !candidates.iter().any(|candidate| candidate == &local_bin) {
             candidates.push(local_bin);
         }
@@ -1188,7 +1198,10 @@ fn resolve_ollama_installation_wsl(distro: &str) -> Result<(String, String), Str
             candidates.push(resolved.to_string());
         }
     }
-    let local_bin = format!("{}/.local/bin/ollama", get_wsl_home_dir(distro).trim_end_matches('/'));
+    let local_bin = format!(
+        "{}/.local/bin/ollama",
+        get_wsl_home_dir(distro).trim_end_matches('/')
+    );
     if !candidates.iter().any(|candidate| candidate == &local_bin) {
         candidates.push(local_bin);
     }
@@ -1486,10 +1499,8 @@ fn resolve_local_data_status(
             };
         }
 
-        let data_root = clawmaster_data_root_posix(
-            profile_selection,
-            _wsl_home_dir.unwrap_or("/home"),
-        );
+        let data_root =
+            clawmaster_data_root_posix(profile_selection, _wsl_home_dir.unwrap_or("/home"));
         return local_data_status_for_root(
             "wsl2",
             profile_key,
@@ -1514,7 +1525,12 @@ fn resolve_local_data_status(
         &target_arch,
         node_installed,
         node_version,
-        |base, child| PathBuf::from(base).join(child).to_string_lossy().to_string(),
+        |base, child| {
+            PathBuf::from(base)
+                .join(child)
+                .to_string_lossy()
+                .to_string()
+        },
     )
 }
 
@@ -2125,8 +2141,7 @@ mod tests {
         local_data_profile_key, normalize_clawmaster_runtime_selection,
         normalize_local_data_target_platform, parse_node_major, parse_wsl_list_verbose,
         resolve_config_path_from_candidates, resolve_local_data_status,
-        resolve_selected_wsl_distro_from_list, supports_seekdb_embedded,
-        OpenclawProfileSelection,
+        resolve_selected_wsl_distro_from_list, supports_seekdb_embedded, OpenclawProfileSelection,
     };
     use std::fs;
     use std::path::Path;
@@ -2734,6 +2749,41 @@ fn get_config() -> Result<OpenClawConfig, String> {
         serde_json::from_str(&content).map_err(|e| cmd_err_d("CONFIG_PARSE_FAILED", e))?;
 
     Ok(OpenClawConfig { data })
+}
+
+#[tauri::command]
+fn desktop_smoke_diagnostics() -> Result<serde_json::Value, String> {
+    let config_path = get_config_path();
+    let cwd = std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .to_string_lossy()
+        .to_string();
+    let home_dir = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .to_string_lossy()
+        .to_string();
+    let openclaw_bin = openclaw_executable_path().to_string_lossy().to_string();
+    let env_path = std::env::var("PATH").unwrap_or_default();
+    let path_head = env_path
+        .split(if cfg!(target_os = "windows") {
+            ';'
+        } else {
+            ':'
+        })
+        .take(12)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    Ok(serde_json::json!({
+        "cwd": cwd,
+        "homeDir": home_dir,
+        "envHome": std::env::var("HOME").unwrap_or_default(),
+        "envUserProfile": std::env::var("USERPROFILE").unwrap_or_default(),
+        "pathHead": path_head,
+        "openclawBin": openclaw_bin,
+        "configPath": config_path.to_string_lossy().to_string(),
+        "configExists": config_path.exists(),
+    }))
 }
 
 // Save openclaw.json
@@ -3503,10 +3553,16 @@ fn read_runtime_text_file(path_input: String) -> Result<RuntimeTextFileDto, Stri
 }
 
 #[tauri::command]
-fn read_required_runtime_text_file(path_input: String) -> Result<RequiredRuntimeTextFileDto, String> {
+fn read_required_runtime_text_file(
+    path_input: String,
+) -> Result<RequiredRuntimeTextFileDto, String> {
     let path = resolve_runtime_input_path(&path_input)?;
-    let content = read_active_openclaw_text_file(&path)?
-        .ok_or_else(|| cmd_err_p("RUNTIME_FILE_NOT_FOUND", serde_json::json!({ "path": path.to_string_lossy() })))?;
+    let content = read_active_openclaw_text_file(&path)?.ok_or_else(|| {
+        cmd_err_p(
+            "RUNTIME_FILE_NOT_FOUND",
+            serde_json::json!({ "path": path.to_string_lossy() }),
+        )
+    })?;
     Ok(RequiredRuntimeTextFileDto {
         path: path.to_string_lossy().to_string(),
         content,
@@ -3528,7 +3584,12 @@ fn list_mcp_import_candidates() -> Result<Vec<McpImportCandidateDto>, String> {
         ("vscode", "json", Some(".vscode/mcp.json"), None),
         ("claude-user", "json", None, Some(".claude.json")),
         ("codex-user", "toml", None, Some(".codex/config.toml")),
-        ("copilot-user", "json", None, Some(".copilot/mcp-config.json")),
+        (
+            "copilot-user",
+            "json",
+            None,
+            Some(".copilot/mcp-config.json"),
+        ),
     ];
 
     let mut out = Vec::new();
@@ -3806,7 +3867,10 @@ fn install_ollama_host() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         let installer_path = std::env::temp_dir().join("OllamaSetup.exe");
-        download_file_via_curl("https://ollama.com/download/OllamaSetup.exe", &installer_path)?;
+        download_file_via_curl(
+            "https://ollama.com/download/OllamaSetup.exe",
+            &installer_path,
+        )?;
         let output = Command::new(&installer_path)
             .args(["/SILENT", "/NORESTART"])
             .stdout(Stdio::piped())
@@ -3937,7 +4001,10 @@ fn start_ollama() -> Result<String, String> {
         let (bin, _version) = resolve_ollama_installation_wsl(&distro)?;
         let output = run_wsl_shell(
             &distro,
-            &format!("nohup {} serve >/dev/null 2>&1 &", shell_escape_posix_arg(&bin)),
+            &format!(
+                "nohup {} serve >/dev/null 2>&1 &",
+                shell_escape_posix_arg(&bin)
+            ),
             None,
         )?;
         if output.code == 0 {
@@ -4084,6 +4151,7 @@ pub fn run() {
             stop_gateway,
             restart_gateway,
             get_config,
+            desktop_smoke_diagnostics,
             save_config,
             reset_openclaw_config,
             save_openclaw_profile,

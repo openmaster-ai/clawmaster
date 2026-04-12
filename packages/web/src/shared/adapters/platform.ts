@@ -9,7 +9,12 @@ import { webFetch } from '@/shared/adapters/webHttp'
 
 /** 是否运行在 Tauri 桌面环境 */
 export function isTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI__' in window
+  if (typeof window === 'undefined') return false
+  const candidate = window as Window & {
+    __TAURI__?: unknown
+    __TAURI_INTERNALS__?: unknown
+  }
+  return typeof candidate.__TAURI_INTERNALS__ === 'object' || typeof candidate.__TAURI__ === 'object'
 }
 
 /** Alias for PR #2 compatibility */
