@@ -746,7 +746,7 @@ async function readLocation(driver) {
 }
 
 async function readPageTitle(driver) {
-  const selectors = ['.app-topbar-title', '.page-header .page-title', '.fullscreen-shell h1']
+  const selectors = ['.app-topbar-title', 'h1.page-title', '.fullscreen-shell h1']
 
   await driver.wait(async () => {
     for (const selector of selectors) {
