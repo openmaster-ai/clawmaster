@@ -13,6 +13,7 @@ Current slice status:
 - Linux and Windows CI use native WebDriver smoke
 - macOS CI uses launch smoke only
 - Linux and Windows native smoke now covers command palette page jump, section deep-link, and sidebar navigation
+- desktop smoke artifacts are uploaded in CI for screenshots/logs
 
 ## Principles
 
@@ -44,6 +45,13 @@ Status:
 - verify Settings renders desktop diagnostics and runtime/local-data state
 - verify one destructive flow remains gated by confirmation
 - harden CI retries/timeouts and capture screenshots on failure
+
+Status:
+
+- partially implemented in `tests/desktop/harness.mjs` and `.github/workflows/desktop-e2e.yml`
+- Settings desktop Local Data read-only state is asserted
+- Danger Zone confirmation dialog is asserted
+- CI now uploads desktop smoke screenshots/logs as artifacts
 
 ## Suggested test matrix
 

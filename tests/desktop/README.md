@@ -9,8 +9,14 @@ The smoke accepts the two valid desktop entry states:
 When the main app shell is available, the native WebDriver smoke now validates:
 - command palette open and page jump to Settings
 - command palette section jump to `#settings-profile`
+- desktop-only Local Data read-only state in Settings
+- danger-zone confirmation gating in Settings
 - command palette async section jump to `#capability-runtime`
 - sidebar navigation from Capabilities to Gateway
+
+The GitHub Actions workflow uploads desktop smoke artifacts on every run:
+- Linux/Windows: screenshots plus metadata, and failure logs when needed
+- macOS: launch logs and metadata
 
 ## Modes
 

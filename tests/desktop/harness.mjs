@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
-import { access } from 'node:fs/promises'
+import { access, mkdir, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { Builder, By, Capabilities, Key, until } from 'selenium-webdriver'
 
@@ -17,6 +17,9 @@ const APP_READY_TIMEOUT_MS = 45_000
 const MAC_LAUNCH_SMOKE_MS = 5_000
 const CLEANUP_TIMEOUT_MS = 10_000
 const NAVIGATION_TIMEOUT_MS = 15_000
+const ARTIFACT_DIR = process.env.CLAWMASTER_DESKTOP_ARTIFACT_DIR
+  ? path.resolve(process.env.CLAWMASTER_DESKTOP_ARTIFACT_DIR)
+  : path.join(os.tmpdir(), 'clawmaster-desktop-artifacts')
 
 function resolveCommand(name) {
   return process.platform === 'win32' ? `${name}.cmd` : name
@@ -34,6 +37,11 @@ async function pathExists(targetPath) {
   } catch {
     return false
   }
+}
+
+async function ensureArtifactDir() {
+  await mkdir(ARTIFACT_DIR, { recursive: true })
+  return ARTIFACT_DIR
 }
 
 function runCommand(command, args, options = {}) {
@@ -200,7 +208,20 @@ async function runLaunchSmoke(binaryPath) {
       stdout: stdout.join(''),
       stderr: stderr.join(''),
     }
+  } catch (error) {
+    await persistTextArtifacts('desktop-launch-failure', {
+      mode: 'launch',
+      error: error instanceof Error ? error.message : String(error),
+      stdout: stdout.join(''),
+      stderr: stderr.join(''),
+    })
+    throw error
   } finally {
+    await persistTextArtifacts('desktop-launch-smoke', {
+      mode: 'launch',
+      stdout: stdout.join(''),
+      stderr: stderr.join(''),
+    })
     await terminateChild(child)
   }
 }
@@ -279,6 +300,8 @@ async function runWebdriverSmoke(binaryPath) {
         expectedTitle: /(Settings|设置|設定)/,
         expectedAnchorId: 'settings-profile',
       })
+      await verifyDesktopSettingsSurface(driver)
+      await verifyDangerZoneConfirmation(driver)
       await runPaletteNavigation(driver, {
         query: 'verify',
         expectedPath: '/capabilities',
@@ -292,10 +315,15 @@ async function runWebdriverSmoke(binaryPath) {
 
       const titleText = await readTopbarTitle(driver)
       assert.match(titleText, /(Gateway|网关|ゲートウェイ)/)
+      await captureDriverArtifacts(driver, 'desktop-shell-validated', {
+        mode: 'webdriver',
+        page: 'gateway',
+        title: titleText,
+      })
 
       return {
         mode: 'webdriver',
-        details: `validated desktop shell navigation via palette + sidebar (${titleText})`,
+        details: `validated desktop shell navigation, desktop settings, and danger gating (${titleText})`,
         logs: tauriDriver.getLogs(),
       }
     }
@@ -305,12 +333,25 @@ async function runWebdriverSmoke(binaryPath) {
       startupCopy,
       /(ClawMaster|OpenClaw|检测|Detect|Install|安装|Take over|接管)/,
     )
+    await captureDriverArtifacts(driver, 'desktop-startup-shell', {
+      mode: 'webdriver',
+      page: 'startup',
+    })
 
     return {
       mode: 'webdriver',
       details: 'reached desktop startup shell on a clean runtime',
       logs: tauriDriver.getLogs(),
     }
+  } catch (error) {
+    if (driver) {
+      await captureDriverArtifacts(driver, 'desktop-smoke-failure', {
+        mode: 'webdriver',
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    await persistDriverLogs(tauriDriver.getLogs(), 'desktop-smoke-failure')
+    throw error
   } finally {
     if (driver) {
       await settleWithin(driver.quit(), CLEANUP_TIMEOUT_MS)
@@ -341,6 +382,13 @@ async function readTopbarTitle(driver) {
     NAVIGATION_TIMEOUT_MS,
   )
   return title.getText()
+}
+
+async function scrollElementIntoView(driver, element) {
+  await driver.executeScript(
+    'arguments[0].scrollIntoView({ behavior: "auto", block: "center" })',
+    element,
+  )
 }
 
 async function waitForAnchorInView(driver, anchorId) {
@@ -386,6 +434,82 @@ async function clickSidebarLink(driver, href) {
     NAVIGATION_TIMEOUT_MS,
   )
   await link.click()
+}
+
+async function verifyDesktopSettingsSurface(driver) {
+  const localDataSection = await driver.wait(
+    until.elementLocated(By.id('settings-local-data')),
+    NAVIGATION_TIMEOUT_MS,
+  )
+  await scrollElementIntoView(driver, localDataSection)
+
+  const rebuildButton = await localDataSection.findElement(By.css('.button-secondary'))
+  const resetButton = await localDataSection.findElement(By.css('.button-danger'))
+  assert.equal(await rebuildButton.isEnabled(), false, 'desktop rebuild button should be disabled')
+  assert.equal(await resetButton.isEnabled(), false, 'desktop reset button should be disabled')
+
+  const sectionText = await localDataSection.getText()
+  assert.match(sectionText, /(Node|worker|桌面|desktop|デスクトップ)/)
+}
+
+async function verifyDangerZoneConfirmation(driver) {
+  const dangerSection = await driver.wait(
+    until.elementLocated(By.xpath("//section[contains(@class,'border-red-500/50')]")),
+    NAVIGATION_TIMEOUT_MS,
+  )
+  await scrollElementIntoView(driver, dangerSection)
+
+  const uninstallButton = await dangerSection.findElement(By.css('.button-danger'))
+  await uninstallButton.click()
+
+  const dialog = await driver.wait(
+    until.elementLocated(By.css('[role="dialog"][aria-modal="true"]')),
+    NAVIGATION_TIMEOUT_MS,
+  )
+  const dialogTitle = await dialog.findElement(By.css('#confirm-dialog-title')).getText()
+  assert.ok(dialogTitle.trim().length > 0, 'danger confirmation should render a title')
+
+  const cancelButton = await dialog.findElement(By.css('.button-secondary'))
+  await cancelButton.click()
+  await driver.wait(until.stalenessOf(dialog), NAVIGATION_TIMEOUT_MS)
+}
+
+async function captureDriverArtifacts(driver, name, metadata = {}) {
+  const artifactDir = await ensureArtifactDir()
+  const screenshot = await driver.takeScreenshot()
+  await writeFile(path.join(artifactDir, `${name}.png`), screenshot, 'base64')
+  await writeFile(
+    path.join(artifactDir, `${name}.json`),
+    JSON.stringify({
+      ...metadata,
+      capturedAt: new Date().toISOString(),
+    }, null, 2),
+    'utf8',
+  )
+}
+
+async function persistDriverLogs(logs, name) {
+  await persistTextArtifacts(`${name}-driver-logs`, {
+    stdout: logs.stdout ?? '',
+    stderr: logs.stderr ?? '',
+  })
+}
+
+async function persistTextArtifacts(name, payload) {
+  const artifactDir = await ensureArtifactDir()
+  await writeFile(
+    path.join(artifactDir, `${name}.log`),
+    [`[stdout]`, payload.stdout ?? '', '', `[stderr]`, payload.stderr ?? ''].join('\n'),
+    'utf8',
+  )
+  await writeFile(
+    path.join(artifactDir, `${name}.json`),
+    JSON.stringify({
+      ...payload,
+      capturedAt: new Date().toISOString(),
+    }, null, 2),
+    'utf8',
+  )
 }
 
 export async function runDesktopSmoke() {

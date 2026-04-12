@@ -92,13 +92,26 @@ jobs:
       - name: Run desktop smoke
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:desktop
+        env:
+          CLAWMASTER_DESKTOP_ARTIFACT_DIR: ${{ runner.temp }}/clawmaster-desktop-artifacts
 
       - name: Run desktop smoke
         if: runner.os == 'Windows'
         run: npm run test:desktop
+        env:
+          CLAWMASTER_DESKTOP_ARTIFACT_DIR: ${{ runner.temp }}/clawmaster-desktop-artifacts
 
       - name: Run desktop smoke
         if: runner.os == 'macOS'
         run: npm run test:desktop
         env:
           CLAWMASTER_DESKTOP_SMOKE_MODE: launch
+          CLAWMASTER_DESKTOP_ARTIFACT_DIR: ${{ runner.temp }}/clawmaster-desktop-artifacts
+
+      - name: Upload desktop smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-smoke-${{ matrix.label }}
+          path: ${{ runner.temp }}/clawmaster-desktop-artifacts
+          if-no-files-found: ignore
