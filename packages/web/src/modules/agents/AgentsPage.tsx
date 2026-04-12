@@ -2,12 +2,20 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { platform } from '@/adapters'
 import { platformResults } from '@/shared/adapters/platformResults'
+import { ActionBanner } from '@/shared/components/ActionBanner'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import type { OpenClawConfig } from '@/lib/types'
 
 export default function Agents() {
   const { t } = useTranslation()
   const [config, setConfig] = useState<OpenClawConfig | null>(null)
   const [loading, setLoading] = useState(true)
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createBusy, setCreateBusy] = useState(false)
+  const [newAgentId, setNewAgentId] = useState('')
+  const [newAgentName, setNewAgentName] = useState('')
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
@@ -26,25 +34,29 @@ export default function Agents() {
   }
 
   async function handleCreateAgent() {
-    const id = window.prompt(t('agents.enterAgentId'))
-    if (!id?.trim()) return
-    const name = window.prompt(t('agents.enterAgentName'), id) ?? id
+    const id = newAgentId.trim()
+    if (!id) return
+    const name = newAgentName.trim() || id
     const model = config?.agents?.defaults?.model?.primary ?? ''
+    setCreateBusy(true)
     const r = await platformResults.createAgent({ id: id.trim(), name, model })
     if (r.success) {
+      setCreateOpen(false)
+      setNewAgentId('')
+      setNewAgentName('')
       await loadData()
     } else {
-      alert(r.error ?? 'Failed to create agent')
+      setFeedback(r.error ?? 'Failed to create agent')
     }
+    setCreateBusy(false)
   }
 
   async function handleDeleteAgent(agentId: string) {
-    if (!window.confirm(t('agents.deleteConfirm', { id: agentId }))) return
     const r = await platformResults.deleteAgent(agentId)
     if (r.success) {
       await loadData()
     } else {
-      alert(r.error ?? 'Failed to delete agent')
+      setFeedback(r.error ?? 'Failed to delete agent')
     }
   }
 
@@ -57,6 +69,7 @@ export default function Agents() {
 
   return (
     <div className="page-shell page-shell-medium">
+      {feedback ? <ActionBanner tone="error" message={feedback} onDismiss={() => setFeedback(null)} /> : null}
       <div className="page-header">
         <div className="page-header-copy">
           <div className="page-header-meta">
@@ -64,7 +77,14 @@ export default function Agents() {
           </div>
           <h1 className="page-title">{t('agents.title')}</h1>
         </div>
-        <button className="button-primary" onClick={handleCreateAgent}>
+        <button
+          className="button-primary"
+          onClick={() => {
+            setCreateOpen(true)
+            setNewAgentId('')
+            setNewAgentName('')
+          }}
+        >
           {t('agents.createAgent')}
         </button>
       </div>
@@ -117,7 +137,7 @@ export default function Agents() {
               {agent.id !== 'main' && (
                 <button
                   className="button-danger px-3 py-1.5"
-                  onClick={() => handleDeleteAgent(agent.id)}
+                  onClick={() => setPendingDeleteId(agent.id)}
                 >
                   {t('common.delete')}
                 </button>
@@ -151,6 +171,54 @@ export default function Agents() {
       </div>
 
       <p className="text-xs text-muted-foreground">{t('agents.editConfigHint')}</p>
+      <ConfirmDialog
+        open={createOpen}
+        title={t('agents.createAgent')}
+        confirmLabel={t('common.save')}
+        busy={createBusy}
+        onCancel={() => {
+          if (createBusy) return
+          setCreateOpen(false)
+        }}
+        onConfirm={() => {
+          if (!newAgentId.trim()) return
+          void handleCreateAgent()
+        }}
+      >
+        <div className="grid gap-3">
+          <label className="grid gap-2">
+            <span className="control-label">{t('agents.enterAgentId')}</span>
+            <input
+              value={newAgentId}
+              onChange={(event) => {
+                setNewAgentId(event.target.value)
+                if (!newAgentName.trim()) setNewAgentName(event.target.value)
+              }}
+              className="control-input"
+            />
+          </label>
+          <label className="grid gap-2">
+            <span className="control-label">{t('agents.enterAgentName')}</span>
+            <input
+              value={newAgentName}
+              onChange={(event) => setNewAgentName(event.target.value)}
+              className="control-input"
+            />
+          </label>
+        </div>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={Boolean(pendingDeleteId)}
+        title={pendingDeleteId ? t('agents.deleteConfirm', { id: pendingDeleteId }) : ''}
+        tone="danger"
+        onCancel={() => setPendingDeleteId(null)}
+        onConfirm={() => {
+          if (!pendingDeleteId) return
+          const agentId = pendingDeleteId
+          setPendingDeleteId(null)
+          void handleDeleteAgent(agentId)
+        }}
+      />
     </div>
   )
 }

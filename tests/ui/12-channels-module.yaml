@@ -129,3 +129,48 @@ cases:
       - 确认后该通道从列表中移除
       - 取消则保持原状态
       - 移除后该通道类型出现在"添加新通道"区域
+
+  - id: ch-08
+    name: 推荐入口分组与重点通道优先
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/channels"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: channels-featured-groups
+    assertions:
+      - 页面顶部显示"推荐入口"
+      - 显示"国内团队协作"与"全球工作区与社区"两个分组
+      - 飞书、微信、Discord、Slack 被优先突出展示
+      - 每张推荐卡提供"开始配置"入口
+
+  - id: ch-09
+    name: 微信安装优先的扫码接入流程
+    steps:
+      - action: click
+        target: 微信推荐卡的"开始配置"按钮
+      - action: wait
+        duration: 800ms
+      - action: screenshot
+        name: channels-wechat-qr-flow
+    assertions:
+      - 不显示通用 token 表单
+      - 先显示微信插件安装状态
+      - 显示微信运行时依赖包名
+      - 显示扫码登录引导
+      - 安装完成后进入扫码等待态
+
+  - id: ch-10
+    name: 上下文排障日志弹层
+    steps:
+      - action: click
+        target: text("查看最近日志")
+      - action: wait
+        duration: 800ms
+      - action: screenshot
+        name: channels-contextual-logs
+    assertions:
+      - 打开"通道排障日志"弹层
+      - 日志内容聚焦当前通道相关问题
+      - 弹层支持关闭返回当前页面

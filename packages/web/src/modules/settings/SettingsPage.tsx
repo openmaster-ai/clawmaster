@@ -5,7 +5,10 @@ import { platformResults } from '@/shared/adapters/platformResults'
 import { isTauri } from '@/shared/adapters/platform'
 import { changeLanguage } from '@/i18n'
 import { useInstallTask } from '@/shared/hooks/useInstallTask'
+import { ActionBanner } from '@/shared/components/ActionBanner'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { InstallTask } from '@/shared/components/InstallTask'
+import { RecentLogsSheet } from '@/shared/components/RecentLogsSheet'
 import { CheckCircle2, AlertCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, FileText, Copy, FolderInput, Sparkles } from 'lucide-react'
 import type { SystemInfo } from '@/lib/types'
 import type { OpenclawNpmVersions } from '@/shared/adapters/npmOpenclaw'
@@ -43,6 +46,9 @@ export default function Settings() {
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
   const [profileMessage, setProfileMessage] = useState<string | null>(null)
+  const [logsOpen, setLogsOpen] = useState(false)
+  const [feedback, setFeedback] = useState<{ tone: 'info' | 'success' | 'error'; message: string } | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'reset' | 'uninstall' | null>(null)
 
   useEffect(() => {
     loadSystemInfo()
@@ -127,6 +133,9 @@ export default function Settings() {
 
   return (
     <div className="page-shell page-shell-narrow">
+      {feedback ? (
+        <ActionBanner tone={feedback.tone} message={feedback.message} onDismiss={() => setFeedback(null)} />
+      ) : null}
       <div className="page-header">
         <div className="page-header-copy">
           <h1 className="page-title">{t('settings.title')}</h1>
@@ -223,7 +232,7 @@ export default function Settings() {
         </section>
       )}
 
-      <section className="surface-card">
+      <section id="settings-profile" className="surface-card">
         <div className="section-heading">
           <div>
             <h3 className="section-title">{t('settings.profileTitle')}</h3>
@@ -442,42 +451,8 @@ export default function Settings() {
         </div>
       </section>
 
-      {/* 花费预算 */}
-      <section className="surface-card">
-        <div className="section-heading">
-          <h3 className="section-title">{t('settings.budget')}</h3>
-        </div>
-        <p className="text-sm text-muted-foreground mb-3">{t('settings.budgetDesc')}</p>
-        <div className="space-y-3">
-          {(['day', 'week', 'month'] as const).map((period) => {
-            const labelKeys = { day: 'settings.budgetDay', week: 'settings.budgetWeek', month: 'settings.budgetMonth' }
-            const key = `clawmaster-budget-${period}`
-            return (
-              <div key={period} className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
-                <label className="text-sm text-muted-foreground">{t(labelKeys[period])}:</label>
-                <div className="flex items-center gap-1">
-                  <span className="text-sm">$</span>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    placeholder={t('settings.budgetUnlimited')}
-                    defaultValue={localStorage.getItem(key) ?? ''}
-                    onChange={(e) => {
-                      if (e.target.value) localStorage.setItem(key, e.target.value)
-                      else localStorage.removeItem(key)
-                    }}
-                    className="control-input min-w-0 flex-1 px-2 py-1.5"
-                  />
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
       {/* 系统信息 */}
-      <section className="surface-card">
+      <section id="settings-system-info" className="surface-card">
         <div className="section-heading">
           <h3 className="section-title">{t('settings.systemInfo')}</h3>
         </div>
@@ -509,6 +484,19 @@ export default function Settings() {
         )}
       </section>
 
+      <section id="settings-logs" className="surface-card">
+        <div className="section-heading">
+          <div>
+            <h3 className="section-title">{t('logs.settingsTitle')}</h3>
+            <p className="section-subtitle">{t('logs.settingsDescription')}</p>
+          </div>
+        </div>
+        <button type="button" className="button-secondary" onClick={() => setLogsOpen(true)}>
+          <FileText className="h-4 w-4" />
+          {t('logs.openRecent')}
+        </button>
+      </section>
+
       {/* 更新 */}
       <UpdateSection currentVersion={systemInfo?.openclaw.version} installed={!!systemInfo?.openclaw.installed} onUpdated={loadSystemInfo} />
 
@@ -520,30 +508,13 @@ export default function Settings() {
         <div className="flex gap-3">
           <button
             className="button-secondary"
-            onClick={async () => {
-              if (!window.confirm(t('settings.resetConfigConfirm'))) return
-              const r = await platformResults.resetOpenclawConfig()
-              if (r.success) {
-                window.location.reload()
-              } else {
-                alert(r.error ?? 'Failed to reset config')
-              }
-            }}
+            onClick={() => setConfirmAction('reset')}
           >
             {t('settings.resetConfig')}
           </button>
           <button
             className="button-danger"
-            onClick={async () => {
-              if (!window.confirm(t('settings.uninstallConfirm'))) return
-              const r = await platformResults.uninstallOpenclawCli()
-              if (r.success) {
-                alert(t('settings.uninstallSuccess'))
-                window.location.reload()
-              } else {
-                alert(r.error ?? 'Failed to uninstall')
-              }
-            }}
+            onClick={() => setConfirmAction('uninstall')}
           >
             {t('settings.uninstallOpenClaw')}
           </button>
@@ -579,7 +550,6 @@ export default function Settings() {
               { name: 'OpenClaw', url: 'https://github.com/openclaw/openclaw', desc: t('settings.ack.openclaw') },
               { name: 'ClawProbe', url: 'https://github.com/openclaw/clawprobe', desc: t('settings.ack.clawprobe') },
               { name: 'ClawHub', url: 'https://clawhub.ai', desc: t('settings.ack.clawhub') },
-              { name: 'PowerMem', url: 'https://github.com/openclaw/powermem', desc: t('settings.ack.powermem') },
               { name: 'Tauri', url: 'https://tauri.app', desc: t('settings.ack.tauri') },
               { name: 'Ollama', url: 'https://ollama.com', desc: t('settings.ack.ollama') },
             ].map((p) => (
@@ -597,6 +567,50 @@ export default function Settings() {
           </div>
         </div>
       </section>
+
+      <RecentLogsSheet
+        open={logsOpen}
+        onClose={() => setLogsOpen(false)}
+        title={t('logs.settingsTitle')}
+        description={t('logs.settingsDescription')}
+        lines={200}
+        scope="all"
+      />
+      <ConfirmDialog
+        open={confirmAction === 'reset'}
+        title={t('settings.resetConfigConfirm')}
+        tone="danger"
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={() => {
+          setConfirmAction(null)
+          void (async () => {
+            const r = await platformResults.resetOpenclawConfig()
+            if (r.success) {
+              window.location.reload()
+            } else {
+              setFeedback({ tone: 'error', message: r.error ?? 'Failed to reset config' })
+            }
+          })()
+        }}
+      />
+      <ConfirmDialog
+        open={confirmAction === 'uninstall'}
+        title={t('settings.uninstallConfirm')}
+        tone="danger"
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={() => {
+          setConfirmAction(null)
+          void (async () => {
+            const r = await platformResults.uninstallOpenclawCli()
+            if (r.success) {
+              setFeedback({ tone: 'success', message: t('settings.uninstallSuccess') })
+              window.setTimeout(() => window.location.reload(), 400)
+            } else {
+              setFeedback({ tone: 'error', message: r.error ?? 'Failed to uninstall' })
+            }
+          })()
+        }}
+      />
     </div>
   )
 }

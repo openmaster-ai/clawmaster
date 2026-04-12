@@ -104,3 +104,37 @@ cases:
       - HTTP/SSE 模式显示 URL、请求头、环境变量
       - 表单布局使用 grid/flex，移动端会自然堆叠
       - 主按钮文案明确为“添加服务 / Add server”
+
+  - id: mcp-07
+    name: 推荐服务安装与启用进度反馈
+    preconditions:
+      - 当前选中的推荐服务尚未安装
+    steps:
+      - action: click
+        target: 推荐服务配置面板的主按钮
+      - action: observe
+        duration: 10000ms
+      - action: screenshot
+        name: mcp-install-progress
+    assertions:
+      - 主按钮进入 busy 状态，文案切换为安装中或连接中
+      - 面板显示步骤化进度或状态文案，而非静默等待
+      - 安装完成后服务进入“已接入服务”列表
+      - 服务状态显示为已启用
+      - 失败时在面板内显示错误信息与重试入口
+
+  - id: mcp-08
+    name: 启用后可在 OpenClaw WebUI 侧识别服务
+    preconditions:
+      - 至少一个 MCP 服务已通过管理页安装并启用
+      - OpenClaw WebUI 已启动且读取同一 profile
+    steps:
+      - action: observe
+        target: OpenClaw WebUI 的工具或 MCP 服务入口
+      - action: screenshot
+        name: mcp-openclaw-runtime
+    assertions:
+      - 刚启用的服务在 OpenClaw WebUI 中可见
+      - 服务名称与管理页中的 ID 或名称一致
+      - 如服务需要凭证，缺失凭证时会显示明确提示
+      - 禁用后刷新 OpenClaw WebUI，对应服务不再可用

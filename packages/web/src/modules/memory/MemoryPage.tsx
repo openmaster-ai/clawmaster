@@ -1,618 +1,553 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import type { TFunction } from 'i18next'
+import { useCallback, useMemo, useState } from 'react'
+import {
+  CheckCircle2,
+  Database,
+  FileJson,
+  FileText,
+  HardDrive,
+  LoaderCircle,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  Trash2,
+  Wrench,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { platformResults } from '@/adapters'
-import type { OpenclawMemoryStatusPayload, PowermemMemoryRow, PowermemMeta } from '@/lib/types'
+import type {
+  OpenclawMemoryFileEntry,
+  OpenclawMemoryFilesPayload,
+  OpenclawMemorySearchCapabilityPayload,
+  OpenclawMemoryStatusPayload,
+} from '@/lib/types'
+import { ActionBanner } from '@/shared/components/ActionBanner'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import type { OpenclawMemoryHit } from '@/shared/memoryOpenclawParse'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
-import type { AdapterResult } from '@/shared/adapters/types'
-import { fail, ok } from '@/shared/adapters/types'
-import type { PowermemBootstrapClientEvent } from '@/shared/adapters/memory'
-import { POWMEM_DEFAULT_ENV_META_SENTINEL } from '@/shared/powermemFromOpenclawConfig'
-import { getIsTauri } from '@/shared/adapters/platform'
 
-function needsManagedPowermemBootstrap(m: PowermemMeta): boolean {
-  return (
-    m.configured &&
-    m.enabled &&
-    m.mode === 'cli' &&
-    Boolean(m.managedRuntimeDir) &&
-    !m.managedRuntimeReady &&
-    !m.managedRuntimeDisabled
-  )
+interface NormalizedStatusEntry {
+  agentId: string
+  backend: string
+  dbPath?: string
+  workspaceDir?: string
+  dirty: boolean
+  totalFiles: number
 }
 
-/** Full PowerMem configuration template (database, LLM, embedding, HTTP server, …). */
-const POWERMEM_ENV_EXAMPLE_URL = 'https://github.com/oceanbase/powermem/blob/main/.env.example'
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
-function formatPowermemEnvErr(raw: string, t: TFunction): string {
-  const m = raw.match(/POWERMEM_[A-Z_]+/)
-  const code = m?.[0]
-  switch (code) {
-    case 'POWERMEM_ENV_HTTP_MODE':
-      return t('memory.powermemEnvHttpMode')
-    case 'POWERMEM_ENV_NO_PATH':
-      return t('memory.powermemEnvNoPath')
-    case 'POWERMEM_NOT_CONFIGURED':
-      return t('memory.powermemEnvNotConfigured')
-    case 'POWERMEM_PLUGIN_DISABLED':
-      return t('memory.powermemEnvPluginDisabled')
-    case 'POWERMEM_ENV_TOO_LARGE':
-      return t('memory.powermemEnvTooLarge')
+function normalizeStatusEntries(data: unknown): NormalizedStatusEntry[] {
+  if (!Array.isArray(data)) return []
+  const entries: NormalizedStatusEntry[] = []
+  for (const item of data) {
+    if (!isRecord(item)) continue
+    const status = isRecord(item.status) ? item.status : null
+    const scan = isRecord(item.scan) ? item.scan : null
+    const agentId = typeof item.agentId === 'string' && item.agentId.trim() ? item.agentId : 'main'
+    const backend = typeof status?.backend === 'string' && status.backend.trim() ? status.backend : 'unknown'
+    const dbPath = typeof status?.dbPath === 'string' ? status.dbPath : undefined
+    const workspaceDir = typeof status?.workspaceDir === 'string' ? status.workspaceDir : undefined
+    const dirty = Boolean(status?.dirty)
+    const totalFiles = typeof scan?.totalFiles === 'number' ? scan.totalFiles : 0
+    entries.push({ agentId, backend, dbPath, workspaceDir, dirty, totalFiles })
+  }
+  return entries
+}
+
+function formatBytes(size: number): string {
+  if (!Number.isFinite(size) || size < 1024) return `${size} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let value = size / 1024
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+function getFileKindLabel(entry: OpenclawMemoryFileEntry, t: (key: string) => string): string {
+  switch (entry.kind) {
+    case 'sqlite':
+      return t('memory.fileKindSqlite')
+    case 'journal':
+      return t('memory.fileKindJournal')
+    case 'json':
+      return t('memory.fileKindJson')
+    case 'text':
+      return t('memory.fileKindText')
     default:
-      return raw.trim() ? raw : t('memory.powermemEnvLoadFailed')
+      return t('memory.fileKindOther')
   }
 }
 
-function PowermemEnvEditorBlock() {
-  const { t } = useTranslation()
-  const [path, setPath] = useState('')
-  const [draft, setDraft] = useState('')
-  const [baseline, setBaseline] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [savedFlash, setSavedFlash] = useState(false)
-
-  const dirty = draft !== baseline
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    setErr(null)
-    const r = await platformResults.powermemEnvGet()
-    setLoading(false)
-    if (!r.success || !r.data) {
-      setErr(formatPowermemEnvErr(r.error ?? '', t))
-      return
-    }
-    setPath(r.data.path)
-    setDraft(r.data.content)
-    setBaseline(r.data.content)
-  }, [t])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  async function save() {
-    setSaving(true)
-    setErr(null)
-    const r = await platformResults.powermemEnvPut(draft)
-    setSaving(false)
-    if (!r.success) {
-      setErr(formatPowermemEnvErr(r.error ?? '', t))
-      return
-    }
-    setBaseline(draft)
-    setSavedFlash(true)
-    window.setTimeout(() => setSavedFlash(false), 2000)
-  }
-
-  return (
-    <div className="mt-4 pt-4 border-t border-border space-y-2">
-      <h4 className="text-sm font-medium text-foreground">{t('memory.powermemEnvEditorTitle')}</h4>
-      <p className="text-xs text-muted-foreground">{t('memory.powermemEnvEditorHint')}</p>
-      <p className="text-xs">
-        <a
-          href={POWERMEM_ENV_EXAMPLE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary underline"
-        >
-          {t('memory.powermemEnvTemplateLink')}
-        </a>
-        <span className="text-muted-foreground"> {t('memory.powermemEnvTemplateHint')}</span>
-      </p>
-      {path ? (
-        <p className="font-mono text-xs break-all text-muted-foreground">
-          <span className="text-muted-foreground">{t('memory.powermemEnvPathLabel')}</span> {path}
-        </p>
-      ) : null}
-      {loading ? (
-        <p className="text-xs text-muted-foreground">{t('memory.powermemEnvLoading')}</p>
-      ) : (
-        <>
-          {err ? <p className="text-xs text-red-500 whitespace-pre-wrap">{err}</p> : null}
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            spellCheck={false}
-            className="control-textarea min-h-[140px] text-xs font-mono"
-            aria-label={t('memory.powermemEnvEditorTitle')}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void load()}
-              disabled={loading || saving}
-              className="button-secondary px-3 py-1.5 text-xs disabled:opacity-50"
-            >
-              {t('memory.powermemEnvReload')}
-            </button>
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={!dirty || saving || loading}
-              className="button-primary px-3 py-1.5 text-xs disabled:opacity-50"
-            >
-              {saving ? t('memory.powermemEnvSaving') : t('memory.powermemEnvSave')}
-            </button>
-            {savedFlash ? (
-              <span className="text-xs text-green-600 dark:text-green-500">{t('memory.powermemEnvSaved')}</span>
-            ) : null}
-          </div>
-        </>
-      )}
-    </div>
-  )
+function getFileHint(entry: OpenclawMemoryFileEntry, t: (key: string) => string): string | null {
+  if (entry.kind === 'sqlite') return t('memory.primaryStoreHint')
+  if (entry.kind === 'journal') return t('memory.sidecarHint')
+  return null
 }
 
-function JsonPreview({ value }: { value: unknown }) {
-  const text =
-    value === undefined || value === null
-      ? ''
-      : typeof value === 'string'
-        ? value
-        : JSON.stringify(value, null, 2)
-  return (
-    <pre className="mono-note max-h-64 overflow-auto whitespace-pre-wrap">
-      {text || '—'}
-    </pre>
-  )
-}
-
-/** OpenClaw CLI `memory` — index + search only in this panel */
-function OpenclawMemoryPanel() {
-  const { t } = useTranslation()
-  const [ocAgent, setOcAgent] = useState('')
-  const [ocQuery, setOcQuery] = useState('')
-  const [ocHits, setOcHits] = useState<OpenclawMemoryHit[] | null>(null)
-  const [ocSearchLoading, setOcSearchLoading] = useState(false)
-  const [ocSearchErr, setOcSearchErr] = useState<string | null>(null)
-
-  const statusFetcher = useCallback(async () => platformResults.openclawMemoryStatus(), [])
-  const {
-    data: ocStatus,
-    loading: ocStatusLoading,
-    error: ocStatusErr,
-    refetch: refetchOcStatus,
-  } = useAdapterCall<OpenclawMemoryStatusPayload>(statusFetcher)
-
-  async function runOpenclawSearch() {
-    const q = ocQuery.trim()
-    if (!q) {
-      setOcHits([])
-      setOcSearchErr(null)
-      return
-    }
-    setOcSearchLoading(true)
-    setOcSearchErr(null)
-    const r = await platformResults.openclawMemorySearch(q, {
-      agent: ocAgent.trim() || undefined,
-      maxResults: 25,
-    })
-    setOcSearchLoading(false)
-    if (!r.success) {
-      setOcHits(null)
-      setOcSearchErr(r.error ?? t('memory.searchFailed'))
-      return
-    }
-    setOcHits(r.data ?? [])
-  }
-
-  return (
-    <div className="surface-card space-y-4">
-      <div className="border-b border-border pb-3">
-        <h3 className="text-base font-semibold">{t('memory.sectionOpenclaw')}</h3>
-        <p className="text-sm text-muted-foreground mt-1">{t('memory.openclawHelp')}</p>
-      </div>
-
-      {ocStatusLoading ? (
-        <p className="text-sm text-muted-foreground">{t('memory.statusLoading')}</p>
-      ) : ocStatusErr ? (
-        <div className="space-y-2">
-          <p className="text-sm text-red-500">{ocStatusErr}</p>
-          <button
-            type="button"
-            onClick={() => void refetchOcStatus()}
-            className="button-secondary px-3 py-1.5 text-sm"
-          >
-            {t('memory.retry')}
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            {t('memory.openclawExit', { code: ocStatus?.exitCode ?? '—' })}
-          </p>
-          <JsonPreview value={ocStatus?.data} />
-          {ocStatus?.stderr ? (
-            <p className="text-xs text-amber-600 whitespace-pre-wrap">{ocStatus.stderr}</p>
-          ) : null}
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <label className="text-xs font-medium text-muted-foreground">{t('memory.openclawSearchLabel')}</label>
-        <input
-          type="text"
-          placeholder={t('memory.agentPlaceholder')}
-          value={ocAgent}
-          onChange={(e) => setOcAgent(e.target.value)}
-          className="control-input"
-        />
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="text"
-            placeholder={t('memory.openclawSearchPlaceholder')}
-            value={ocQuery}
-            onChange={(e) => setOcQuery(e.target.value)}
-            className="control-input flex-1"
-          />
-          <button
-            type="button"
-            disabled={ocSearchLoading}
-            onClick={() => void runOpenclawSearch()}
-            className="button-primary shrink-0 disabled:opacity-50"
-          >
-            {ocSearchLoading ? t('memory.searching') : t('memory.search')}
-          </button>
-        </div>
-      </div>
-
-      {ocSearchErr ? <p className="text-sm text-red-500">{ocSearchErr}</p> : null}
-      {ocHits && ocHits.length > 0 ? (
-        <ul className="space-y-3">
-          {ocHits.map((h) => (
-            <li key={h.id} className="list-card bg-background/70 text-sm">
-              {h.score !== undefined && Number.isFinite(h.score) ? (
-                <span className="text-xs text-muted-foreground mr-2">score: {h.score.toFixed(3)}</span>
-              ) : null}
-              <p className="mt-1 whitespace-pre-wrap">{h.content}</p>
-              {h.path ? (
-                <p className="text-xs text-muted-foreground mt-1 font-mono">{h.path}</p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : ocHits && ocHits.length === 0 && ocQuery.trim() ? (
-        <p className="text-sm text-muted-foreground">{t('memory.noHits')}</p>
-      ) : null}
-    </div>
-  )
-}
-
-/** PowerMem plugin — separate storage from OpenClaw native memory */
-function PowermemMemoryPanel() {
-  const { t } = useTranslation()
-  const [pmQuery, setPmQuery] = useState('')
-  const [pmSearchRows, setPmSearchRows] = useState<PowermemMemoryRow[] | null>(null)
-  const [pmSearchLoading, setPmSearchLoading] = useState(false)
-  const [pmSearchErr, setPmSearchErr] = useState<string | null>(null)
-
-  const metaFetcher = useCallback(async () => platformResults.powermemMeta(), [])
-  const {
-    data: pmMeta,
-    loading: pmMetaLoading,
-    error: pmMetaErr,
-    refetch: refetchPmMeta,
-  } = useAdapterCall<PowermemMeta>(metaFetcher)
-  const refetchPmMetaRef = useRef(refetchPmMeta)
-  refetchPmMetaRef.current = refetchPmMeta
-
-  const onBootstrapSse = useCallback((e: PowermemBootstrapClientEvent) => {
-    if (e.type === 'phase') {
-      setLiveBootstrapPhase(e.phase)
-    } else {
-      setBootstrapSseLines((prev) => [...prev.slice(-500), e.line])
-    }
-  }, [])
-
-  const listFetcher = useCallback(async (): Promise<AdapterResult<PowermemMemoryRow[]>> => {
-    const meta = await platformResults.powermemMeta()
-    if (!meta.success || !meta.data?.configured || !meta.data.enabled) {
-      return ok<PowermemMemoryRow[]>([])
-    }
-    const m = meta.data
-    let ranManagedBootstrap = false
-    if (needsManagedPowermemBootstrap(m) && !getIsTauri()) {
-      ranManagedBootstrap = true
-      setBootstrapSseLines([])
-      setLiveBootstrapPhase(null)
-      const boot = await platformResults.powermemBootstrapStream(onBootstrapSse)
-      if (!boot.success) {
-        return fail<PowermemMemoryRow[]>(boot.error ?? 'PowerMem bootstrap failed')
-      }
-    }
-    const list = await platformResults.powermemList(80)
-    if (list.success) {
-      setBootstrapSseLines([])
-      setLiveBootstrapPhase(null)
-      if (ranManagedBootstrap || needsManagedPowermemBootstrap(m)) {
-        void refetchPmMetaRef.current()
-      }
-    }
-    return list
-  }, [onBootstrapSse])
-  const {
-    data: pmList,
-    loading: pmListLoading,
-    error: pmListErr,
-    refetch: refetchPmList,
-  } = useAdapterCall<PowermemMemoryRow[]>(listFetcher)
-
-  const pmReady = Boolean(pmMeta?.configured && pmMeta.enabled)
-
-  const [liveBootstrapPhase, setLiveBootstrapPhase] = useState<'venv' | 'pip' | null>(null)
-  const [bootstrapSseLines, setBootstrapSseLines] = useState<string[]>([])
-
-  const powermemFirstRunBootstrap =
-    pmReady &&
-    pmMeta?.mode === 'cli' &&
-    Boolean(pmMeta.managedRuntimeDir) &&
-    !pmMeta.managedRuntimeReady &&
-    !pmMeta.managedRuntimeDisabled
-
-  async function runPowermemSearch() {
-    const q = pmQuery.trim()
-    setPmSearchLoading(true)
-    setPmSearchErr(null)
-    const r = await platformResults.powermemSearch(q, 40)
-    setPmSearchLoading(false)
-    if (!r.success) {
-      setPmSearchRows(null)
-      setPmSearchErr(r.error ?? t('memory.searchFailed'))
-      return
-    }
-    setPmSearchRows(r.data ?? [])
-  }
-
-  async function deletePowermemRow(id: string) {
-    if (!window.confirm(t('memory.confirmDelete', { id }))) return
-    const r = await platformResults.powermemDelete(id)
-    if (!r.success) {
-      alert(r.error ?? t('memory.deleteFailed'))
-      return
-    }
-    void refetchPmList()
-    setPmSearchRows((prev) => (prev ? prev.filter((row) => row.id !== id) : prev))
-  }
-
-  return (
-    <div className="surface-card space-y-4">
-      <div className="border-b border-border pb-3">
-        <h3 className="text-base font-semibold">{t('memory.sectionPowermem')}</h3>
-        <p className="text-sm text-muted-foreground mt-1">{t('memory.powermemHelp')}</p>
-      </div>
-
-      {pmMetaLoading ? (
-        <p className="text-sm text-muted-foreground">{t('memory.metaLoading')}</p>
-      ) : pmMetaErr ? (
-        <p className="text-sm text-red-500">{pmMetaErr}</p>
-      ) : pmMeta ? (
-        <div className="inline-note space-y-1">
-          <p>
-            <span className="text-muted-foreground">{t('memory.pluginState')}:</span>{' '}
-            {!pmMeta.configured
-              ? t('memory.pluginNotConfigured')
-              : !pmMeta.enabled
-                ? t('memory.pluginDisabled')
-                : t('memory.pluginReady')}
-          </p>
-          {pmMeta.configured ? (
-            <>
-              <p>
-                <span className="text-muted-foreground">mode:</span> {pmMeta.mode ?? '—'}
-              </p>
-              <p>
-                <span className="text-muted-foreground">user / agent:</span> {pmMeta.userId} / {pmMeta.agentId}
-              </p>
-              {pmMeta.pmemPath ? (
-                <p className="font-mono text-xs break-all">
-                  <span className="text-muted-foreground">pmem:</span> {pmMeta.pmemPath}
-                </p>
-              ) : null}
-              {pmMeta.baseUrl ? (
-                <p className="font-mono text-xs break-all">
-                  <span className="text-muted-foreground">baseUrl:</span> {pmMeta.baseUrl}
-                </p>
-              ) : null}
-              {pmMeta.mode === 'cli' ? (
-                pmMeta.envFileResolved === POWMEM_DEFAULT_ENV_META_SENTINEL ? (
-                  <p className="text-xs text-muted-foreground">{t('memory.powermemEnvDefaultHint')}</p>
-                ) : pmMeta.envFileResolved ? (
-                  <p className="font-mono text-xs break-all">
-                    <span className="text-muted-foreground">env:</span> {pmMeta.envFileResolved}
-                  </p>
-                ) : (
-                  <p className="text-xs text-amber-600 dark:text-amber-500">{t('memory.powermemEnvMissingHint')}</p>
-                )
-              ) : null}
-              {pmMeta.mode === 'cli' && pmMeta.managedRuntimeDir ? (
-                <div className="mt-3 pt-3 border-t border-border text-xs space-y-1">
-                  <p className="font-medium text-foreground">{t('memory.managedRuntimeTitle')}</p>
-                  <p className="text-muted-foreground">{t('memory.managedRuntimeBlurb')}</p>
-                  <p className="font-mono break-all text-muted-foreground">{pmMeta.managedRuntimeDir}</p>
-                  {pmMeta.managedRuntimeDisabled ? (
-                    <p className="text-amber-600">{t('memory.managedRuntimeOff')}</p>
-                  ) : pmMeta.managedRuntimeReady ? (
-                    <p className="text-green-600 dark:text-green-500">{t('memory.managedRuntimeReady')}</p>
-                  ) : (
-                    <p className="text-muted-foreground">{t('memory.managedRuntimePending')}</p>
-                  )}
-                </div>
-              ) : null}
-              {pmReady && pmMeta.mode === 'cli' ? <PowermemEnvEditorBlock /> : null}
-            </>
-          ) : null}
-          <div className="pt-2">
-            <Link to="/plugins" className="text-primary text-sm underline">
-              {t('memory.goPlugins')}
-            </Link>
-          </div>
-        </div>
-      ) : null}
-
-      {!pmReady ? (
-        <p className="text-sm text-muted-foreground">{t('memory.powermemNeedPlugin')}</p>
-      ) : pmListLoading ? (
-        <div className="text-sm text-muted-foreground space-y-2">
-          <p>{t('memory.listLoading')}</p>
-          {powermemFirstRunBootstrap ? (
-            <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs space-y-2">
-              <p>{t('memory.listLoadingBootstrapHint')}</p>
-              <p className="text-foreground font-medium">
-                {liveBootstrapPhase === 'venv'
-                  ? t('memory.bootstrapPhaseVenv')
-                  : liveBootstrapPhase === 'pip'
-                    ? t('memory.bootstrapPhasePip')
-                    : t('memory.bootstrapPhaseStarting')}
-              </p>
-              {!getIsTauri() && bootstrapSseLines.length > 0 ? (
-                <div>
-                  <p className="text-muted-foreground mb-1">{t('memory.bootstrapSseLogTitle')}</p>
-                  <pre className="max-h-52 overflow-auto rounded border border-border bg-background/80 p-2 text-[11px] leading-snug font-mono whitespace-pre-wrap break-all">
-                    {bootstrapSseLines.join('\n')}
-                  </pre>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ) : pmListErr ? (
-        <div className="space-y-2">
-          <p className="text-sm text-red-500">{pmListErr}</p>
-          <button
-            type="button"
-            onClick={() => void refetchPmList()}
-            className="button-secondary px-3 py-1.5 text-sm"
-          >
-            {t('memory.retry')}
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="flex justify-between items-center gap-2">
-            <h4 className="text-sm font-medium">{t('memory.powermemListTitle', { count: pmList?.length ?? 0 })}</h4>
-            <button
-              type="button"
-              onClick={() => void refetchPmList()}
-              className="button-secondary px-3 py-1.5 text-xs"
-            >
-              {t('memory.refreshList')}
-            </button>
-          </div>
-          <ul className="space-y-3">
-            {(pmList ?? []).map((row) => (
-              <li
-                key={row.id}
-                className="list-card flex items-start justify-between gap-3 bg-background/70"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-muted-foreground">#{row.memoryId}</p>
-                  <p className="text-sm mt-1 whitespace-pre-wrap">{row.content}</p>
-                  {row.score !== undefined && Number.isFinite(row.score) ? (
-                    <p className="text-xs text-muted-foreground mt-1">score: {row.score.toFixed(4)}</p>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void deletePowermemRow(row.id)}
-                  className="button-danger shrink-0 px-2 py-1 text-xs"
-                >
-                  {t('memory.delete')}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {(pmList ?? []).length === 0 ? (
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">{t('memory.powermemEmpty')}</p>
-              <p className="text-xs text-muted-foreground">{t('memory.powermemEmptyIsolationHint')}</p>
-            </div>
-          ) : null}
-        </>
-      )}
-
-      {pmReady ? (
-        <div className="space-y-2 pt-2 border-t border-border">
-          <h4 className="text-sm font-medium">{t('memory.powermemSearchTitle')}</h4>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              type="text"
-              placeholder={t('memory.powermemSearchPlaceholder')}
-              value={pmQuery}
-              onChange={(e) => setPmQuery(e.target.value)}
-              className="control-input flex-1"
-            />
-            <button
-              type="button"
-              disabled={pmSearchLoading}
-              onClick={() => void runPowermemSearch()}
-              className="button-primary shrink-0 disabled:opacity-50"
-            >
-              {pmSearchLoading ? t('memory.searching') : t('memory.search')}
-            </button>
-          </div>
-          {pmSearchErr ? <p className="text-sm text-red-500">{pmSearchErr}</p> : null}
-          {pmSearchRows && pmSearchRows.length > 0 ? (
-            <ul className="space-y-2">
-              {pmSearchRows.map((row) => (
-                <li key={`s-${row.id}`} className="list-card bg-background/70 p-3 text-sm">
-                  <span className="text-xs text-muted-foreground">#{row.memoryId}</span>
-                  <p className="mt-1 whitespace-pre-wrap">{row.content}</p>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-
-      <p className="text-xs text-muted-foreground pt-2">{t('memory.extensibleHint')}</p>
-    </div>
-  )
+function isKnownFtsWarning(message: string): boolean {
+  const lower = message.toLowerCase()
+  return lower.includes('fts unavailable') || (lower.includes('fts5') && lower.includes('no such module'))
 }
 
 export default function MemoryPage() {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<'openclaw' | 'powermem'>('openclaw')
+  const [agentFilter, setAgentFilter] = useState('')
+  const [query, setQuery] = useState('')
+  const [hits, setHits] = useState<OpenclawMemoryHit[] | null>(null)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchErr, setSearchErr] = useState<string | null>(null)
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
+  const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null)
+  const [reindexLoading, setReindexLoading] = useState(false)
+  const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
+
+  const statusFetcher = useCallback(async () => platformResults.openclawMemoryStatus(), [])
+  const searchCapabilityFetcher = useCallback(async () => platformResults.openclawMemorySearchCapability(), [])
+  const filesFetcher = useCallback(async () => platformResults.openclawMemoryFiles(), [])
+
+  const {
+    data: statusPayload,
+    loading: statusLoading,
+    error: statusErr,
+    refetch: refetchStatus,
+  } = useAdapterCall<OpenclawMemoryStatusPayload>(statusFetcher)
+
+  const {
+    data: searchCapability,
+    loading: searchCapabilityLoading,
+    refetch: refetchSearchCapability,
+  } = useAdapterCall<OpenclawMemorySearchCapabilityPayload>(searchCapabilityFetcher)
+
+  const {
+    data: filesPayload,
+    loading: filesLoading,
+    error: filesErr,
+    refetch: refetchFiles,
+  } = useAdapterCall<OpenclawMemoryFilesPayload>(filesFetcher)
+
+  const statusEntries = useMemo(
+    () => normalizeStatusEntries(statusPayload?.data),
+    [statusPayload?.data],
+  )
+  const selectedFile =
+    filesPayload?.files.find((entry) => entry.relativePath === selectedFilePath) ?? filesPayload?.files[0] ?? null
+
+  const summary = useMemo(() => {
+    const agents = statusEntries.length
+    const trackedFiles =
+      filesPayload?.files.length ?? statusEntries.reduce((sum, entry) => sum + entry.totalFiles, 0)
+    const backends = Array.from(new Set(statusEntries.map((entry) => entry.backend))).filter(Boolean)
+    const dirty = statusEntries.some((entry) => entry.dirty)
+    return {
+      agents,
+      trackedFiles,
+      backend: backends[0] ?? 'unknown',
+      dirty,
+    }
+  }, [filesPayload?.files.length, statusEntries])
+
+  const visibleStatusWarning = useMemo(() => {
+    const stderr = statusPayload?.stderr?.trim()
+    if (!stderr || isKnownFtsWarning(stderr)) return null
+    return stderr
+  }, [statusPayload?.stderr])
+
+  async function handleReindex() {
+    setReindexLoading(true)
+    try {
+      const result = await platformResults.reindexOpenclawMemory()
+      if (!result.success) {
+        setFeedback({ tone: 'error', message: result.error ?? t('memory.reindexFailed') })
+        return
+      }
+      setFeedback({ tone: 'success', message: t('memory.reindexSuccess') })
+      await Promise.all([refetchStatus(), refetchFiles(), refetchSearchCapability()])
+    } finally {
+      setReindexLoading(false)
+    }
+  }
+
+  async function runSearch() {
+    const trimmed = query.trim()
+    if (!trimmed) {
+      setHits([])
+      setSearchErr(null)
+      return
+    }
+    setSearchLoading(true)
+    setSearchErr(null)
+    const result = await platformResults.openclawMemorySearch(trimmed, {
+      agent: agentFilter.trim() || undefined,
+      maxResults: 25,
+    })
+    setSearchLoading(false)
+    if (!result.success) {
+      setHits(null)
+      setSearchErr(result.error ?? t('memory.searchFailed'))
+      return
+    }
+    setHits(result.data ?? [])
+  }
+
+  async function handleDeleteFile(relativePath: string) {
+    const result = await platformResults.deleteOpenclawMemoryFile(relativePath)
+    if (!result.success) {
+      setFeedback({ tone: 'error', message: result.error ?? t('memory.fileDeleteFailed') })
+      return
+    }
+    if (selectedFilePath === relativePath) {
+      setSelectedFilePath(null)
+    }
+    setFeedback({ tone: 'success', message: t('memory.fileDeleteSuccess') })
+    await refetchFiles()
+    await refetchStatus()
+  }
+
+  const summaryCards = [
+    {
+      title: t('memory.summaryAgents'),
+      value: String(summary.agents),
+      icon: Database,
+    },
+    {
+      title: t('memory.summaryFiles'),
+      value: String(summary.trackedFiles),
+      icon: HardDrive,
+    },
+    {
+      title: t('memory.summaryBackend'),
+      value: summary.backend,
+      icon: Search,
+    },
+    {
+      title: t('memory.summaryState'),
+      value: summary.dirty ? t('memory.stateNeedsAttention') : t('memory.stateClean'),
+      icon: ShieldAlert,
+    },
+  ]
+
+  const searchMode = searchCapability?.mode ?? 'native'
+  const SearchModeIcon =
+    searchCapabilityLoading ? LoaderCircle : searchMode === 'fallback' ? ShieldAlert : CheckCircle2
+  const searchModeBadgeClass =
+    searchMode === 'fallback'
+      ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+  const searchModePanelClass =
+    searchMode === 'fallback'
+      ? 'border-amber-500/20 bg-amber-500/5'
+      : 'border-emerald-500/20 bg-emerald-500/5'
+  const searchModeLabel = searchCapabilityLoading
+    ? t('memory.searchModeChecking')
+    : searchMode === 'fallback'
+      ? t('memory.searchModeFallback')
+      : t('memory.searchModeNative')
+  const searchModeHelp = searchCapabilityLoading
+    ? t('memory.searchModeLoadingHelp')
+    : searchMode === 'fallback'
+      ? t('memory.searchModeFallbackHelp')
+      : t('memory.searchModeNativeHelp')
 
   return (
-    <div className="page-shell page-shell-medium">
+    <div className="page-shell page-shell-wide">
+      {feedback ? <ActionBanner tone={feedback.tone} message={feedback.message} onDismiss={() => setFeedback(null)} /> : null}
+
       <div className="page-header">
         <div className="page-header-copy">
           <h1 className="page-title">{t('memory.title')}</h1>
           <p className="page-subtitle">{t('memory.subtitleTabs')}</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void refetchStatus()} className="button-secondary">
+            <RefreshCw className="h-4 w-4" />
+            <span>{t('common.refresh')}</span>
+          </button>
+          <button type="button" onClick={() => void refetchFiles()} className="button-secondary">
+            <HardDrive className="h-4 w-4" />
+            <span>{t('memory.sectionFiles')}</span>
+          </button>
+        </div>
       </div>
 
-      <div className="pill-group">
-        <button
-          type="button"
-          onClick={() => setTab('openclaw')}
-          className={`pill-button ${
-            tab === 'openclaw'
-              ? 'pill-button-active'
-              : 'pill-button-inactive'
-          }`}
-        >
-          {t('memory.tabOpenclaw')}
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('powermem')}
-          className={`pill-button ${
-            tab === 'powermem'
-              ? 'pill-button-active'
-              : 'pill-button-inactive'
-          }`}
-        >
-          {t('memory.tabPowermem')}
-        </button>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((card) => {
+          const Icon = card.icon
+          return (
+            <div key={card.title} className="surface-card flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{card.title}</p>
+                <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{card.value}</p>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/70 bg-muted/60 text-foreground">
+                <Icon className="h-5 w-5" />
+              </div>
+            </div>
+          )
+        })}
       </div>
 
-      {tab === 'openclaw' ? <OpenclawMemoryPanel /> : <PowermemMemoryPanel />}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,1fr)]">
+        <div className="space-y-4">
+          <div className="surface-card space-y-4">
+            <div className="section-heading">
+              <div>
+                <h3 className="section-title">{t('memory.sectionStatusOverview')}</h3>
+                <p className="text-sm text-muted-foreground">{t('memory.openclawHelp')}</p>
+              </div>
+            </div>
+
+            {statusLoading ? (
+              <p className="text-sm text-muted-foreground">{t('memory.statusLoading')}</p>
+            ) : statusErr ? (
+              <div className="space-y-2">
+                <p className="text-sm text-red-500">{statusErr}</p>
+                <button type="button" onClick={() => void refetchStatus()} className="button-secondary px-3 py-1.5 text-sm">
+                  {t('memory.retry')}
+                </button>
+              </div>
+            ) : (
+              <>
+                {statusEntries.length > 0 ? (
+                  <div className="grid gap-3">
+                    {statusEntries.map((entry) => (
+                      <div key={entry.agentId} className="list-card bg-background/70">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                            {entry.agentId}
+                          </span>
+                          <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                            {entry.backend}
+                          </span>
+                          <span className={`rounded-full px-2.5 py-1 text-xs ${entry.dirty ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'}`}>
+                            {entry.dirty ? t('memory.stateNeedsAttention') : t('memory.stateClean')}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
+                          <div>
+                            <p className="text-muted-foreground">{t('memory.workspaceDir')}</p>
+                            <p className="break-all font-mono text-xs">{entry.workspaceDir || '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">{t('memory.dbPath')}</p>
+                            <p className="break-all font-mono text-xs">{entry.dbPath || '—'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{t('memory.noStatusEntries')}</p>
+                )}
+                {visibleStatusWarning ? (
+                  <p className="text-xs whitespace-pre-wrap text-amber-600 dark:text-amber-500">{visibleStatusWarning}</p>
+                ) : null}
+              </>
+            )}
+          </div>
+
+          <div className="surface-card space-y-4">
+            <div className="section-heading">
+              <div>
+                <h3 className="section-title">{t('memory.openclawSearchLabel')}</h3>
+                <p className="text-sm text-muted-foreground">{t('memory.openclawSearchHelp')}</p>
+              </div>
+            </div>
+
+            <div className={`rounded-[1.15rem] border px-4 py-3 ${searchModePanelClass}`}>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      {t('memory.searchModeLabel')}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${searchModeBadgeClass}`}>
+                      <SearchModeIcon className={`h-3.5 w-3.5 ${searchCapabilityLoading ? 'animate-spin' : ''}`} />
+                      <span>{searchModeLabel}</span>
+                    </span>
+                  </div>
+                  <p className="max-w-2xl text-sm text-muted-foreground">{searchModeHelp}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={reindexLoading}
+                  onClick={() => void handleReindex()}
+                  className="button-secondary shrink-0 disabled:opacity-50"
+                >
+                  <Wrench className="h-4 w-4" />
+                  <span>{reindexLoading ? t('memory.reindexing') : t('memory.reindex')}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <input
+                type="text"
+                placeholder={t('memory.agentPlaceholder')}
+                value={agentFilter}
+                onChange={(event) => setAgentFilter(event.target.value)}
+                className="control-input"
+              />
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  placeholder={t('memory.openclawSearchPlaceholder')}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  className="control-input flex-1"
+                />
+                <button
+                  type="button"
+                  disabled={searchLoading}
+                  onClick={() => void runSearch()}
+                  className="button-primary shrink-0 disabled:opacity-50"
+                >
+                  {searchLoading ? t('memory.searching') : t('memory.search')}
+                </button>
+              </div>
+            </div>
+
+            {searchErr ? <p className="text-sm text-red-500">{searchErr}</p> : null}
+            {hits && hits.length > 0 ? (
+              <ul className="space-y-3">
+                {hits.map((hit) => (
+                  <li key={hit.id} className="list-card bg-background/70 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {hit.score !== undefined && Number.isFinite(hit.score) ? (
+                        <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
+                          score: {hit.score.toFixed(3)}
+                        </span>
+                      ) : null}
+                      {hit.path ? (
+                        <span className="break-all font-mono text-[11px] text-muted-foreground">{hit.path}</span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap">{hit.content}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : hits && hits.length === 0 && query.trim() ? (
+              <p className="text-sm text-muted-foreground">{t('memory.noHits')}</p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="surface-card space-y-4">
+            <div className="section-heading">
+              <div>
+                <h3 className="section-title">{t('memory.sectionFiles')}</h3>
+                <p className="text-sm text-muted-foreground">{t('memory.sectionFilesHint')}</p>
+              </div>
+            </div>
+
+            <div className="inline-note space-y-2">
+              <p className="text-xs text-muted-foreground">
+                {t('memory.storageRoot')}: <span className="font-mono break-all">{filesPayload?.root ?? '—'}</span>
+              </p>
+            </div>
+
+            {filesLoading ? (
+              <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+            ) : filesErr ? (
+              <div className="space-y-2">
+                <p className="text-sm text-red-500">{filesErr}</p>
+                <button type="button" onClick={() => void refetchFiles()} className="button-secondary px-3 py-1.5 text-sm">
+                  {t('memory.retry')}
+                </button>
+              </div>
+            ) : filesPayload && filesPayload.files.length > 0 ? (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  {filesPayload.files.map((entry) => {
+                    const selected = selectedFile?.relativePath === entry.relativePath
+                    const hint = getFileHint(entry, t)
+                    const Icon = entry.kind === 'json' ? FileJson : entry.kind === 'text' ? FileText : Database
+                    return (
+                      <div
+                        key={entry.relativePath}
+                        className={`list-card flex items-start justify-between gap-3 ${selected ? 'border-primary/30 bg-primary/5' : 'bg-background/70'}`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSelectedFilePath(entry.relativePath)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4 text-muted-foreground" />
+                            <span className="truncate font-medium text-foreground">{entry.relativePath}</span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            <span>{getFileKindLabel(entry, t)}</span>
+                            <span>{formatBytes(entry.size)}</span>
+                            <span>{new Date(entry.modifiedAtMs).toLocaleString()}</span>
+                          </div>
+                          {hint ? <p className="mt-2 text-xs text-muted-foreground">{hint}</p> : null}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPendingDeletePath(entry.relativePath)}
+                          className="button-danger shrink-0 px-2 py-1 text-xs"
+                          aria-label={`${t('common.delete')} ${entry.relativePath}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {selectedFile ? (
+                  <div className="section-subcard space-y-2">
+                    <div className="flex items-center gap-2">
+                      <HardDrive className="h-4 w-4 text-muted-foreground" />
+                      <h4 className="text-sm font-medium text-foreground">{t('memory.fileDetails')}</h4>
+                    </div>
+                    <p className="break-all font-mono text-xs text-muted-foreground">{selectedFile.absolutePath}</p>
+                    <div className="grid gap-3 text-sm sm:grid-cols-2">
+                      <div>
+                        <p className="text-muted-foreground">{t('memory.fileUpdated')}</p>
+                        <p>{new Date(selectedFile.modifiedAtMs).toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">{t('memory.fileExtension')}</p>
+                        <p>{selectedFile.extension || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">{t('memory.summaryFiles')}</p>
+                        <p>{formatBytes(selectedFile.size)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">{t('memory.summaryBackend')}</p>
+                        <p>{getFileKindLabel(selectedFile, t)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t('memory.sectionFilesEmpty')}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingDeletePath)}
+        title={pendingDeletePath ? t('memory.fileDeleteConfirm', { path: pendingDeletePath }) : ''}
+        tone="danger"
+        onCancel={() => setPendingDeletePath(null)}
+        onConfirm={() => {
+          if (!pendingDeletePath) return
+          const target = pendingDeletePath
+          setPendingDeletePath(null)
+          void handleDeleteFile(target)
+        }}
+      />
     </div>
   )
 }

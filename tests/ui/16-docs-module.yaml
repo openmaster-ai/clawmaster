@@ -1,8 +1,8 @@
 suite: docs-module
 name: 文档中心功能
 description: |
-  验证文档中心页面的完整功能：
-  快速链接网格、搜索输入、搜索结果显示、外部链接
+  验证文档中心页面的核心体验：
+  本地优先搜索、场景入口、可复制命令、实时文档回退
 
 preconditions:
   - dev server 已启动（{BASE_URL} 可访问）
@@ -12,63 +12,101 @@ viewport: { width: 1280, height: 800 }
 
 cases:
   - id: doc-01
-    name: 快速链接网格
+    name: 文档首页结构与本地优先说明
     steps:
       - action: navigate
         url: "{BASE_URL}/docs"
       - action: wait
         duration: 1500ms
       - action: screenshot
-        name: docs-quicklinks
+        name: docs-home
     assertions:
-      - 页面标题"文档中心"
-      - 显示 2 列快速链接网格
-      - 6 个链接卡片：快速开始、CLI 参考、通道配置、模型配置、技能开发、安全指南
-      - 每张卡片包含标题 + 描述文字
-      - 卡片 hover 时 border 变色（border-primary/50）
-      - 底部显示"查看完整文档 →"链接
-      - 所有链接指向 docs.openclaw.ai 域名
+      - 页面标题"文档"
+      - 页面副标题说明本地优先帮助索引
+      - 顶部显示 3 个标识："本地索引""任务剧本""CLI 回退"
+      - Hero 区显示搜索输入框和"搜索实时文档"按钮
+      - Hero 右侧显示 3 条工作方式说明："本地优先""任务回到页面""上游回退"
+      - 页面默认显示 4 个主分区："常见任务""核心指南""可复制命令""排障入口"
 
   - id: doc-02
-    name: 搜索输入交互
+    name: 本地搜索先过滤内置内容
     steps:
+      - action: navigate
+        url: "{BASE_URL}/docs"
+      - action: wait
+        duration: 1000ms
       - action: fill
         target: input[placeholder*="搜索"]
-        value: "channel"
+        value: "gateway"
+      - action: wait
+        duration: 500ms
       - action: screenshot
-        name: docs-search-input
+        name: docs-local-search
     assertions:
-      - 搜索输入框显示已填入的文字"channel"
-      - "搜索"按钮可用（不再 disabled）
-      - 可按 Enter 触发搜索
+      - 显示"本地匹配结果"标题
+      - 显示结果数量说明
+      - 本地结果内至少出现 1 张与 Gateway 相关的卡片
+      - 默认的完整 4 个主分区不再同时展示
+      - 搜索实时文档按钮保持可点击
 
   - id: doc-03
-    name: 搜索结果显示
+    name: 无本地结果时保留回退入口
     steps:
+      - action: navigate
+        url: "{BASE_URL}/docs"
+      - action: wait
+        duration: 1000ms
       - action: fill
         target: input[placeholder*="搜索"]
-        value: "channel"
+        value: "totally-unmatched-keyword"
+      - action: wait
+        duration: 500ms
+      - action: screenshot
+        name: docs-no-local-match
+    assertions:
+      - 显示"暂时没有本地匹配"
+      - 显示建议改关键词或直接使用实时文档搜索
+      - '“搜索实时文档”按钮仍可用'
+
+  - id: doc-04
+    name: 可复制命令与页面回链
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/docs"
+      - action: wait
+        duration: 1200ms
+      - action: scroll_to
+        target: 可复制命令区域
       - action: click
-        target: text("搜索")
+        target: text("复制命令")
+      - action: wait
+        duration: 500ms
+      - action: screenshot
+        name: docs-command-copy
+    assertions:
+      - 可复制命令区域至少显示 4 张命令卡片
+      - 每张命令卡片显示标题、说明和 monospace 命令块
+      - 点击后显示"命令已复制"反馈
+      - 命令卡片带有"打开页面"或"打开指南"入口
+
+  - id: doc-05
+    name: 实时文档回退结果区域
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/docs"
+      - action: wait
+        duration: 1000ms
+      - action: fill
+        target: input[placeholder*="搜索"]
+        value: "gateway auth"
+      - action: click
+        target: text("搜索实时文档")
       - action: wait
         duration: 3000ms
       - action: screenshot
-        name: docs-search-results
+        name: docs-live-search
     assertions:
-      - 搜索按钮在请求期间显示"搜索中..."
-      - 搜索完成后显示结果列表
-      - 每条结果包含：标题（primary 颜色）、URL（mono 字体）、摘要
-      - 结果条数显示在列表上方
-      - 搜索后快速链接区域隐藏
-      - 如无结果：显示"未找到相关文档"
-
-  - id: doc-04
-    name: 外部链接属性
-    steps:
-      - action: observe
-        target: 所有链接元素
-    assertions:
-      - 快速链接卡片有 target="_blank" 属性
-      - 快速链接卡片有 rel="noopener noreferrer" 属性
-      - 搜索结果链接同样有 target="_blank"
-      - 点击链接在新标签页打开
+      - 点击后按钮在请求期间显示搜索中状态
+      - 请求完成后出现"实时文档结果"区域或错误提示
+      - 如有结果：每条结果显示标题、URL、摘要，且链接在新标签页打开
+      - 如无结构化结果：显示"实时文档搜索未返回结构化结果。"

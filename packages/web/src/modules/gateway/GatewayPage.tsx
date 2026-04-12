@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ScrollText } from 'lucide-react'
 import { platform } from '@/adapters'
 import { platformResults } from '@/shared/adapters/platformResults'
+import { ActionBanner } from '@/shared/components/ActionBanner'
 import { LoadingState } from '@/shared/components/LoadingState'
+import { RecentLogsSheet } from '@/shared/components/RecentLogsSheet'
 import type { GatewayStatus, OpenClawConfig } from '@/lib/types'
 import { buildGatewayUrl } from '@/shared/gatewayUrl'
 
@@ -13,6 +16,8 @@ export default function Gateway() {
   const [loading, setLoading] = useState(true)
   const [statusLoading, setStatusLoading] = useState(true)
   const [operating, setOperating] = useState<string | null>(null)
+  const [logsOpen, setLogsOpen] = useState(false)
+  const [feedback, setFeedback] = useState<{ tone: 'info' | 'success' | 'error'; message: string } | null>(null)
 
   useEffect(() => {
     void loadData()
@@ -64,21 +69,21 @@ export default function Gateway() {
       const expectRunning = action !== 'stop'
       const ok = await pollStatus(expectRunning)
       if (!ok) {
-        alert(t('gateway.operationTimeout'))
+        setFeedback({ tone: 'error', message: t('gateway.operationTimeout') })
       }
       await loadData()
     } catch (err: any) {
-      alert(t('gateway.operationFailed', { message: err.message }))
+      setFeedback({ tone: 'error', message: t('gateway.operationFailed', { message: err.message }) })
     } finally {
       setOperating(null)
     }
   }
 
-  function copyToken() {
+  async function copyToken() {
     const token = config?.gateway?.auth?.token
     if (token) {
-      navigator.clipboard.writeText(token)
-      alert(t('gateway.tokenCopied'))
+      await navigator.clipboard.writeText(token)
+      setFeedback({ tone: 'success', message: t('gateway.tokenCopied') })
     }
   }
 
@@ -90,6 +95,9 @@ export default function Gateway() {
 
   return (
     <div className="page-shell page-shell-medium">
+      {feedback ? (
+        <ActionBanner tone={feedback.tone} message={feedback.message} onDismiss={() => setFeedback(null)} />
+      ) : null}
       <div className="page-header">
         <div className="page-header-copy">
           <div className="page-header-meta">
@@ -100,6 +108,10 @@ export default function Gateway() {
           <h1 className="page-title">{t('gateway.title')}</h1>
           <p className="page-subtitle">{t('gateway.editConfigHint')}</p>
         </div>
+        <button type="button" onClick={() => setLogsOpen(true)} className="button-secondary">
+          <ScrollText className="h-4 w-4" />
+          {t('logs.openRecent')}
+        </button>
       </div>
 
       <div className="metric-grid">
@@ -128,7 +140,7 @@ export default function Gateway() {
         </div>
       </div>
 
-      <div className="surface-card">
+      <div id="gateway-runtime" className="surface-card">
         {loading ? (
           <LoadingState message={t('common.loading')} fullPage={false} />
         ) : (
@@ -184,12 +196,16 @@ export default function Gateway() {
               >
                 {t('gateway.openInBrowser')}
               </a>
+              <button type="button" onClick={() => setLogsOpen(true)} className="button-secondary">
+                <ScrollText className="h-4 w-4" />
+                {t('logs.openRecent')}
+              </button>
             </div>
           </div>
         )}
       </div>
 
-      <div className="surface-card">
+      <div id="gateway-config" className="surface-card">
         <div className="section-heading">
           <h3 className="section-title">{t('gateway.config')}</h3>
         </div>
@@ -223,6 +239,15 @@ export default function Gateway() {
           </>
         )}
       </div>
+
+      <RecentLogsSheet
+        open={logsOpen}
+        onClose={() => setLogsOpen(false)}
+        title={t('logs.gatewayTitle')}
+        description={t('logs.gatewayDescription')}
+        lines={240}
+        scope="gateway"
+      />
     </div>
   )
 }

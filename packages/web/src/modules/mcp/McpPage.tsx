@@ -18,6 +18,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { InstallTask } from '@/shared/components/InstallTask'
 import { LoadingState } from '@/shared/components/LoadingState'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
@@ -103,6 +104,7 @@ function McpContent() {
   const [catalogExtraArgs, setCatalogExtraArgs] = useState<Record<string, string>>({})
   const [busyServerId, setBusyServerId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [pendingRemoval, setPendingRemoval] = useState<{ id: string; config: McpServerConfig; name: string } | null>(null)
   const [importPath, setImportPath] = useState('')
   const [importResult, setImportResult] = useState<ImportResultState>(null)
   const [manualForm, setManualForm] = useState<ManualFormState>(DEFAULT_MANUAL_FORM)
@@ -180,8 +182,7 @@ function McpContent() {
     })
   }
 
-  async function handleRemove(id: string, config: McpServerConfig, name: string) {
-    if (!window.confirm(t('mcp.confirmRemove', { name }))) return
+  async function handleRemove(id: string, config: McpServerConfig) {
     await withBusyServer(id, async () => {
       const pkg = config.meta?.managedPackage ?? catalogById.get(id)?.package
       const result = await removeMcpServer(id, pkg)
@@ -334,7 +335,7 @@ function McpContent() {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(21rem,0.95fr)]">
         <div className="space-y-5">
-          <section className="surface-card">
+          <section id="mcp-installed" className="surface-card">
             <div className="section-heading">
               <div>
                 <p className="section-subtitle">{t('mcp.installedLead')}</p>
@@ -402,7 +403,7 @@ function McpContent() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => void handleRemove(id, config, name)}
+                          onClick={() => setPendingRemoval({ id, config, name })}
                           disabled={busy}
                           className="button-danger px-3 py-1.5 text-sm"
                         >
@@ -417,7 +418,7 @@ function McpContent() {
             )}
           </section>
 
-          <section className="surface-card">
+          <section id="mcp-featured" className="surface-card">
             <div className="section-heading">
               <div>
                 <p className="section-subtitle">{t('mcp.featuredLead')}</p>
@@ -632,7 +633,7 @@ function McpContent() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => void handleRemove(selectedCatalog.id, selectedInstalled, selectedCatalog.name)}
+                      onClick={() => setPendingRemoval({ id: selectedCatalog.id, config: selectedInstalled, name: selectedCatalog.name })}
                       disabled={busyServerId === selectedCatalog.id}
                       className="button-danger"
                     >
@@ -655,7 +656,7 @@ function McpContent() {
             </section>
           )}
 
-          <section className="surface-card">
+          <section id="mcp-import" className="surface-card">
             <div className="section-heading">
               <div>
                 <p className="section-subtitle">{t('mcp.importLead')}</p>
@@ -737,7 +738,7 @@ function McpContent() {
             </div>
           </section>
 
-          <section className="surface-card">
+          <section id="mcp-manual" className="surface-card">
             <div className="section-heading">
               <div>
                 <p className="section-subtitle">{t('mcp.manualLead')}</p>
@@ -870,6 +871,18 @@ function McpContent() {
           </section>
         </div>
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingRemoval)}
+        title={pendingRemoval ? t('mcp.confirmRemove', { name: pendingRemoval.name }) : ''}
+        tone="danger"
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={() => {
+          if (!pendingRemoval) return
+          const current = pendingRemoval
+          setPendingRemoval(null)
+          void handleRemove(current.id, current.config)
+        }}
+      />
     </div>
   )
 }

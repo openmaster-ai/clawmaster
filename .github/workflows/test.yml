@@ -86,6 +86,24 @@ jobs:
 
           echo "All backend endpoints responding"
 
+  backend-windows:
+    name: Backend Unit Tests (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run backend tests
+        run: npm test --workspace=@openclaw-manager/backend
+
+      - name: Build backend
+        run: npm run build --workspace=@openclaw-manager/backend
+
   # ─── Ollama Integration Tests ───
   ollama:
     name: Ollama Integration

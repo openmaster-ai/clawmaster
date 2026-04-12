@@ -1,0 +1,116 @@
+suite: cross-module-workflows
+name: 跨模块主流程
+description: |
+  验证跨模块的真实使用路径，而不是单页静态渲染：
+  1. onboarding → 模型 → 网关 → OpenClaw WebUI 首次对话
+  2. 通道配置 → 上下文日志排障
+  3. 技能 / 插件 / MCP 在 ClawMaster 中变更后，于 OpenClaw WebUI 生效
+
+preconditions:
+  - npm run dev:web 已启动
+  - OpenClaw WebUI 可访问
+  - ClawMaster 与 OpenClaw WebUI 读取同一 profile
+
+viewport: { width: 1440, height: 960 }
+
+cases:
+  - id: flow-01
+    name: Onboarding 到模型配置完成首个可用 provider
+    preconditions:
+      - 当前 profile 尚未完成初始化，或已重置到 onboarding 可重现状态
+    steps:
+      - action: navigate
+        url: "{BASE_URL}"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: flow-onboarding-start
+    assertions:
+      - 安装或引导流程能正常进入
+      - 完成初始化后能进入模型配置步骤
+      - 用户能在一步流程内填写 provider 凭证并选择默认模型
+      - 完成后主界面不出现阻断性错误
+
+  - id: flow-02
+    name: 模型配置后启动网关并进入 OpenClaw WebUI 首次对话
+    preconditions:
+      - 至少一个模型 provider 已在 ClawMaster 中配置成功
+      - 网关尚未运行，或可由当前流程重新启动
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/gateway"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: flow-gateway-start
+    assertions:
+      - 网关页能显示当前运行状态
+      - 点击启动后状态切换为运行中
+      - 可从 ClawMaster 跳转或打开 OpenClaw WebUI
+      - 在 OpenClaw WebUI 发起首个对话时，请求能正常返回
+      - 首次对话使用的是 ClawMaster 中刚配置的默认模型或 provider
+
+  - id: flow-03
+    name: 通道配置完成后可从上下文日志入口排障
+    preconditions:
+      - 至少一个通道支持在当前环境完成配置或模拟验证
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/channels"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: flow-channels-setup
+    assertions:
+      - 用户能从推荐入口快速进入目标通道配置
+      - 填写凭据并保存后，通道状态会更新
+      - 当验证失败或需要排障时，可从当前上下文直接打开日志弹层
+      - 日志弹层内容与当前通道相关，而不是无过滤的全量日志
+
+  - id: flow-04
+    name: 技能变更后在 OpenClaw WebUI 新会话中生效
+    preconditions:
+      - 至少一个重点技能可在当前环境安装并启用
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/skills"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: flow-skills-runtime
+    assertions:
+      - 在 ClawMaster 中安装并启用技能后，状态即时更新
+      - 重新打开或新建 OpenClaw WebUI 会话后，技能能力可被识别
+      - 禁用该技能后，再开新会话时对应能力不再暴露
+
+  - id: flow-05
+    name: 插件变更后在 OpenClaw WebUI 中同步生效
+    preconditions:
+      - 至少一个插件会影响 OpenClaw WebUI 工具、通道或模型能力
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/plugins"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: flow-plugins-runtime
+    assertions:
+      - 在 ClawMaster 中启用或禁用插件后，插件状态即时刷新
+      - OpenClaw WebUI 刷新后，受影响能力的可见性随之变化
+      - 用户能够从行为变化确认插件开关真实生效，而非仅 UI 状态变化
+
+  - id: flow-06
+    name: MCP 服务启用后在 OpenClaw WebUI 中可用
+    preconditions:
+      - 至少一个 MCP 服务可通过 ClawMaster 成功安装并启用
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/mcp"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: flow-mcp-runtime
+    assertions:
+      - ClawMaster 中的 MCP 服务状态变更会写回当前 profile
+      - OpenClaw WebUI 能识别新启用的 MCP 服务
+      - 若禁用该服务，OpenClaw WebUI 中对应入口会消失或不可用

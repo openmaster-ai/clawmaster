@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import path from 'node:path'
 
 import {
   getOpenclawConfigPathCandidatesFor,
@@ -19,8 +18,8 @@ test('prefers ~/.openclaw/openclaw.json before the roaming config on Windows', (
   })
 
   assert.deepEqual(candidates, [
-    path.join(homeDir, '.openclaw', 'openclaw.json'),
-    path.join(appDataBase, 'openclaw', 'openclaw.json'),
+    'C:\\Users\\alice\\.openclaw\\openclaw.json',
+    'C:\\Users\\alice\\AppData\\Roaming\\openclaw\\openclaw.json',
   ])
 })
 
@@ -74,4 +73,15 @@ test('uses ~/.openclaw-<name> when a named profile override is active', () => {
   assert.equal(resolution.configPath, '/home/alice/.openclaw-team-a/openclaw.json')
   assert.equal(resolution.source, 'profile-named')
   assert.equal(resolution.overrideActive, true)
+})
+
+test('uses Windows path semantics for profile overrides when the target platform is win32', () => {
+  const resolution = getOpenclawConfigResolution({
+    platform: 'win32',
+    homeDir: 'C:\\Users\\alice',
+    profileSelection: { kind: 'named', name: 'team-a' },
+  })
+
+  assert.equal(resolution.dataDir, 'C:\\Users\\alice\\.openclaw-team-a')
+  assert.equal(resolution.configPath, 'C:\\Users\\alice\\.openclaw-team-a\\openclaw.json')
 })

@@ -1,8 +1,8 @@
 suite: plugins-module
 name: 插件管理功能
 description: |
-  验证插件管理页面的完整功能：
-  插件表格、搜索过滤、状态过滤、启用/禁用、安装/卸载、描述展开
+  验证当前插件页的主流程：
+  运行快照、安装与清理、分组筛选、启用/禁用、卸载，以及 OpenClaw WebUI 生效情况。
 
 preconditions:
   - dev server 已启动（{BASE_URL} 可访问）
@@ -12,116 +12,142 @@ viewport: { width: 1280, height: 800 }
 
 cases:
   - id: plg-01
-    name: 插件表格渲染
+    name: 页面头部与指标卡
     steps:
       - action: navigate
         url: "{BASE_URL}/plugins"
       - action: wait
-        duration: 2000ms
+        duration: 1500ms
       - action: screenshot
-        name: plugins-table
+        name: plugins-overview
     assertions:
-      - 页面标题"插件管理"
-      - 显示介绍副标题
-      - 显示"刷新"按钮
-      - 如有插件：显示表格
-      - 表头包含：名称/ID、状态、版本、描述
-      - 每行显示：插件名（粗体）+ ID（mono 字体灰色）
-      - 状态列：已启用为绿色文字、已禁用为灰色文字
-      - 状态列显示"启用""禁用""卸载"三个按钮
-      - 版本列显示版本号或"—"
-      - 如无插件：显示空状态提示
+      - 页面标题显示"插件管理"
+      - 顶部显示刷新按钮
+      - 显示 4 张指标卡：运行中、未加载、插件总数、通道插件
+      - 页面不显示 emoji
 
   - id: plg-02
-    name: 搜索过滤
+    name: 运行快照区块
+    steps:
+      - action: observe
+        target: text("当前运行中的插件")
+      - action: screenshot
+        name: plugins-runtime-groups
+    assertions:
+      - 页面展示当前运行中的插件分组卡片
+      - 分组卡包含模型与网关、消息通道、工具与检索、系统能力等类别
+      - 分组卡使用紧凑图标化布局，桌面端高度对齐
+      - 区块内部不出现多余 hr 分隔线
+
+  - id: plg-03
+    name: 安装与清理面板
+    steps:
+      - action: scroll_to
+        target: text("安装与清理")
+      - action: screenshot
+        name: plugins-manage-panel
+    assertions:
+      - 面板包含插件 ID 输入框与安装按钮
+      - 显示"卸载时保留文件"复选框
+      - 显示文档、编辑配置、前往技能市场等辅助入口
+      - 说明文案强调安装、启用、卸载都会刷新实时列表
+
+  - id: plg-04
+    name: 状态分组与搜索过滤
     preconditions:
       - 已安装至少 2 个插件
     steps:
       - action: fill
         target: input[type="search"]
-        value: "mcp"
+        value: "browser"
       - action: wait
         duration: 500ms
       - action: screenshot
-        name: plugins-search
+        name: plugins-filtering
     assertions:
-      - 表格仅显示名称/ID/状态/描述中包含"mcp"的插件
-      - 不匹配的插件行被隐藏
-      - 如无匹配：表格下方显示"无匹配结果"
-      - 清空搜索框后恢复完整列表
+      - 列表支持按关键字过滤名称、ID、状态或描述
+      - 状态筛选包含已加载、全部、已禁用三项
+      - 分类 pill 包含全部分组、模型与网关、消息通道、工具与检索、系统能力
+      - 切换筛选后，下方插件卡片列表同步更新
 
-  - id: plg-03
-    name: 状态过滤下拉框
-    steps:
-      - action: select
-        target: 状态过滤下拉框
-        value: "全部"
-      - action: wait
-        duration: 500ms
-    assertions:
-      - 下拉框有三个选项：已加载、全部、已禁用
-      - 默认选择"已加载"（仅显示启用的插件）
-      - 选择"全部"显示所有插件（含禁用）
-      - 选择"已禁用"仅显示禁用状态的插件
-      - 排序：启用的排在前面
-
-  - id: plg-04
-    name: 启用/禁用插件
+  - id: plg-05
+    name: 启用或禁用插件
     preconditions:
       - 已安装至少一个插件
     steps:
       - action: click
-        target: 某插件的"禁用"按钮
+        target: 某插件的"禁用"或"启用"按钮
       - action: wait
         duration: 2000ms
     assertions:
-      - 按钮显示"…"（busy 状态）
-      - 操作完成后状态文字变为 disabled/灰色
-      - 该行"禁用"按钮变为 disabled，"启用"按钮变为可用
+      - 按钮在处理中显示 busy 状态
+      - 操作完成后状态徽标即时更新
       - 列表自动刷新
 
-  - id: plg-05
-    name: 安装插件
+  - id: plg-06
+    name: 安装插件的输入校验与进度
     steps:
+      - action: click
+        target: text("安装")
       - action: fill
-        target: input[placeholder*="插件 ID"]
-        value: "test-plugin"
+        target: input[placeholder*="输入插件 ID"]
+        value: "  plugin.new  "
       - action: click
         target: text("安装")
       - action: observe
-        duration: 10000ms
+        duration: 5000ms
     assertions:
-      - 安装按钮显示"安装中..."
-      - 所有操作按钮在 busy 期间 disabled
-      - 安装成功后插件出现在表格中
-      - 安装失败显示红色错误信息
+      - 插件 ID 为空时显示校验错误
+      - 提交时会自动 trim 输入值
+      - 安装期间按钮进入 busy 状态
+      - 安装成功后列表刷新并出现新插件
+      - 安装失败时显示红色错误信息
 
-  - id: plg-06
-    name: 卸载插件
+  - id: plg-07
+    name: 卸载插件确认与保留文件选项
     preconditions:
       - 已安装至少一个插件
     steps:
       - action: click
+        target: label("卸载时保留文件")
+      - action: click
         target: 某插件的"卸载"按钮
-      - action: observe
+      - action: wait
         duration: 1000ms
+      - action: screenshot
+        name: plugins-uninstall-dialog
     assertions:
-      - 弹出确认对话框"确定要卸载 XXX 吗？"
-      - 确认后按钮显示"卸载中..."
-      - 卸载完成后该插件从表格移除
-      - 取消则保持原状态
-      - "卸载时保留文件"复选框生效（在工具栏中可勾选）
+      - 弹出应用内确认对话框
+      - 对话框显示插件名称与 ID
+      - 确认卸载时会带上"保留文件"选项
+      - 若插件当前处于 loaded 状态，卸载前会先禁用
 
-  - id: plg-07
-    name: 描述展开/折叠
+  - id: plg-08
+    name: 描述展开与折叠
     preconditions:
       - 存在描述超过 96 字符的插件
     steps:
       - action: observe
-        target: 长描述插件行
+        target: 长描述插件卡
     assertions:
-      - 描述默认截断为 2 行（line-clamp-2）
+      - 描述默认截断为 2 行
       - 显示"展开"按钮
-      - 点击"展开"后显示完整描述
-      - 按钮变为"收起"
-      - 点击"收起"恢复截断
+      - 点击后显示完整描述
+      - 按钮切换为"收起"
+
+  - id: plg-09
+    name: 插件启用或禁用后在 OpenClaw WebUI 生效
+    preconditions:
+      - 至少存在一个可被 OpenClaw WebUI 直接感知的插件
+      - OpenClaw WebUI 已启动且读取同一 profile
+    steps:
+      - action: click
+        target: 某插件的"禁用"或"启用"按钮
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: plugins-runtime-effect
+    assertions:
+      - 管理页中的插件状态即时更新
+      - 刷新 OpenClaw WebUI 后，对应插件能力随之消失或恢复
+      - 如插件出现在工具列表、消息入口或聊天能力中，其可见性与管理页一致

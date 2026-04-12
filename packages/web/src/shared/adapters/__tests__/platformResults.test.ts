@@ -61,11 +61,11 @@ describe('platformResults', () => {
 
     // Memory
     expect(typeof platformResults.openclawMemoryStatus).toBe('function')
+    expect(typeof platformResults.openclawMemorySearchCapability).toBe('function')
     expect(typeof platformResults.openclawMemorySearch).toBe('function')
-    expect(typeof platformResults.powermemMeta).toBe('function')
-    expect(typeof platformResults.powermemList).toBe('function')
-    expect(typeof platformResults.powermemSearch).toBe('function')
-    expect(typeof platformResults.powermemDelete).toBe('function')
+    expect(typeof platformResults.openclawMemoryFiles).toBe('function')
+    expect(typeof platformResults.reindexOpenclawMemory).toBe('function')
+    expect(typeof platformResults.deleteOpenclawMemoryFile).toBe('function')
 
     // Danger
     expect(typeof platformResults.resetOpenclawConfig).toBe('function')

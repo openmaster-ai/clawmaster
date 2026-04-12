@@ -6,6 +6,7 @@ import ChannelsPage from '../ChannelsPage'
 
 const mockGetConfig = vi.fn()
 const mockExecCommand = vi.fn()
+const mockGetLogsResult = vi.fn()
 
 vi.mock('@/adapters', () => ({
   platformResults: {
@@ -24,6 +25,10 @@ vi.mock('@/shared/adapters/platform', () => ({
   execCommand: (...args: any[]) => mockExecCommand(...args),
 }))
 
+vi.mock('@/shared/adapters/logs', () => ({
+  getLogsResult: (...args: any[]) => mockGetLogsResult(...args),
+}))
+
 function renderChannels() {
   return render(
     <MemoryRouter>
@@ -37,6 +42,12 @@ describe('ChannelsPage', () => {
     vi.clearAllMocks()
     await changeLanguage('zh')
     mockExecCommand.mockResolvedValue('')
+    mockGetLogsResult.mockResolvedValue({
+      success: true,
+      data: [
+        { timestamp: '2026-04-07 10:00:00', level: 'ERROR', message: 'webchat disconnected code=1001' },
+      ],
+    })
     mockGetConfig.mockResolvedValue({
       success: true,
       data: {
@@ -95,5 +106,16 @@ describe('ChannelsPage', () => {
       '-g',
       '@tencent-weixin/openclaw-weixin',
     ])
+  })
+
+  it('opens recent logs from the contextual troubleshooting action', async () => {
+    renderChannels()
+
+    expect(await screen.findByText('推荐入口')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '查看最近日志' }))
+
+    expect(await screen.findByRole('dialog', { name: '通道排障日志' })).toBeInTheDocument()
+    expect(screen.getByText('webchat disconnected code=1001')).toBeInTheDocument()
   })
 })

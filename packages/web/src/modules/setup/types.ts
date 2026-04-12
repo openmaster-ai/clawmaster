@@ -166,7 +166,13 @@ export interface ProviderConfig {
   configKeyOverride?: string
   /** API Key 管理页面链接 */
   keyUrl?: string
+  /** 凭证名称，默认 API Key */
+  credentialLabel?: string
+  /** 本地化凭证名称 */
+  credentialLabelByLocale?: Partial<Record<'zh' | 'en' | 'ja', string>>
 }
+
+export type ProviderBadgeTone = 'golden-sponsor'
 
 /**
  * 所有提供商共用 config path 模式: models.providers.<id>.apiKey
@@ -282,6 +288,25 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     ],
     defaultModel: 'deepseek-ai/DeepSeek-V3',
   },
+  'baidu-aistudio': {
+    label: 'Baidu AI Studio',
+    api: 'openai-completions',
+    keyUrl: 'https://aistudio.baidu.com/usercenter/token',
+    credentialLabel: 'Access Token',
+    credentialLabelByLocale: {
+      zh: '令牌',
+      en: 'Access Token',
+      ja: 'アクセストークン',
+    },
+    baseUrl: 'https://aistudio.baidu.com/llm/lmapi/v3',
+    models: [
+      { id: 'deepseek-v3', name: 'DeepSeek V3' },
+      { id: 'deepseek-r1', name: 'DeepSeek R1' },
+      { id: 'ernie-4.5-turbo-128k-preview', name: 'ERNIE 4.5 Turbo' },
+      { id: 'ernie-3.5-8k', name: 'ERNIE 3.5 8K' },
+    ],
+    defaultModel: 'deepseek-v3',
+  },
   // ── 聚合平台 ──
   openrouter: {
     label: 'OpenRouter',
@@ -360,7 +385,19 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
 }
 
 /** 首屏展示的提供商（按钮行），其余折叠在"更多"中 */
-export const PRIMARY_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'ollama', 'openrouter'] as const
+export const PRIMARY_PROVIDERS = ['baidu-aistudio', 'openai', 'anthropic', 'deepseek', 'google', 'ollama', 'openrouter'] as const
+
+export const PROVIDER_BADGES: Partial<Record<keyof typeof PROVIDERS, ProviderBadgeTone>> = {
+  'baidu-aistudio': 'golden-sponsor',
+}
+
+export function getProviderCredentialLabel(providerId: string, locale?: string): string {
+  const provider = PROVIDERS[providerId]
+  if (!provider) return 'API Key'
+
+  const normalizedLocale = locale?.split('-')[0] as 'zh' | 'en' | 'ja' | undefined
+  return provider.credentialLabelByLocale?.[normalizedLocale ?? 'en'] ?? provider.credentialLabel ?? 'API Key'
+}
 
 export interface ChannelTokenField {
   key: string        // CLI flag name (e.g. 'token', 'bot-token')

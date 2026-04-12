@@ -1,3 +1,10 @@
+import {
+  PADDLEOCR_DOC_SKILL_ID,
+  PADDLEOCR_DOC_SKILL_NAME,
+  PADDLEOCR_TEXT_SKILL_ID,
+  PADDLEOCR_TEXT_SKILL_NAME,
+} from '@/shared/paddleocr'
+
 // ─── Types ───
 
 export type SkillCategory = 'ocr' | 'writing' | 'coding' | 'productivity' | 'agent'
@@ -32,20 +39,20 @@ export interface SceneBundle {
 export const SKILL_CATALOG: CatalogSkill[] = [
   // OCR & Document
   {
-    slug: 'paddleocr-doc-parsing',
-    name: 'PaddleOCR Doc Parsing',
+    slug: PADDLEOCR_DOC_SKILL_ID,
+    name: PADDLEOCR_DOC_SKILL_NAME,
     descriptionKey: 'skills.catalog.paddleocrDoc.desc',
     category: 'ocr',
-    skillKey: 'paddleocr-doc-parsing',
+    skillKey: PADDLEOCR_DOC_SKILL_ID,
     hiddenFromMarketplace: true,
     sourceUrl: 'https://github.com/PaddlePaddle/PaddleOCR',
   },
   {
-    slug: 'paddleocr-text-recognition',
-    name: 'PaddleOCR Text Recognition',
+    slug: PADDLEOCR_TEXT_SKILL_ID,
+    name: PADDLEOCR_TEXT_SKILL_NAME,
     descriptionKey: 'skills.catalog.paddleocrText.desc',
     category: 'ocr',
-    skillKey: 'paddleocr-text-recognition',
+    skillKey: PADDLEOCR_TEXT_SKILL_ID,
     hiddenFromMarketplace: true,
     sourceUrl: 'https://github.com/PaddlePaddle/PaddleOCR',
   },
@@ -144,7 +151,7 @@ export const SCENE_BUNDLES: SceneBundle[] = [
     id: 'photo-qa',
     titleKey: 'skills.photoQa',
     descKey: 'skills.photoQaDesc',
-    skills: ['paddleocr-doc-parsing', 'paddleocr-text-recognition'],
+    skills: [PADDLEOCR_DOC_SKILL_ID, PADDLEOCR_TEXT_SKILL_ID],
     icon: 'camera',
     color: 'text-blue-500 bg-blue-100 dark:bg-blue-900/40',
   },
@@ -152,7 +159,7 @@ export const SCENE_BUNDLES: SceneBundle[] = [
     id: 'invoice',
     titleKey: 'skills.invoice',
     descKey: 'skills.invoiceDesc',
-    skills: ['paddleocr-doc-parsing'],
+    skills: [PADDLEOCR_DOC_SKILL_ID],
     icon: 'receipt',
     color: 'text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40',
   },

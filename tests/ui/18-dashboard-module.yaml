@@ -77,12 +77,12 @@ cases:
         name: dashboard-actions
     assertions:
       - 显示"快捷操作"标题
-      - "打开控制台"按钮（外部链接，href 由 buildGatewayUrl 生成，非硬编码 localhost:18789）
-      - "查看日志"按钮（链接到 /gateway，非不存在的 /logs）
-      - "编辑配置"按钮（链接到 /config）
-      - "打开控制台"有 ExternalLink 图标
-      - "查看日志"有 ScrollText 图标
-      - "编辑配置"有 Settings2 图标
+      - '“打开控制台”按钮（外部链接，href 由 buildGatewayUrl 生成，非硬编码 localhost:18789）'
+      - '“查看日志”按钮（链接到 /gateway，非不存在的 /logs）'
+      - '“编辑配置”按钮（链接到 /config）'
+      - '“打开控制台”有 ExternalLink 图标'
+      - '“查看日志”有 ScrollText 图标'
+      - '“编辑配置”有 Settings2 图标'
       - 页面不存在 href="/logs" 的链接
 
   - id: dash-06
@@ -139,3 +139,67 @@ cases:
       - 每个页面的 footer 都显示相同的网关翻译状态
       - footer 不出现 i18n raw key
       - footer 不显示硬编码版本号
+
+  - id: dash-09
+    name: 推荐任务流卡片显示实时就绪状态
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/"
+      - action: wait
+        duration: 2500ms
+      - action: observe
+        target: 推荐任务流区域
+      - action: screenshot
+        name: dashboard-task-flow
+    assertions:
+      - 显示"推荐任务流"标题
+      - 至少显示 4 张任务卡片
+      - 每张任务卡片显示已就绪步骤计数（如"3 / 4 已就绪"）
+      - 每张任务卡片显示状态标签（已就绪 / 需关注 / 待确认 / 检查中）
+      - 每张任务卡片显示"查看清单"按钮
+      - 卡片包含模块入口链接（如"文档""插件"）
+
+  - id: dash-10
+    name: 任务清单抽屉可打开并跳转到精确区块
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/"
+      - action: wait
+        duration: 2500ms
+      - action: click
+        target: 接入飞书或 Lark 卡片的"查看清单"按钮
+      - action: wait
+        duration: 800ms
+      - action: screenshot
+        name: dashboard-task-drawer
+    assertions:
+      - 打开右侧抽屉或弹层
+      - 抽屉显示"任务清单"标题
+      - 抽屉显示当前任务名称
+      - 抽屉显示"建议下一步"
+      - 抽屉内每一步都显示状态标签
+      - 抽屉内包含"前往对应区块"链接
+      - 至少一个链接包含 hash 锚点（如 /channels#channel-focus）
+      - 点击关闭后抽屉消失
+
+  - id: dash-11
+    name: 任务清单链接可直达目标模块区块
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/"
+      - action: wait
+        duration: 2500ms
+      - action: click
+        target: 接入飞书或 Lark 卡片的"查看清单"按钮
+      - action: wait
+        duration: 600ms
+      - action: click
+        target: 抽屉内第一个"前往对应区块"链接
+      - action: wait
+        duration: 1200ms
+      - action: screenshot
+        name: dashboard-task-deeplink
+    assertions:
+      - 页面已跳转到对应模块
+      - URL 包含 hash 锚点
+      - 目标页面存在对应区块标题或内容

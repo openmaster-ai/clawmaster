@@ -180,21 +180,18 @@ cases:
       - 显示"重新检测"按钮
 
   - id: real-setup-10
-    name: 记忆页面 → CapabilityGuard 拦截（powermem 未安装）
-    preconditions:
-      - powermem 未安装
+    name: 记忆页面 → 原生 OpenClaw 记忆工作区
     steps:
       - action: click
         target: role(link, "记忆")
       - action: wait
         duration: 3000ms
       - action: screenshot
-        name: real-setup-memory-guard
+        name: real-setup-memory-native
     assertions:
-      - 页面不显示记忆列表
-      - 显示"记忆管理尚未启用"或类似提示
-      - 显示"安装记忆管理"按钮
-      - 显示"重新检测"按钮
+      - 页面显示"记忆管理"
+      - 显示记忆概览与存储文件区块
+      - 不显示过时的 PowerMem 安装引导
 
 # ──────────────────────────────────────────────
 # Part D: 错误处理

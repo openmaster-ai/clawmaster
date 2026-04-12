@@ -76,7 +76,7 @@ cases:
       - action: observe
         target: text("在浏览器中打开")
     assertions:
-      - "在浏览器中打开"按钮可见
+      - '“在浏览器中打开”按钮可见'
       - 按钮 href 由 buildGatewayUrl(config) 生成（使用 config.gateway.bind/port）
       - 按钮有 target="_blank" 属性
 
@@ -92,4 +92,4 @@ cases:
     assertions:
       - 按钮区域显示"重启中..."（操作状态）
       - 操作完成后状态恢复为"运行中"
-      - "停止"和"重启"按钮恢复可用
+      - '“停止”和“重启”按钮恢复可用'

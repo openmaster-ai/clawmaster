@@ -2,12 +2,11 @@ suite: config-and-security
 name: 配置编辑 + 安全功能
 description: |
   验证配置页面的可写能力和安全相关功能：
-  1. 配置可视化编辑
-  2. JSON 编辑器
-  3. 配置保存/导出
-  4. API Key 脱敏
-  5. 花费预算设置
-  6. 主题切换
+  1. JSON 编辑器
+  2. 配置保存/导出
+  3. API Key 脱敏
+  4. 主题切换
+  5. Settings 中的 Profile 与确认对话框
 
 preconditions:
   - dev server 已启动
@@ -19,54 +18,35 @@ cases:
   # === 配置编辑 ===
 
   - id: cfg-01
-    name: 可视化编辑模式
+    name: JSON 编辑器模式
     steps:
       - action: navigate_to
         target: 配置页面
       - action: wait
         duration: 2000ms
       - action: screenshot
-        name: cfg-visual-mode
+        name: cfg-json-mode
     assertions:
-      - 显示"可视化编辑"和"JSON 编辑器"两个 tab
-      - "可视化编辑"tab 默认选中（高亮）
-      - 显示"网关 (Gateway)"折叠区（端口、模式、绑定、认证）
-      - 显示"代理默认设置 (Agents Defaults)"折叠区
-      - 输入框可编辑（非 readOnly）
+      - 显示格式化的 JSON 文本
+      - textarea 可编辑
       - 显示"保存""刷新""导出"三个按钮
 
   - id: cfg-02
-    name: 可视化编辑字段交互
+    name: JSON 内容编辑
     steps:
       - action: clear_and_fill
-        target: 端口输入框
-        value: "18800"
-      - action: select
-        target: 绑定模式下拉
-        value: "lan"
+        target: JSON textarea
+        value: |
+          {
+            "gateway": { "port": 18800 }
+          }
       - action: screenshot
         name: cfg-editing
     assertions:
-      - 端口输入框值变为"18800"
-      - 绑定模式下拉值变为"LAN"
-      - 输入框支持数字类型校验
+      - textarea 内容更新
+      - 内容保持可编辑
 
   - id: cfg-03
-    name: JSON 编辑器模式
-    steps:
-      - action: click
-        target: text("JSON 编辑器")
-      - action: wait
-        duration: 500ms
-      - action: screenshot
-        name: cfg-json-mode
-    assertions:
-      - "JSON 编辑器"tab 高亮
-      - 显示 textarea 包含格式化的 JSON 文本
-      - textarea 可编辑
-      - JSON 内容与可视化编辑的字段一致
-
-  - id: cfg-04
     name: JSON 语法校验
     steps:
       - action: clear_and_fill
@@ -74,13 +54,11 @@ cases:
         value: "{ invalid json"
     assertions:
       - 显示红色错误提示"JSON 语法错误: ..."
-      - "保存"按钮置灰（disabled）
+      - '“保存”按钮置灰（disabled）'
 
-  - id: cfg-05
+  - id: cfg-04
     name: 配置保存（原子 saveFullConfig）
     steps:
-      - action: click
-        target: text("可视化编辑")
       - action: click
         target: text("保存")
       - action: wait
@@ -92,7 +70,7 @@ cases:
       - 提示 2 秒后自动消失
       - 保存使用 saveFullConfigResult（原子整文件写入），非逐 key 循环 setConfig
 
-  - id: cfg-06
+  - id: cfg-05
     name: 配置导出
     steps:
       - action: click
@@ -132,56 +110,19 @@ cases:
       - 图标变为 🙈
       - 再次点击恢复脱敏
 
-  # === 花费预算 ===
-
-  - id: sec-03
-    name: 花费预算设置
-    steps:
-      - action: navigate_to
-        target: 设置页面
-      - action: scroll_to
-        target: 花费预算区域
-      - action: screenshot
-        name: sec-budget-settings
-    assertions:
-      - 显示"花费预算"区块标题
-      - 显示说明文字"设置预算上限，超支时在可观测 Dashboard 显示告警"
-      - 显示 3 个输入框：日预算 / 周预算 / 月预算
-      - 输入框有 $ 前缀
-      - 输入框类型为 number
-      - placeholder 为"不限"
-
-  - id: sec-04
-    name: 预算值持久化
-    steps:
-      - action: fill
-        target: 日预算输入框
-        value: "5"
-      - action: fill
-        target: 周预算输入框
-        value: "20"
-      - action: navigate_to
-        target: 其他页面
-      - action: navigate_to
-        target: 设置页面
-    assertions:
-      - 日预算输入框仍显示"5"
-      - 周预算输入框仍显示"20"
-      - 值通过 localStorage 持久化
-
   # === 主题切换 ===
 
-  - id: sec-05
+  - id: sec-03
     name: 主题切换
     steps:
       - action: navigate_to
         target: 设置页面
       - action: click
-        target: "深色"主题 radio
+        target: '“深色”主题 radio'
       - action: screenshot
         name: sec-theme-dark
       - action: click
-        target: "浅色"主题 radio
+        target: '“浅色”主题 radio'
       - action: screenshot
         name: sec-theme-light
     assertions:
@@ -243,7 +184,7 @@ cases:
   # === Issue #4 修复验证：Settings 死按钮 ===
 
   - id: cfg-14
-    name: "重置配置"按钮已接线
+    name: '“重置配置”按钮已接线'
     steps:
       - action: navigate
         url: "{BASE_URL}/settings"
@@ -254,11 +195,12 @@ cases:
     assertions:
       - 危险操作区显示"重置配置"按钮
       - 按钮有 click handler（非死按钮）
-      - 点击后弹出 window.confirm 确认对话框
+      - 点击后弹出应用内确认对话框（非原生 window.confirm）
+      - 确认对话框包含取消与确认操作
       - 取消后不执行重置
 
   - id: cfg-15
-    name: "卸载 OpenClaw"按钮已接线
+    name: '“卸载 OpenClaw”按钮已接线'
     steps:
       - action: navigate
         url: "{BASE_URL}/settings"
@@ -267,7 +209,8 @@ cases:
     assertions:
       - 危险操作区显示"卸载 OpenClaw"按钮
       - 按钮有 click handler（非死按钮）
-      - 点击后弹出 window.confirm 确认对话框
+      - 点击后弹出应用内确认对话框（非原生 window.confirm）
+      - 确认对话框包含取消与确认操作
 
   - id: cfg-16
     name: Web 模式隐藏 Tauri 专用系统设置
@@ -282,3 +225,69 @@ cases:
       - 不显示"显示托盘图标"复选框
       - 不显示"最小化到托盘"复选框
       - 页面无 defaultChecked 且无 onChange 的复选框
+
+  - id: cfg-17
+    name: Settings 配置档切换与命名配置校验
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/settings"
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: settings-profile-section
+    assertions:
+      - 显示"OpenClaw 配置档"区块
+      - 提供 Default、Dev、Named 三种模式
+      - 切换到 Named 后显示配置档名称输入框
+      - 未填写名称直接保存时显示校验错误
+      - 选择"导入配置路径"后显示配置文件路径输入框
+      - 右侧显示当前解析出的配置目标、数据目录与 config path
+
+  - id: cfg-18
+    name: Settings 诊断入口
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/settings"
+      - action: wait
+        duration: 1500ms
+      - action: click
+        target: text("查看最近日志")
+      - action: wait
+        duration: 800ms
+      - action: screenshot
+        name: settings-diagnostics-sheet
+    assertions:
+      - 显示"诊断与排障"区块
+      - 点击后打开最近日志弹层
+      - 弹层可关闭
+      - 日志内容保留完整系统流，不只限某个模块
+
+  - id: cfg-19
+    name: 全局更新横幅与设置页联动
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: settings-update-banner
+    assertions:
+      - 当存在新版本时，页面顶部显示 OpenClaw 更新横幅
+      - 横幅包含目标版本号
+      - 横幅提供"查看更新"入口
+      - 点击后可跳转到设置页更新区块
+
+  - id: cfg-20
+    name: Profile 区块说明配置与运行时隔离关系
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/settings"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: settings-profile-scope
+    assertions:
+      - Profile 区块显示当前解析目标
+      - 显示数据目录与配置文件路径
+      - 导入配置路径模式展示路径输入框
+      - 页面说明仅复制配置，不复制技能、插件、日志等运行时状态

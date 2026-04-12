@@ -44,7 +44,7 @@ cases:
       - 智能体编排显示"v0.1.4"（已安装）
       - 核心引擎（required=true）已安装 → 不需要安装按钮
       - 页面显示"核心引擎已就绪，2 项扩展能力可稍后安装"
-      - "进入管理大师"按钮可见且可点击（因为 required 全部满足）
+      - '“进入管理大师”按钮可见且可点击（因为 required 全部满足）'
       - 显示"未安装的能力可在对应功能页面按需安装"提示
 
   - id: setup-03
@@ -79,19 +79,19 @@ cases:
       - 不显示费用卡片/图表（被 guard 拦截）
 
   - id: setup-05
-    name: 记忆页面显示能力引导安装
+    name: 记忆页面显示原生记忆工作区
     steps:
       - action: click
         target: role(link, "记忆")
       - action: wait
         duration: 2000ms
       - action: screenshot
-        name: setup-memory-guard
+        name: setup-memory-native
     assertions:
-      - 页面显示"记忆管理尚未启用"
-      - 显示"安装记忆管理"按钮
-      - 显示"重新检测"按钮
-      - 不显示记忆列表（被 guard 拦截）
+      - 页面显示"记忆管理"
+      - 显示原生记忆概览卡片
+      - 显示存储文件列表
+      - 不显示安装引导
 
   # === Issue #4 修复验证 ===
 

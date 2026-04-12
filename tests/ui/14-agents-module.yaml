@@ -74,7 +74,7 @@ cases:
       - 默认配置卡片仍然显示（defaults 区域）
       - 代理列表区域显示空状态卡片
       - 空状态文字"暂无代理"
-      - "创建代理"按钮仍然可用
+      - '“创建代理”按钮仍然可用'
 
   - id: agt-05
     name: main 代理删除保护
@@ -90,19 +90,19 @@ cases:
   # === Issue #4 修复验证 ===
 
   - id: agt-06
-    name: "创建代理"按钮已接线
+    name: '“创建代理”按钮已接线'
     steps:
       - action: navigate
         url: "{BASE_URL}/agents"
       - action: wait
         duration: 2000ms
     assertions:
-      - "+ 创建代理"按钮有 click handler（非死按钮）
+      - '“+ 创建代理”按钮有 click handler（非死按钮）'
       - 点击后弹出 window.prompt 输入代理 ID
       - 取消后不创建代理
 
   - id: agt-07
-    name: "删除"按钮已接线
+    name: '“删除”按钮已接线'
     preconditions:
       - 存在非 main 代理
     steps:

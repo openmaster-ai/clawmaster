@@ -13,13 +13,33 @@ type ClawmasterSettings = {
   openclawProfile?: OpenclawProfileSelection
 }
 
-function getClawmasterSettingsPath(): string {
-  return path.join(os.homedir(), '.clawmaster', 'settings.json')
+type PlatformPath = Pick<typeof path, 'join' | 'dirname'>
+
+export interface OpenclawProfileContext {
+  homeDir?: string
+  settingsPath?: string
+  platform?: string
 }
 
-function readClawmasterSettings(): ClawmasterSettings {
+export function getOpenclawPathModule(platformName: string = process.platform): PlatformPath {
+  return platformName === 'win32' ? path.win32 : path.posix
+}
+
+function resolveHomeDir(homeDir?: string): string {
+  return homeDir ?? os.homedir()
+}
+
+function getClawmasterSettingsPath(context: OpenclawProfileContext = {}): string {
+  if (context.settingsPath) {
+    return context.settingsPath
+  }
+  const pathModule = getOpenclawPathModule(context.platform)
+  return pathModule.join(resolveHomeDir(context.homeDir), '.clawmaster', 'settings.json')
+}
+
+function readClawmasterSettings(context: OpenclawProfileContext = {}): ClawmasterSettings {
   try {
-    const raw = fs.readFileSync(getClawmasterSettingsPath(), 'utf8')
+    const raw = fs.readFileSync(getClawmasterSettingsPath(context), 'utf8')
     const parsed = JSON.parse(raw) as ClawmasterSettings
     return typeof parsed === 'object' && parsed !== null ? parsed : {}
   } catch {
@@ -27,9 +47,13 @@ function readClawmasterSettings(): ClawmasterSettings {
   }
 }
 
-function writeClawmasterSettings(settings: ClawmasterSettings): void {
-  const file = getClawmasterSettingsPath()
-  fs.mkdirSync(path.dirname(file), { recursive: true })
+function writeClawmasterSettings(
+  settings: ClawmasterSettings,
+  context: OpenclawProfileContext = {}
+): void {
+  const file = getClawmasterSettingsPath(context)
+  const pathModule = getOpenclawPathModule(context.platform)
+  fs.mkdirSync(pathModule.dirname(file), { recursive: true })
   fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`, 'utf8')
 }
 
@@ -65,29 +89,34 @@ export function normalizeOpenclawProfileSelection(
   throw new Error('Unsupported OpenClaw profile kind')
 }
 
-export function getOpenclawProfileSelection(): OpenclawProfileSelection {
-  return normalizeOpenclawProfileSelection(readClawmasterSettings().openclawProfile)
+export function getOpenclawProfileSelection(
+  context: OpenclawProfileContext = {}
+): OpenclawProfileSelection {
+  return normalizeOpenclawProfileSelection(readClawmasterSettings(context).openclawProfile)
 }
 
 export function setOpenclawProfileSelection(
-  selection?: Partial<OpenclawProfileSelection> | null
+  selection?: Partial<OpenclawProfileSelection> | null,
+  context: OpenclawProfileContext = {}
 ): OpenclawProfileSelection {
   const normalized = normalizeOpenclawProfileSelection(selection)
   if (normalized.kind === 'default') {
-    clearOpenclawProfileSelection()
+    clearOpenclawProfileSelection(context)
     return normalized
   }
 
-  const next = readClawmasterSettings()
+  const next = readClawmasterSettings(context)
   next.openclawProfile = normalized
-  writeClawmasterSettings(next)
+  writeClawmasterSettings(next, context)
   return normalized
 }
 
-export function clearOpenclawProfileSelection(): void {
-  const next = readClawmasterSettings()
+export function clearOpenclawProfileSelection(
+  context: OpenclawProfileContext = {}
+): void {
+  const next = readClawmasterSettings(context)
   delete next.openclawProfile
-  writeClawmasterSettings(next)
+  writeClawmasterSettings(next, context)
 }
 
 export function getOpenclawProfileArgs(
@@ -104,13 +133,15 @@ export function getOpenclawProfileArgs(
 
 export function getOpenclawDataDirForProfile(
   selection: OpenclawProfileSelection,
-  homeDir: string = os.homedir()
+  context: OpenclawProfileContext = {}
 ): string | null {
+  const pathModule = getOpenclawPathModule(context.platform)
+  const homeDir = resolveHomeDir(context.homeDir)
   if (selection.kind === 'dev') {
-    return path.join(homeDir, '.openclaw-dev')
+    return pathModule.join(homeDir, '.openclaw-dev')
   }
   if (selection.kind === 'named' && selection.name) {
-    return path.join(homeDir, `.openclaw-${selection.name}`)
+    return pathModule.join(homeDir, `.openclaw-${selection.name}`)
   }
   return null
 }

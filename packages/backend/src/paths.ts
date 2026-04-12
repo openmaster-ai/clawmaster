@@ -5,6 +5,7 @@ import {
   getOpenclawDataDirForProfile,
   getOpenclawProfileSelection,
   type OpenclawProfileSelection,
+  type OpenclawProfileContext,
 } from './openclawProfile.js'
 
 type OpenclawConfigPathOptions = {
@@ -12,6 +13,8 @@ type OpenclawConfigPathOptions = {
   homeDir?: string
   appDataBase?: string
   profileSelection?: OpenclawProfileSelection
+  settingsPath?: string
+  existsSync?: (candidate: string) => boolean
 }
 
 export type OpenclawConfigResolutionSource =
@@ -35,10 +38,14 @@ function getWindowsOpenclawConfigPathCandidates(
   homeDir: string,
   appDataBase: string
 ): string[] {
-  const homePath = path.join(homeDir, '.openclaw', 'openclaw.json')
-  const roamingPath = path.join(appDataBase, 'openclaw', 'openclaw.json')
+  const homePath = path.win32.join(homeDir, '.openclaw', 'openclaw.json')
+  const roamingPath = path.win32.join(appDataBase, 'openclaw', 'openclaw.json')
 
   return homePath === roamingPath ? [homePath] : [homePath, roamingPath]
+}
+
+function getPathModule(platformName: string = process.platform): Pick<typeof path, 'join' | 'dirname'> {
+  return platformName === 'win32' ? path.win32 : path.posix
 }
 
 /** Same path as src-tauri/src/lib.rs get_config_path */
@@ -50,7 +57,7 @@ export function getOpenclawConfigPathCandidatesFor({
   if (platform === 'win32') {
     return getWindowsOpenclawConfigPathCandidates(homeDir, appDataBase)
   }
-  return [path.join(homeDir, '.openclaw', 'openclaw.json')]
+  return [getPathModule(platform).join(homeDir, '.openclaw', 'openclaw.json')]
 }
 
 /** Same path as src-tauri/src/lib.rs get_config_path */
@@ -72,12 +79,13 @@ export function resolveOpenclawConfigPath(
 
 function getDefaultResolutionSource(
   candidates: string[],
-  resolved: string
+  resolved: string,
+  existsSync: (candidate: string) => boolean = fs.existsSync
 ): OpenclawConfigResolutionSource {
   if (resolved === candidates[1]) {
     return 'existing-default-roaming'
   }
-  if (fs.existsSync(resolved)) {
+  if (existsSync(resolved)) {
     return 'existing-default-home'
   }
   return 'default-home'
@@ -87,34 +95,44 @@ export function getOpenclawConfigResolution({
   platform = process.platform,
   homeDir = os.homedir(),
   appDataBase = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
-  profileSelection = getOpenclawProfileSelection(),
+  settingsPath,
+  profileSelection,
+  existsSync = fs.existsSync,
 }: OpenclawConfigPathOptions = {}): OpenclawConfigResolution {
+  const resolvedProfileSelection =
+    profileSelection ??
+    getOpenclawProfileSelection({
+      homeDir,
+      settingsPath,
+      platform,
+    } satisfies OpenclawProfileContext)
   const defaultCandidates = getOpenclawConfigPathCandidatesFor({
     platform,
     homeDir,
     appDataBase,
   })
-  const existingConfigPaths = defaultCandidates.filter((candidate) => fs.existsSync(candidate))
+  const pathModule = getPathModule(platform)
+  const existingConfigPaths = defaultCandidates.filter((candidate) => existsSync(candidate))
 
-  const overrideDir = getOpenclawDataDirForProfile(profileSelection, homeDir)
+  const overrideDir = getOpenclawDataDirForProfile(resolvedProfileSelection, { homeDir, platform })
   if (overrideDir) {
     return {
-      configPath: path.join(overrideDir, 'openclaw.json'),
+      configPath: pathModule.join(overrideDir, 'openclaw.json'),
       dataDir: overrideDir,
-      source: profileSelection.kind === 'dev' ? 'profile-dev' : 'profile-named',
-      profileSelection,
+      source: resolvedProfileSelection.kind === 'dev' ? 'profile-dev' : 'profile-named',
+      profileSelection: resolvedProfileSelection,
       overrideActive: true,
       configPathCandidates: defaultCandidates,
       existingConfigPaths,
     }
   }
 
-  const configPath = resolveOpenclawConfigPath(defaultCandidates)
+  const configPath = resolveOpenclawConfigPath(defaultCandidates, existsSync)
   return {
     configPath,
-    dataDir: path.dirname(configPath),
-    source: getDefaultResolutionSource(defaultCandidates, configPath),
-    profileSelection,
+    dataDir: pathModule.dirname(configPath),
+    source: getDefaultResolutionSource(defaultCandidates, configPath, existsSync),
+    profileSelection: resolvedProfileSelection,
     overrideActive: false,
     configPathCandidates: defaultCandidates,
     existingConfigPaths,
@@ -129,32 +147,6 @@ export function getOpenclawConfigPath(): string {
 /** OpenClaw data root (openclaw.json, logs, skills, etc.) */
 export function getOpenclawDataDir(): string {
   return getOpenclawConfigResolution().dataDir
-}
-
-/**
- * PowerMem (pmem) bundle under OpenClaw data: default `.env`, managed Python venv, etc.
- * Keeps third-party plugin secrets and runtime out of `~/.clawmaster` and off the openclaw.json parent alone.
- */
-export function getOpenclawPowermemDir(): string {
-  return path.join(getOpenclawDataDir(), 'powermem')
-}
-
-/** Default PowerMem env file: `powermem/.env` next to OpenClaw state. */
-export function getDefaultPowermemEnvFilePath(): string {
-  return path.join(getOpenclawPowermemDir(), '.env')
-}
-
-/**
- * SQLite file used by OpenClaw gateway + memory-powermem when no custom `.env` layout
- * (`openclaw-powermem-env.ts` `buildDefaultSqlitePowermemEnv`). Clawmaster must use the same
- * path when running `pmem` or generated `.env` or the UI lists an empty DB.
- */
-export function getOpenclawPowermemGatewayDataDir(): string {
-  return path.join(getOpenclawPowermemDir(), 'data')
-}
-
-export function getOpenclawPowermemGatewaySqlitePath(): string {
-  return path.join(getOpenclawPowermemGatewayDataDir(), 'powermem.db')
 }
 
 /** Default snapshots dir (aligned with openclaw-uninstaller) */

@@ -6,7 +6,7 @@ use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const CMD_ERR_PREFIX: &str = "CLAWMASTER_ERR:";
 
@@ -655,7 +655,7 @@ const PADDLEOCR_TEXT_SKILL_ID: &str = "paddleocr-text-recognition";
 const PADDLEOCR_DOC_SKILL_ID: &str = "paddleocr-doc-parsing";
 const PADDLEOCR_SKILL_IDS: [&str; 2] = [PADDLEOCR_TEXT_SKILL_ID, PADDLEOCR_DOC_SKILL_ID];
 const PADDLEOCR_SAMPLE_IMAGE_BASE64: &str =
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5nLJ8AAAAASUVORK5CYII=";
+    include_str!("../resources/paddleocr-preview/sample_image.base64");
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -663,6 +663,12 @@ struct PaddleocrSetupPayload {
     module_id: String,
     api_url: String,
     access_token: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PaddleocrClearPayload {
+    module_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -685,6 +691,18 @@ struct PaddleocrStatusPayload {
     missing_modules: Vec<String>,
     text_recognition: PaddleocrModuleStatus,
     doc_parsing: PaddleocrModuleStatus,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PaddleocrPreviewPayload {
+    module_id: String,
+    api_url: String,
+    latency_ms: u128,
+    page_count: usize,
+    text_line_count: usize,
+    extracted_text: String,
+    response_preview: String,
 }
 
 struct BundledPaddleocrFile {
@@ -958,33 +976,29 @@ fn read_paddleocr_api_url_from_entry(
     normalize_paddleocr_api_url(module_id, env_url).ok()
 }
 
-fn paddleocr_has_access_token(
+fn read_paddleocr_access_token_from_entry(
     entry: Option<&serde_json::Map<String, serde_json::Value>>,
-) -> bool {
-    let Some(entry) = entry else {
-        return false;
-    };
+) -> Option<String> {
+    let entry = entry?;
 
-    if entry
+    if let Some(token) = entry
         .get("apiKey")
         .and_then(|value| value.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .is_some()
     {
-        return true;
+        return Some(token.to_string());
     }
 
-    if entry
+    if let Some(token) = entry
         .get("config")
         .and_then(|value| value.as_object())
         .and_then(|config| config.get("accessToken"))
         .and_then(|value| value.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .is_some()
     {
-        return true;
+        return Some(token.to_string());
     }
 
     entry
@@ -994,27 +1008,13 @@ fn paddleocr_has_access_token(
         .and_then(|value| value.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .is_some()
+        .map(|value| value.to_string())
 }
 
-fn paddleocr_has_module_endpoint(
+fn paddleocr_has_access_token(
     entry: Option<&serde_json::Map<String, serde_json::Value>>,
-    module_id: &str,
 ) -> bool {
-    let Some(entry) = entry else {
-        return false;
-    };
-    let Some(env) = entry.get("env").and_then(|value| value.as_object()) else {
-        return false;
-    };
-    let Ok(key) = paddleocr_module_api_env_key(module_id) else {
-        return false;
-    };
-    env.get(key)
-        .and_then(|value| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .is_some()
+    read_paddleocr_access_token_from_entry(entry).is_some()
 }
 
 fn build_paddleocr_module_status(
@@ -1186,13 +1186,136 @@ fn paddleocr_error_code(payload: Option<&serde_json::Value>) -> i64 {
         .unwrap_or(0)
 }
 
-fn run_paddleocr_validation_request(
+fn paddleocr_sample_image_base64() -> String {
+    PADDLEOCR_SAMPLE_IMAGE_BASE64
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect()
+}
+
+fn count_non_empty_lines(text: &str) -> usize {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .count()
+}
+
+fn extract_paddleocr_preview_text(payload: Option<&serde_json::Value>) -> (String, usize) {
+    let Some(payload) = payload else {
+        return (String::new(), 0);
+    };
+
+    let Some(result) = payload.get("result").and_then(|value| value.as_object()) else {
+        let text = payload
+            .get("text")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .unwrap_or("")
+            .to_string();
+        return (text, 0);
+    };
+
+    if let Some(ocr_results) = result.get("ocrResults").and_then(|value| value.as_array()) {
+        let page_texts = ocr_results
+            .iter()
+            .filter_map(|page| page.get("prunedResult"))
+            .filter_map(|value| value.as_object())
+            .map(|pruned_result| {
+                pruned_result
+                    .get("rec_texts")
+                    .and_then(|value| value.as_array())
+                    .map(|texts| {
+                        texts
+                            .iter()
+                            .filter_map(|item| item.as_str())
+                            .map(str::trim)
+                            .filter(|item| !item.is_empty())
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .unwrap_or_default()
+            })
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>();
+
+        let page_count = result
+            .get("dataInfo")
+            .and_then(|value| value.as_object())
+            .and_then(|data_info| data_info.get("numPages"))
+            .and_then(|value| value.as_u64())
+            .map(|value| value as usize)
+            .filter(|value| *value > 0)
+            .unwrap_or(ocr_results.len());
+
+        return (page_texts.join("\n\n"), page_count);
+    }
+
+    if let Some(layout_results) = result
+        .get("layoutParsingResults")
+        .and_then(|value| value.as_array())
+    {
+        let page_texts = layout_results
+            .iter()
+            .filter_map(|page| page.get("markdown"))
+            .filter_map(|value| value.as_object())
+            .filter_map(|markdown| markdown.get("text"))
+            .filter_map(|value| value.as_str())
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(|text| text.to_string())
+            .collect::<Vec<_>>();
+
+        return (page_texts.join("\n\n"), layout_results.len());
+    }
+
+    let text = payload
+        .get("text")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string();
+    (text, 0)
+}
+
+fn format_paddleocr_response_preview(payload: Option<&serde_json::Value>) -> String {
+    let preview_value = payload.and_then(|value| value.get("result").or(Some(value)));
+    let Some(preview_value) = preview_value else {
+        return String::new();
+    };
+
+    let serialized =
+        serde_json::to_string_pretty(preview_value).unwrap_or_else(|_| preview_value.to_string());
+    shorten_chars(&serialized, 4000)
+}
+
+fn resolve_paddleocr_access_token(
+    input_access_token: &str,
+    config: &serde_json::Value,
+    module_id: &str,
+) -> Result<String, String> {
+    let input_access_token = input_access_token.trim();
+    if !input_access_token.is_empty() {
+        return Ok(input_access_token.to_string());
+    }
+
+    read_paddleocr_access_token_from_entry(read_paddleocr_skill_entry(config, module_id))
+        .ok_or_else(|| "Access Token is required.".to_string())
+}
+
+struct PaddleocrRequestResult {
+    status: u16,
+    raw_body: String,
+    payload: Option<serde_json::Value>,
+    latency_ms: u128,
+}
+
+fn run_paddleocr_request(
     api_url: &str,
     access_token: &str,
-) -> Result<(u16, String), String> {
+) -> Result<PaddleocrRequestResult, String> {
     const STATUS_MARKER: &str = "__CLAWMASTER_PADDLEOCR_STATUS__:";
     let payload = serde_json::json!({
-        "file": PADDLEOCR_SAMPLE_IMAGE_BASE64,
+        "file": paddleocr_sample_image_base64(),
         "fileType": 1,
         "visualize": false,
         "useDocUnwarping": false,
@@ -1200,6 +1323,7 @@ fn run_paddleocr_validation_request(
     })
     .to_string();
 
+    let started_at = Instant::now();
     let output = Command::new(resolve_system_command_path("curl"))
         .args([
             "-sS",
@@ -1224,6 +1348,7 @@ fn run_paddleocr_validation_request(
         .stdin(Stdio::null())
         .output()
         .map_err(|e| format!("PaddleOCR verification request could not start: {e}"))?;
+    let latency_ms = started_at.elapsed().as_millis();
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -1246,11 +1371,17 @@ fn run_paddleocr_validation_request(
         .parse::<u16>()
         .map_err(|_| "PaddleOCR verification returned an invalid status code.".to_string())?;
 
-    Ok((
+    let raw_body = body
+        .trim_end_matches(|ch| ch == '\r' || ch == '\n')
+        .to_string();
+    let payload = serde_json::from_str::<serde_json::Value>(&raw_body).ok();
+
+    Ok(PaddleocrRequestResult {
         status,
-        body.trim_end_matches(|ch| ch == '\r' || ch == '\n')
-            .to_string(),
-    ))
+        raw_body,
+        payload,
+        latency_ms,
+    })
 }
 
 fn validate_single_paddleocr_endpoint(
@@ -1259,24 +1390,26 @@ fn validate_single_paddleocr_endpoint(
     access_token: &str,
 ) -> Result<(), String> {
     let label = paddleocr_validation_label(module_id)?;
-    let (status, raw_body) = run_paddleocr_validation_request(api_url, access_token)?;
-    let payload = serde_json::from_str::<serde_json::Value>(&raw_body).ok();
+    let request = run_paddleocr_request(api_url, access_token)?;
 
-    if status != 200 {
-        let detail = paddleocr_error_detail(payload.as_ref(), &raw_body);
-        return Err(match status {
+    if request.status != 200 {
+        let detail = paddleocr_error_detail(request.payload.as_ref(), &request.raw_body);
+        return Err(match request.status {
             403 => format!("{label} rejected the access token (403)."),
             429 => format!("{label} quota has been exceeded (429)."),
             500..=599 => {
-                format!("{label} service is temporarily unavailable ({status}): {detail}")
+                format!(
+                    "{label} service is temporarily unavailable ({}): {detail}",
+                    request.status
+                )
             }
-            _ => format!("{label} verification failed ({status}): {detail}"),
+            _ => format!("{label} verification failed ({}): {detail}", request.status),
         });
     }
 
-    let api_error_code = paddleocr_error_code(payload.as_ref());
+    let api_error_code = paddleocr_error_code(request.payload.as_ref());
     if api_error_code != 0 {
-        let detail = paddleocr_error_detail(payload.as_ref(), &raw_body);
+        let detail = paddleocr_error_detail(request.payload.as_ref(), &request.raw_body);
         return Err(format!("{label} verification failed: {detail}"));
     }
 
@@ -1296,6 +1429,17 @@ fn validate_paddleocr_credentials(
     let api_url = normalize_paddleocr_api_url(module_id, api_url)?;
     validate_single_paddleocr_endpoint(module_id, &api_url, token)?;
     Ok(())
+}
+
+fn clear_paddleocr_skill_entry(config: &mut serde_json::Value, module_id: &str) {
+    if let Some(entries) = config
+        .get_mut("skills")
+        .and_then(|value| value.as_object_mut())
+        .and_then(|skills| skills.get_mut("entries"))
+        .and_then(|value| value.as_object_mut())
+    {
+        entries.remove(module_id);
+    }
 }
 
 fn write_paddleocr_skill_entries(
@@ -1356,23 +1500,78 @@ fn get_paddleocr_status() -> Result<PaddleocrStatusPayload, String> {
 
 #[tauri::command]
 fn setup_paddleocr(payload: PaddleocrSetupPayload) -> Result<PaddleocrStatusPayload, String> {
-    let access_token = payload.access_token.trim().to_string();
-    if access_token.is_empty() {
-        return Err("Access Token is required.".to_string());
-    }
-
     let module_id = payload.module_id.trim();
+    let config = load_config_json_value()?;
+    let access_token =
+        resolve_paddleocr_access_token(&payload.access_token, &config, module_id)?;
     let api_url = normalize_paddleocr_api_url(module_id, &payload.api_url)?;
     validate_paddleocr_credentials(module_id, &api_url, &access_token)?;
 
     let skills_dir = get_paddleocr_skills_dir();
     ensure_bundled_paddleocr_modules(&skills_dir)?;
 
-    let mut config = load_config_json_value()?;
+    let mut config = config;
     write_paddleocr_skill_entries(&mut config, module_id, &api_url, &access_token)?;
     save_config_json_value(config)?;
 
     let updated_config = load_config_json_value()?;
+    Ok(build_paddleocr_status(&updated_config, &skills_dir))
+}
+
+#[tauri::command]
+fn preview_paddleocr(payload: PaddleocrSetupPayload) -> Result<PaddleocrPreviewPayload, String> {
+    let module_id = payload.module_id.trim();
+    let config = load_config_json_value()?;
+    let access_token =
+        resolve_paddleocr_access_token(&payload.access_token, &config, module_id)?;
+    let api_url = normalize_paddleocr_api_url(module_id, &payload.api_url)?;
+    let request = run_paddleocr_request(&api_url, &access_token)?;
+    let label = paddleocr_validation_label(module_id)?;
+
+    if request.status != 200 {
+        let detail = paddleocr_error_detail(request.payload.as_ref(), &request.raw_body);
+        return Err(match request.status {
+            403 => format!("{label} rejected the access token (403)."),
+            429 => format!("{label} quota has been exceeded (429)."),
+            500..=599 => {
+                format!("{label} service is temporarily unavailable ({}): {detail}", request.status)
+            }
+            _ => format!("{label} verification failed ({}): {detail}", request.status),
+        });
+    }
+
+    let api_error_code = paddleocr_error_code(request.payload.as_ref());
+    if api_error_code != 0 {
+        let detail = paddleocr_error_detail(request.payload.as_ref(), &request.raw_body);
+        return Err(format!("{label} verification failed: {detail}"));
+    }
+
+    let (extracted_text, page_count) = extract_paddleocr_preview_text(request.payload.as_ref());
+
+    Ok(PaddleocrPreviewPayload {
+        module_id: module_id.to_string(),
+        api_url,
+        latency_ms: request.latency_ms,
+        page_count,
+        text_line_count: count_non_empty_lines(&extracted_text),
+        extracted_text,
+        response_preview: format_paddleocr_response_preview(request.payload.as_ref()),
+    })
+}
+
+#[tauri::command]
+fn clear_paddleocr(payload: PaddleocrClearPayload) -> Result<PaddleocrStatusPayload, String> {
+    let module_id = payload.module_id.trim();
+    if module_id != PADDLEOCR_TEXT_SKILL_ID && module_id != PADDLEOCR_DOC_SKILL_ID {
+        return Err("Unsupported PaddleOCR module.".to_string());
+    }
+
+    let mut config = load_config_json_value()?;
+    clear_paddleocr_skill_entry(&mut config, module_id);
+    save_config_json_value(config)?;
+
+    let updated_config = load_config_json_value()?;
+    let skills_dir = get_paddleocr_skills_dir();
     Ok(build_paddleocr_status(&updated_config, &skills_dir))
 }
 
@@ -3217,6 +3416,8 @@ pub fn run() {
             save_config,
             get_paddleocr_status,
             setup_paddleocr,
+            preview_paddleocr,
+            clear_paddleocr,
             reset_openclaw_config,
             save_openclaw_profile,
             clear_openclaw_profile,

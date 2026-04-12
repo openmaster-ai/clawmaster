@@ -23,13 +23,21 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type {
+  PaddleOcrModuleStatus,
   PaddleOcrModuleId,
+  PaddleOcrPreviewPayload,
   PaddleOcrStatusPayload,
   SkillGuardScanResult,
   SkillInfo,
 } from '@/lib/types'
 import PaddleOcrSetupDialog from '@/modules/setup/PaddleOcrSetupDialog'
-import { getPaddleOcrStatusResult, setupPaddleOcrResult } from '@/shared/adapters/paddleocr'
+import {
+  clearPaddleOcrResult,
+  getPaddleOcrStatusResult,
+  previewPaddleOcrResult,
+  setupPaddleOcrResult,
+} from '@/shared/adapters/paddleocr'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
 import { InstallTask } from '@/shared/components/InstallTask'
 import { LoadingState } from '@/shared/components/LoadingState'
@@ -198,11 +206,19 @@ function SkillsContent() {
   const [activeScanDetailsKey, setActiveScanDetailsKey] = useState<string | null>(null)
   const [paddleOcrDialogOpen, setPaddleOcrDialogOpen] = useState(false)
   const [paddleOcrDialogModuleId, setPaddleOcrDialogModuleId] = useState<PaddleOcrModuleId | null>(null)
+  const [paddleOcrModuleStatus, setPaddleOcrModuleStatus] =
+    useState<PaddleOcrModuleStatus | null>(null)
   const [paddleOcrApiUrl, setPaddleOcrApiUrl] = useState('')
   const [paddleOcrAccessToken, setPaddleOcrAccessToken] = useState('')
-  const [paddleOcrBusy, setPaddleOcrBusy] = useState(false)
+  const [paddleOcrSubmitBusy, setPaddleOcrSubmitBusy] = useState(false)
+  const [paddleOcrPreviewBusy, setPaddleOcrPreviewBusy] = useState(false)
+  const [paddleOcrClearBusy, setPaddleOcrClearBusy] = useState(false)
   const [paddleOcrError, setPaddleOcrError] = useState<string | null>(null)
+  const [paddleOcrPreview, setPaddleOcrPreview] =
+    useState<PaddleOcrPreviewPayload | null>(null)
+  const [paddleOcrClearConfirmOpen, setPaddleOcrClearConfirmOpen] = useState(false)
   const clawhubInstallTask = useInstallTask()
+  const paddleOcrBusy = paddleOcrSubmitBusy || paddleOcrPreviewBusy || paddleOcrClearBusy
 
   const visibleCatalog = useMemo(
     () => SKILL_CATALOG.filter((skill) => !skill.hiddenFromMarketplace),
@@ -364,28 +380,77 @@ function SkillsContent() {
   }
 
   const openPaddleOcrDialog = useCallback((moduleId: PaddleOcrModuleId) => {
+    const moduleStatus = paddleOcrStatus
+      ? getPaddleOcrModuleStatus(paddleOcrStatus, moduleId)
+      : null
+
     setPaddleOcrDialogModuleId(moduleId)
     setPaddleOcrDialogOpen(true)
+    setPaddleOcrModuleStatus(moduleStatus)
     setPaddleOcrError(null)
+    setPaddleOcrPreview(null)
+    setPaddleOcrClearConfirmOpen(false)
     setPaddleOcrAccessToken('')
-    setPaddleOcrApiUrl(
-      paddleOcrStatus ? getPaddleOcrModuleStatus(paddleOcrStatus, moduleId).apiUrl ?? '' : '',
-    )
+    setPaddleOcrApiUrl(moduleStatus?.apiUrl ?? '')
   }, [paddleOcrStatus])
 
   const closePaddleOcrDialog = useCallback(() => {
     if (paddleOcrBusy) return
     setPaddleOcrDialogOpen(false)
     setPaddleOcrDialogModuleId(null)
+    setPaddleOcrModuleStatus(null)
+    setPaddleOcrApiUrl('')
+    setPaddleOcrAccessToken('')
     setPaddleOcrError(null)
+    setPaddleOcrPreview(null)
+    setPaddleOcrClearConfirmOpen(false)
   }, [paddleOcrBusy])
 
-  const submitPaddleOcrSetup = useCallback(async () => {
-    if (!paddleOcrDialogModuleId || !paddleOcrApiUrl.trim() || !paddleOcrAccessToken.trim()) {
+  const runPaddleOcrPreview = useCallback(async () => {
+    if (
+      !paddleOcrDialogModuleId ||
+      !paddleOcrApiUrl.trim() ||
+      (!paddleOcrAccessToken.trim() && !paddleOcrModuleStatus?.accessTokenConfigured)
+    ) {
       return
     }
 
-    setPaddleOcrBusy(true)
+    setPaddleOcrPreviewBusy(true)
+    setPaddleOcrError(null)
+    try {
+      const result = await previewPaddleOcrResult({
+        moduleId: paddleOcrDialogModuleId,
+        apiUrl: paddleOcrApiUrl.trim(),
+        accessToken: paddleOcrAccessToken.trim(),
+      })
+      if (!result.success || !result.data) {
+        throw new Error(result.error ?? t('common.requestFailed'))
+      }
+      setPaddleOcrPreview(result.data)
+    } catch (error) {
+      setPaddleOcrPreview(null)
+      setPaddleOcrError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setPaddleOcrPreviewBusy(false)
+    }
+  }, [
+    paddleOcrAccessToken,
+    paddleOcrApiUrl,
+    paddleOcrDialogModuleId,
+    paddleOcrModuleStatus?.accessTokenConfigured,
+    t,
+  ])
+
+  const submitPaddleOcrSetup = useCallback(async () => {
+    if (
+      !paddleOcrDialogModuleId ||
+      !paddleOcrApiUrl.trim() ||
+      (!paddleOcrAccessToken.trim() && !paddleOcrModuleStatus?.accessTokenConfigured)
+    ) {
+      return
+    }
+
+    setPaddleOcrSubmitBusy(true)
     setPaddleOcrError(null)
     try {
       const result = await setupPaddleOcrResult({
@@ -396,24 +461,51 @@ function SkillsContent() {
       if (!result.success || !result.data) {
         throw new Error(result.error ?? t('common.requestFailed'))
       }
+      setPaddleOcrModuleStatus(getPaddleOcrModuleStatus(result.data, paddleOcrDialogModuleId))
       setPaddleOcrDialogOpen(false)
       setPaddleOcrDialogModuleId(null)
+      setPaddleOcrPreview(null)
       setPaddleOcrAccessToken('')
       await refetchPaddleOcrStatus()
       await refetch()
     } catch (error) {
       setPaddleOcrError(error instanceof Error ? error.message : String(error))
     } finally {
-      setPaddleOcrBusy(false)
+      setPaddleOcrSubmitBusy(false)
     }
   }, [
     paddleOcrAccessToken,
     paddleOcrApiUrl,
     paddleOcrDialogModuleId,
+    paddleOcrModuleStatus?.accessTokenConfigured,
     refetch,
     refetchPaddleOcrStatus,
     t,
   ])
+
+  const confirmClearPaddleOcr = useCallback(async () => {
+    if (!paddleOcrDialogModuleId) return
+
+    setPaddleOcrClearBusy(true)
+    setPaddleOcrError(null)
+    try {
+      const result = await clearPaddleOcrResult({ moduleId: paddleOcrDialogModuleId })
+      if (!result.success || !result.data) {
+        throw new Error(result.error ?? t('common.requestFailed'))
+      }
+      setPaddleOcrModuleStatus(getPaddleOcrModuleStatus(result.data, paddleOcrDialogModuleId))
+      setPaddleOcrApiUrl('')
+      setPaddleOcrAccessToken('')
+      setPaddleOcrPreview(null)
+      setPaddleOcrClearConfirmOpen(false)
+      await refetchPaddleOcrStatus()
+      await refetch()
+    } catch (error) {
+      setPaddleOcrError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setPaddleOcrClearBusy(false)
+    }
+  }, [paddleOcrDialogModuleId, refetch, refetchPaddleOcrStatus, t])
 
   return (
     <div className="page-shell page-shell-bleed">
@@ -613,14 +705,33 @@ function SkillsContent() {
       <PaddleOcrSetupDialog
         open={paddleOcrDialogOpen}
         busy={paddleOcrBusy}
+        submitBusy={paddleOcrSubmitBusy}
+        previewBusy={paddleOcrPreviewBusy}
+        clearBusy={paddleOcrClearBusy}
         error={paddleOcrError}
         moduleId={paddleOcrDialogModuleId}
+        moduleStatus={paddleOcrModuleStatus}
         apiUrl={paddleOcrApiUrl}
         accessToken={paddleOcrAccessToken}
+        preview={paddleOcrPreview}
         onClose={closePaddleOcrDialog}
         onApiUrlChange={setPaddleOcrApiUrl}
         onAccessTokenChange={setPaddleOcrAccessToken}
+        onPreview={runPaddleOcrPreview}
+        onRequestClear={() => setPaddleOcrClearConfirmOpen(true)}
         onSubmit={submitPaddleOcrSetup}
+      />
+      <ConfirmDialog
+        open={paddleOcrClearConfirmOpen}
+        title={t('setup.paddleocr.clearTitle')}
+        description={t('setup.paddleocr.clearDescription')}
+        confirmLabel={t('setup.paddleocr.clearConfirm')}
+        tone="danger"
+        busy={paddleOcrClearBusy}
+        onCancel={() => {
+          if (!paddleOcrClearBusy) setPaddleOcrClearConfirmOpen(false)
+        }}
+        onConfirm={confirmClearPaddleOcr}
       />
     </div>
   )

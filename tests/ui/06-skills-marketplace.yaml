@@ -1,8 +1,8 @@
 suite: skills-marketplace
 name: 技能市场
 description: |
-  验证技能页面的完整功能：
-  分类过滤、场景推荐、精选目录、已安装技能、市场搜索、安装/卸载
+  验证当前技能页的主流程：
+  ClawHub 前置检查、重点推荐技能、已安装技能筛选、SkillGuard 扫描，以及运行时启用/禁用效果。
 
 preconditions:
   - dev server 已启动
@@ -12,147 +12,200 @@ viewport: { width: 1280, height: 800 }
 
 cases:
   - id: skill-01
-    name: 页面头部和分类过滤器
+    name: 页面头部与指标卡
     steps:
       - action: navigate
         url: "{BASE_URL}/skills"
       - action: wait
-        duration: 2000ms
+        duration: 1500ms
       - action: screenshot
         name: skill-page-header
     assertions:
-      - 页面标题"技能市场"
-      - 副标题"发现并安装 OpenClaw 技能扩展"
-      - 显示刷新按钮
-      - 显示"访问 ClawHub 在线市场 →"外部链接
-      - 显示分类过滤器 pill 按钮："全部"默认选中
-      - 分类 pill 包含：OCR 文档、写作风格、编程工程、效率工具、智能体
+      - 页面标题显示"技能市场"
+      - 副标题说明先从 ClawHub 安装，再只启用应暴露给运行时的技能
+      - 顶部显示 4 张指标卡：已安装技能、当前启用、可立即使用、重点推荐
+      - 页面不显示 emoji
 
   - id: skill-02
-    name: 分类过滤功能
+    name: 重点推荐技能区块
     steps:
-      - action: click
-        target: text("编程工程")
-      - action: wait
-        duration: 500ms
+      - action: observe
+        target: 重点推荐技能区块
       - action: screenshot
-        name: skill-filter-coding
+        name: skill-featured
     assertions:
-      - "编程工程"pill 高亮（bg-card shadow-sm）
-      - 场景区域仅显示与编程相关的场景（"编程增强"）
-      - 精选目录仅显示编程类技能（Self-Improving Agent、Agency Skills Pack、OK Skills）
-      - OCR 类技能不可见
-      - 点击"全部"恢复完整显示
+      - 显示"先从 4 个高价值技能开始"
+      - 显示 4 张重点推荐技能卡
+      - 技能标题使用技能 ID 或 skill key，不显示冗余 slug 副标题
+      - 默认排序为 clawvet、find-skills、openclaw-memory-pro-system、self-improving-agent
+      - 每张卡片包含分类标签、简短描述、安装或启用按钮、源码按钮
 
   - id: skill-03
-    name: 场景推荐区块（4 张卡片）
+    name: 分类 pill 过滤
     steps:
       - action: click
-        target: text("全部")
+        target: text("智能体")
       - action: wait
         duration: 500ms
       - action: screenshot
-        name: skill-scenes
+        name: skill-filter-agent
     assertions:
-      - 显示"推荐场景"标题
-      - 显示 4 张场景卡片（lg 屏幕 4 列）
-      - 拍照答题：Camera 图标 + "2 个技能" + 描述含"OCR" + 一键安装按钮
-      - 发票整理：Receipt 图标 + "1 个技能" + 描述含"发票" + 一键安装按钮
-      - 错题本：BookOpen 图标 + "1 个技能" + 描述含"错题" + 一键安装按钮
-      - 编程增强：Code 图标 + "2 个技能" + 描述含"自我改进" + 一键安装按钮
-      - 已全部安装的场景显示绿色"已全部安装"标签（CheckCircle2）
+      - 分类 pill 包含：全部、OCR 文档、写作风格、编程工程、效率工具、智能体
+      - 当前分类 pill 高亮
+      - 已安装技能列表根据分类过滤
+      - 点击"全部"后恢复完整列表
 
   - id: skill-04
-    name: 精选目录网格
+    name: 推荐技能卡操作入口
     steps:
-      - action: scroll_to
-        target: 精选目录区域
-      - action: screenshot
-        name: skill-catalog-grid
+      - action: observe
+        target: 某重点推荐技能卡
     assertions:
-      - 显示"精选目录"标题
-      - 显示 3 列卡片网格（lg 屏幕）
-      - 每张卡片包含：技能名称 + slug（mono 字体）+ 分类标签（彩色）+ 描述 + 源码链接 + 安装按钮
-      - 至少显示 11 张技能卡片
-      - 包含技能：PaddleOCR Doc Parsing、Writing Style、Self-Improving Agent、Agency Skills Pack、ClawVet 等
-      - 已安装的技能显示绿色"已安装"标签 + "卸载"按钮
-      - 未安装的技能显示"安装"按钮
-      - 分类标签颜色：OCR 蓝色、写作紫色、编程绿色、效率琥珀色、智能体玫红色
+      - 未安装时显示"安装"主按钮
+      - 已安装时显示启用或禁用按钮
+      - 卡片同时提供"源码"外链
+      - 源码按钮带 ExternalLink 图标并以新窗口打开
 
   - id: skill-05
-    name: 精选目录安装流程
+    name: 运行时冲突提示
+    preconditions:
+      - 已安装技能中存在与重点推荐 skill key 相同、但来源不同的技能
     steps:
-      - action: click
-        target: 某未安装技能卡片的"安装"按钮
       - action: observe
-        duration: 10000ms
+        target: 发生冲突的重点推荐技能卡
+      - action: screenshot
+        name: skill-collision
     assertions:
-      - 点击后显示 InstallTask 进度组件
-      - 进度组件显示安装状态（进行中/成功/失败）
-      - 安装完成前不提前显示 done（onInstall 已被 await）
-      - 安装成功后卡片显示"已安装"绿色标签
-      - 安装成功后按钮变为"卸载"
+      - 卡片显示运行时冲突提示
+      - 提示文案说明已有其他来源的同名技能正在占用该 key
+      - 不会把个人技能误判成重点推荐技能已正确安装
 
   - id: skill-06
-    name: 源码链接
-    steps:
-      - action: observe
-        target: 精选目录卡片的"源码"链接
-    assertions:
-      - "源码"链接有 ExternalLink 图标
-      - 链接有 target="_blank" 属性
-      - 链接指向 GitHub 或 ClawHub URL
-
-  - id: skill-07
-    name: 已安装技能 tab
+    name: 已安装技能区块与空状态
     steps:
       - action: scroll_to
-        target: 已安装 tab 区域
-      - action: observe
-        target: "已安装"tab 区域
+        target: text("当前工作区已安装")
+      - action: screenshot
+        name: skill-installed
     assertions:
-      - "已安装 (N)"tab 默认选中
-      - 显示过滤输入框
-      - 如有技能：显示技能卡片（名称 + 版本 + 描述 + slug + 卸载按钮）
-      - 如无技能：显示 Package 图标 + "暂无已安装技能"
+      - 显示"当前工作区已安装"区块
+      - 区块右侧显示过滤输入框
+      - 如有技能：按卡片方式展示技能 ID、版本、描述、状态标签与操作按钮
+      - 如无技能：显示空状态"暂无已安装技能"
+
+  - id: skill-07
+    name: 已安装技能过滤
+    preconditions:
+      - 已安装至少 2 个技能
+    steps:
+      - action: fill
+        target: input[placeholder*="过滤已安装技能"]
+        value: "find"
+      - action: wait
+        duration: 500ms
+      - action: screenshot
+        name: skill-installed-filter
+    assertions:
+      - 列表只保留名称、ID、描述或来源匹配关键字的技能
+      - 如无匹配则显示"无匹配结果"
+      - 清空输入框后恢复完整列表
 
   - id: skill-08
-    name: 搜索市场 tab
+    name: ClawHub CLI 缺失时先显示安装引导
+    preconditions:
+      - 当前机器未安装 ClawHub CLI
     steps:
-      - action: click
-        target: text("搜索市场")
+      - action: navigate
+        url: "{BASE_URL}/skills"
+      - action: wait
+        duration: 1500ms
       - action: screenshot
-        name: skill-market-tab
+        name: skill-clawhub-prerequisite
     assertions:
-      - "搜索市场"tab 高亮
-      - 搜索输入框 placeholder 变为市场搜索提示
-      - 显示"搜索"按钮
-      - 初始状态显示 Search 图标 + 搜索提示文字
+      - 页面显示"先安装 ClawHub CLI"
+      - 显示安装命令提示
+      - 显示"安装 ClawHub CLI"主按钮
+      - 重点推荐技能卡的安装入口变为"先安装 ClawHub"
 
   - id: skill-09
-    name: 场景一键安装
+    name: ClawHub CLI 安装进度反馈
+    preconditions:
+      - 当前机器未安装 ClawHub CLI
     steps:
       - action: click
-        target: 某场景卡片的"一键安装"按钮
+        target: text("安装 ClawHub CLI")
       - action: observe
         duration: 10000ms
+      - action: screenshot
+        name: skill-clawhub-install
     assertions:
-      - 显示 InstallTask 进度组件替代安装按钮
-      - 安装进度与真实异步操作一致（onInstall 已被 await，不提前 done）
-      - 安装完成后场景显示"已全部安装"绿色标签
-      - 已安装 tab 数字更新
+      - 安装卡进入进行中状态
+      - 页面显示步骤化进度组件，而非静默等待
+      - 安装成功后状态切换为已就绪
+      - 失败时显示错误信息与重试入口
 
   - id: skill-10
-    name: 技能卸载
+    name: SkillGuard 扫描结果与详情弹层
     preconditions:
-      - 有已安装的技能
+      - 至少一个已安装技能支持扫描
     steps:
       - action: click
-        target: 某个技能的"卸载"按钮
-      - action: observe
+        target: 某已安装技能的"扫描"按钮
+      - action: wait
         duration: 3000ms
+      - action: screenshot
+        name: skill-scan-summary
     assertions:
-      - 弹出确认对话框
-      - 确认后技能从已安装列表消失
-      - 精选目录中该技能恢复为"安装"按钮
-      - 已安装数字更新
+      - 扫描期间显示"扫描中..."
+      - 完成后在技能卡下方显示 SkillGuard 摘要
+      - 摘要卡显示安全等级、问题数、最高严重度等紧凑信息
+      - 显示"查看详情"按钮
+      - 点击后打开详情弹层
+      - 详情弹层覆盖技能页主要视口，包含技能路径、扫描时间、严重度分布与主要发现
+
+  - id: skill-11
+    name: 已安装技能启用或禁用
+    preconditions:
+      - 至少存在一个已安装技能
+    steps:
+      - action: click
+        target: 某技能卡的"启用"或"禁用"按钮
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: skill-runtime-toggle
+    assertions:
+      - 按钮在处理中显示启用中或禁用中
+      - 技能状态标签即时更新
+      - 状态会写回 OpenClaw 的 skills.entries.<skillKey>.enabled 配置
+
+  - id: skill-12
+    name: 已安装列表慢加载时仍保留推荐区
+    preconditions:
+      - 已安装技能列表请求存在可感知延迟
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/skills"
+      - action: wait
+        duration: 300ms
+      - action: screenshot
+        name: skill-loading-partial
+    assertions:
+      - 重点推荐技能区先渲染
+      - 已安装技能区显示 loading 状态
+      - 页面不显示已废弃的精选目录或 OpenClaw 运行时状态面板
+
+  - id: skill-13
+    name: 重点技能在 OpenClaw WebUI 中生效
+    preconditions:
+      - 已通过管理页安装并启用 find-skills 等重点技能
+      - OpenClaw WebUI 已启动且读取同一 profile
+    steps:
+      - action: observe
+        target: OpenClaw WebUI 对话输入区
+      - action: screenshot
+        name: skill-openclaw-runtime
+    assertions:
+      - 新开会话后，OpenClaw WebUI 能识别已启用技能
+      - 可通过让助手列出可用技能或直接触发对应能力来验证
+      - 禁用后重新发起新会话，对应技能不再被暴露

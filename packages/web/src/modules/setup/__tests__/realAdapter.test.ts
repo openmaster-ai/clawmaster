@@ -23,7 +23,9 @@ vi.mock('@/shared/adapters/openclawBootstrap', () => ({
 }))
 
 vi.mock('@/shared/adapters/paddleocr', () => ({
+  clearPaddleOcrResult: vi.fn(),
   getPaddleOcrStatusResult: vi.fn(),
+  previewPaddleOcrResult: vi.fn(),
   setupPaddleOcrResult: vi.fn(),
 }))
 
@@ -31,7 +33,12 @@ import { execCommand } from '@/shared/adapters/platform'
 import { setConfigResult } from '@/shared/adapters/openclaw'
 import { installOpenclawGlobalResult } from '@/shared/adapters/npmOpenclaw'
 import { bootstrapAfterInstallResult } from '@/shared/adapters/openclawBootstrap'
-import { getPaddleOcrStatusResult } from '@/shared/adapters/paddleocr'
+import {
+  clearPaddleOcrResult,
+  getPaddleOcrStatusResult,
+  previewPaddleOcrResult,
+  setupPaddleOcrResult,
+} from '@/shared/adapters/paddleocr'
 import { realSetupAdapter } from '../adapters'
 import type { InstallProgress } from '../types'
 
@@ -41,7 +48,10 @@ describe('realSetupAdapter', () => {
     vi.mocked(setConfigResult).mockReset()
     vi.mocked(installOpenclawGlobalResult).mockReset()
     vi.mocked(bootstrapAfterInstallResult).mockReset()
+    vi.mocked(clearPaddleOcrResult).mockReset()
     vi.mocked(getPaddleOcrStatusResult).mockReset()
+    vi.mocked(previewPaddleOcrResult).mockReset()
+    vi.mocked(setupPaddleOcrResult).mockReset()
     vi.mocked(installOpenclawGlobalResult).mockResolvedValue({
       success: true,
       data: { ok: true, code: 0, stdout: 'installed', stderr: '' },
@@ -56,6 +66,66 @@ describe('realSetupAdapter', () => {
       error: null,
     })
     vi.mocked(getPaddleOcrStatusResult).mockResolvedValue({
+      success: true,
+      data: {
+        configured: false,
+        enabledModules: [],
+        missingModules: [],
+        textRecognition: {
+          configured: false,
+          enabled: false,
+          missing: false,
+          apiUrlConfigured: false,
+          accessTokenConfigured: false,
+        },
+        docParsing: {
+          configured: false,
+          enabled: false,
+          missing: false,
+          apiUrlConfigured: false,
+          accessTokenConfigured: false,
+        },
+      },
+      error: null,
+    })
+    vi.mocked(previewPaddleOcrResult).mockResolvedValue({
+      success: true,
+      data: {
+        moduleId: 'paddleocr-text-recognition',
+        apiUrl: 'https://demo.paddleocr.com/ocr',
+        latencyMs: 123,
+        pageCount: 1,
+        textLineCount: 2,
+        extractedText: 'demo',
+        responsePreview: '{}',
+      },
+      error: null,
+    })
+    vi.mocked(setupPaddleOcrResult).mockResolvedValue({
+      success: true,
+      data: {
+        configured: false,
+        enabledModules: ['paddleocr-text-recognition'],
+        missingModules: [],
+        textRecognition: {
+          configured: true,
+          enabled: true,
+          missing: false,
+          apiUrlConfigured: true,
+          accessTokenConfigured: true,
+          apiUrl: 'https://demo.paddleocr.com/ocr',
+        },
+        docParsing: {
+          configured: false,
+          enabled: false,
+          missing: false,
+          apiUrlConfigured: false,
+          accessTokenConfigured: false,
+        },
+      },
+      error: null,
+    })
+    vi.mocked(clearPaddleOcrResult).mockResolvedValue({
       success: true,
       data: {
         configured: false,
@@ -166,6 +236,36 @@ describe('realSetupAdapter', () => {
         { id: 'Pro/deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3 (Pro)' },
         { id: 'Pro/deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1 (Pro)' },
       ],
+    })
+  })
+
+  it('forwards PaddleOCR preview and clear requests through the shared adapter layer', async () => {
+    await expect(
+      realSetupAdapter.paddleocr.preview({
+        moduleId: 'paddleocr-text-recognition',
+        apiUrl: 'https://demo.paddleocr.com/ocr',
+        accessToken: '',
+      }),
+    ).resolves.toMatchObject({
+      apiUrl: 'https://demo.paddleocr.com/ocr',
+      latencyMs: 123,
+    })
+
+    await expect(
+      realSetupAdapter.paddleocr.clear({
+        moduleId: 'paddleocr-text-recognition',
+      }),
+    ).resolves.toMatchObject({
+      enabledModules: [],
+    })
+
+    expect(previewPaddleOcrResult).toHaveBeenCalledWith({
+      moduleId: 'paddleocr-text-recognition',
+      apiUrl: 'https://demo.paddleocr.com/ocr',
+      accessToken: '',
+    })
+    expect(clearPaddleOcrResult).toHaveBeenCalledWith({
+      moduleId: 'paddleocr-text-recognition',
     })
   })
 })

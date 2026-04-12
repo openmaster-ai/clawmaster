@@ -2,13 +2,24 @@ suite: models-module
 name: 模型配置功能
 description: |
   验证模型配置页面的完整功能：
-  提供商列表、添加提供商、测试连接、API Key 脱敏、默认模型指示
+  提供商列表、赞助商优先级、添加提供商、测试连接、凭证入口、API Key 脱敏、默认模型指示
 
 preconditions:
   - dev server 已启动（{BASE_URL} 可访问）
   - 已进入主界面
 
 viewport: { width: 1280, height: 800 }
+
+setup:
+  - action: navigate
+    url: "{BASE_URL}/models"
+  - action: wait
+    duration: 1500ms
+  - action: select
+    target: select[class]
+    value: zh
+  - action: wait
+    duration: 500ms
 
 cases:
   - id: mod-01
@@ -26,6 +37,8 @@ cases:
       - 显示"添加提供商"按钮
       - 每个已配置提供商显示为卡片
       - 卡片包含：状态圆点 + 提供商名称
+      - 金牌赞助提供商显示"金牌赞助"
+      - 若已配置 Baidu AI Studio，则其卡片优先显示在列表顶部
       - 默认提供商卡片显示蓝色"默认"标签
       - 卡片内显示 API Key（脱敏格式）
       - 卡片内显示"测试连接"按钮
@@ -42,14 +55,31 @@ cases:
         name: models-add-panel
     assertions:
       - 展开"添加提供商"面板
-      - 显示提供商选择按钮（OpenAI、Anthropic、Google 等）
-      - 当前选中按钮高亮（bg-primary）
-      - 显示 API Key 输入框（password 类型）
+      - 面板顶部单独显示"金牌赞助"区块
+      - '“金牌赞助”区块包含 Baidu AI Studio'
+      - 赞助商区块与"推荐提供商"区块分开呈现
+      - 默认选中 Baidu AI Studio
+      - 显示密码类型凭证输入框
       - 显示"验证并添加"按钮
       - 显示"取消"按钮
-      - 显示"获取 API Key →"链接（指向对应提供商注册页面）
+      - 显示"获取 Baidu AI Studio 令牌 →"链接
 
   - id: mod-03
+    name: Baidu 令牌入口与文案
+    steps:
+      - action: click
+        target: text("添加提供商")
+      - action: wait
+        duration: 300ms
+      - action: screenshot
+        name: models-baidu-token-shortcut
+    assertions:
+      - 当前 provider 为"Baidu AI Studio"
+      - 显示"获取 Baidu AI Studio 令牌 →"
+      - 凭证输入框 placeholder 显示"输入 Baidu AI Studio 令牌"
+      - 不应显示"输入 Baidu AI Studio API Key"
+
+  - id: mod-04
     name: 测试连接功能
     preconditions:
       - 已配置至少一个提供商
@@ -64,7 +94,7 @@ cases:
       - 测试失败：按钮旁显示红色"连接失败"
       - 测试结果与实际 API Key 有效性一致
 
-  - id: mod-04
+  - id: mod-05
     name: API Key 脱敏显示
     preconditions:
       - 已配置含 API Key 的提供商
@@ -77,7 +107,7 @@ cases:
       - 点击眼睛图标可显示明文 Key
       - 再次点击恢复遮罩
 
-  - id: mod-05
+  - id: mod-06
     name: 默认模型标识
     steps:
       - action: observe
@@ -87,7 +117,7 @@ cases:
       - 显示蓝色"默认"小标签（bg-primary/10 text-primary）
       - 状态圆点为 primary 色（区别于其他提供商的绿色）
 
-  - id: mod-06
+  - id: mod-07
     name: 展开更多提供商
     steps:
       - action: click
@@ -97,8 +127,71 @@ cases:
       - action: observe
         target: 提供商选择区域
     assertions:
-      - 默认显示主要提供商（OpenAI、Anthropic、Google 等）
+      - 默认显示主要提供商（Baidu AI Studio、OpenAI、Anthropic、Google 等）
       - 显示"更多 (N 个)"链接
       - 点击后展开全部提供商列表
       - 展开后显示 Ollama、DeepSeek、智谱 等全部选项
       - 选择需要 Base URL 的提供商时出现额外输入框
+
+  - id: mod-08
+    name: 无效凭证不应保存
+    steps:
+      - action: click
+        target: text("添加提供商")
+      - action: wait
+        duration: 300ms
+      - action: fill
+        target: input[placeholder*="令牌"], input[placeholder*="Access Token"]
+        value: invalid-test-token
+      - action: click
+        target: text("验证并添加")
+      - action: observe
+        duration: 3000ms
+    assertions:
+      - 验证失败时显示"API Key 验证失败"
+      - 添加面板保持打开
+      - 不应新增重复 provider 卡片
+
+  - id: mod-09
+    name: 切换 provider 后重置输入
+    steps:
+      - action: click
+        target: text("添加提供商")
+      - action: wait
+        duration: 300ms
+      - action: fill
+        target: input[placeholder*="令牌"], input[placeholder*="Access Token"]
+        value: temporary-token
+      - action: click
+        target: text("OpenAI")
+      - action: wait
+        duration: 200ms
+      - action: click
+        target: text("Baidu AI Studio")
+      - action: wait
+        duration: 200ms
+    assertions:
+      - 切换到 OpenAI 后显示"输入 OpenAI API Key"
+      - 切回 Baidu AI Studio 后恢复"输入 Baidu AI Studio 令牌"
+      - 返回 Baidu 时旧输入值不应残留
+
+  - id: mod-10
+    name: 取消后重新打开应回到推荐 provider
+    steps:
+      - action: click
+        target: text("添加提供商")
+      - action: wait
+        duration: 300ms
+      - action: click
+        target: text("取消")
+      - action: wait
+        duration: 200ms
+      - action: click
+        target: text("添加提供商")
+      - action: wait
+        duration: 300ms
+      - action: screenshot
+        name: models-reopen-panel
+    assertions:
+      - 重新打开后面板默认仍指向"Baidu AI Studio"
+      - 再次显示"获取 Baidu AI Studio 令牌 →"

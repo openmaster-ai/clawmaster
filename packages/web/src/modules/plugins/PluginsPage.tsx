@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { platformResults } from '@/adapters'
 import type { OpenClawPluginInfo } from '@/lib/types'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { LoadingState } from '@/shared/components/LoadingState'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
 
@@ -391,6 +392,7 @@ export default function PluginsPage() {
   const [categoryFilter, setCategoryFilter] = useState<PluginCategory | 'all'>('all')
   const [busy, setBusy] = useState<PluginBusy | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [pendingUninstall, setPendingUninstall] = useState<OpenClawPluginInfo | null>(null)
   const [installId, setInstallId] = useState('')
   const [uninstallKeepFiles, setUninstallKeepFiles] = useState(false)
 
@@ -442,16 +444,6 @@ export default function PluginsPage() {
 
   const runUninstall = useCallback(
     async (plugin: OpenClawPluginInfo) => {
-      if (
-        !window.confirm(
-          t('plugins.uninstallConfirm', {
-            id: plugin.id,
-            name: pluginDisplayName(plugin),
-          })
-        )
-      ) {
-        return
-      }
       setActionError(null)
       setBusy({ kind: 'uninstall', id: plugin.id })
       const r = await platformResults.uninstallPlugin(plugin.id, {
@@ -630,7 +622,7 @@ export default function PluginsPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]">
-        <section className="surface-card">
+        <section id="plugins-inventory" className="surface-card">
           <div className="dashboard-section-head">
             <div className="dashboard-section-copy">
               <p className="dashboard-section-meta">{t('plugins.liveInventoryTitle')}</p>
@@ -655,7 +647,7 @@ export default function PluginsPage() {
           )}
         </section>
 
-        <section className="surface-card space-y-4">
+        <section id="plugins-install" className="surface-card space-y-4">
           <div className="dashboard-section-copy">
             <p className="dashboard-section-meta">{t('plugins.managePanelTitle')}</p>
             <h2 className="text-xl font-semibold text-foreground">{t('plugins.install')}</h2>
@@ -722,7 +714,7 @@ export default function PluginsPage() {
         </section>
       </div>
 
-      <section className="surface-card space-y-4">
+      <section id="plugins-groups" className="surface-card space-y-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div className="toolbar-group">
             <label className="flex-1 min-w-[14rem]">
@@ -827,7 +819,7 @@ export default function PluginsPage() {
                       busy={busy}
                       onEnable={(id) => void runSetEnabled(id, true)}
                       onDisable={(id) => void runSetEnabled(id, false)}
-                      onUninstall={(item) => void runUninstall(item)}
+                      onUninstall={(item) => setPendingUninstall(item)}
                     />
                   ))}
                 </div>
@@ -849,6 +841,25 @@ export default function PluginsPage() {
       {plugins.length === 0 && !rawCliOutput && (
         <p className="text-sm text-muted-foreground">{t('plugins.emptyList')}</p>
       )}
+      <ConfirmDialog
+        open={Boolean(pendingUninstall)}
+        title={
+          pendingUninstall
+            ? t('plugins.uninstallConfirm', {
+                id: pendingUninstall.id,
+                name: pluginDisplayName(pendingUninstall),
+              })
+            : ''
+        }
+        tone="danger"
+        onCancel={() => setPendingUninstall(null)}
+        onConfirm={() => {
+          if (!pendingUninstall) return
+          const plugin = pendingUninstall
+          setPendingUninstall(null)
+          void runUninstall(plugin)
+        }}
+      />
     </div>
   )
 }

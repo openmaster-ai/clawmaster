@@ -6,25 +6,26 @@
 
 | 文件 | 用例数 | 覆盖范围 |
 |------|--------|---------|
-| `01-setup-wizard.yaml` | 5 | 安装向导 demo 全流程（检测→就绪→安装→完成→进入主界面） |
+| `01-setup-wizard.yaml` | 7 | 安装向导 demo 全流程（检测→就绪→进入主界面/CapabilityGuard/回归用例） |
 | `02-page-navigation.yaml` | 15 | 全部 15 个页面导航可达性 + 渲染验证 |
-| `03-memory-module.yaml` | 10 | 记忆管理完整功能（降级/健康/列表/搜索/添加/编辑/删除/Agent 切换） |
-| `04-observe-module.yaml` | 9 | 可观测 Dashboard（降级/费用卡片/图表/健康度/建议/会话） |
-| `05-config-and-security.yaml` | 13 | 配置编辑 + API Key 脱敏 + 预算 + 主题切换 + 版本更新 |
-| `06-skills-marketplace.yaml` | 10 | 技能市场（分类过滤/场景推荐/精选目录/安装卸载/市场搜索） |
+| `03-memory-module.yaml` | 6 | 原生记忆管理（概览/搜索/文件详情/删除确认/区块 loading/FTS 降级提示） |
+| `04-observe-module.yaml` | 10 | 可观测 Dashboard（CapabilityGuard/费用卡片/图表/健康度/建议/会话） |
+| `05-config-and-security.yaml` | 18 | 配置编辑 + API Key 脱敏 + 主题切换 + 版本更新 + Profile 与横幅联动 |
+| `06-skills-marketplace.yaml` | 13 | 技能市场（ClawHub 前置/4 个重点技能/过滤/SkillGuard/运行时启停/OpenClaw WebUI 效果） |
 | `07-setup-install-real.yaml` | 16 | 安装向导真实安装全流程（检测/卸载/安装/CapabilityGuard/错误处理/API） |
 | `08-onboarding-config.yaml` | 17 | 安装后配置引导（初始化/API Key/模型/网关/通道/跳过/汇总） |
 | `09-gateway-module.yaml` | 6 | 网关管理（状态指示/启动停止/配置概览/Token 复制/重启） |
-| `10-mcp-servers.yaml` | 8 | MCP 服务器管理（目录浏览/分类过滤/安装卸载/环境变量/自定义服务器） |
-| `11-sessions-module.yaml` | 6 | 会话管理（列表/Agent 过滤/Token 进度条/对话历史/清理） |
-| `12-channels-module.yaml` | 7 | 通道管理（列表/添加/编辑器/验证连接/启用禁用/账号/移除） |
-| `13-models-module.yaml` | 6 | 模型配置（提供商列表/添加面板/测试连接/Key 脱敏/默认标识） |
-| `14-agents-module.yaml` | 5 | 代理管理（默认配置/列表/路由绑定/空状态/main 保护） |
-| `15-plugins-module.yaml` | 7 | 插件管理（表格/搜索/状态过滤/启用禁用/安装卸载/描述展开） |
-| `16-docs-module.yaml` | 4 | 文档中心（快速链接/搜索交互/结果展示/外部链接） |
-| `17-logs-module.yaml` | 5 | 日志查看（列表/级别过滤/搜索/颜色编码/刷新） |
-| `18-dashboard-module.yaml` | 6 | 概览页面（系统信息/网关状态/通道/速览卡片/快捷操作/模型代理） |
-| **合计** | **155** | |
+| `10-mcp-servers.yaml` | 8 | MCP 服务器管理（推荐配置/导入/手动添加/安装进度/OpenClaw WebUI 可见性） |
+| `11-sessions-module.yaml` | 8 | 会话管理（列表/Agent 过滤/Token 进度条/对话历史/清理/轮询与 useAdapterCall 稳定性） |
+| `12-channels-module.yaml` | 11 | 通道管理（推荐入口/微信扫码流/上下文日志/列表/编辑器/验证连接/启用禁用/账号/移除） |
+| `13-models-module.yaml` | 10 | 模型配置（赞助商优先级/令牌入口/添加面板/测试连接/Key 脱敏/默认标识/重置行为） |
+| `14-agents-module.yaml` | 8 | 代理管理（默认配置/列表/路由绑定/空状态/main 保护/死按钮回归） |
+| `15-plugins-module.yaml` | 9 | 插件管理（运行快照/安装清理/筛选/启停/卸载确认/描述展开/OpenClaw WebUI 效果） |
+| `16-docs-module.yaml` | 5 | 文档中心（快速链接/搜索交互/结果展示/外部链接/实时文档回退） |
+| `17-logs-module.yaml` | 6 | 日志查看（列表/级别过滤/搜索/颜色编码/刷新/模块上下文入口） |
+| `18-dashboard-module.yaml` | 11 | 概览页面（系统信息/网关状态/通道/速览卡片/快捷操作/任务清单/页脚一致性） |
+| `19-cross-module-workflows.yaml` | 6 | 跨模块主流程（onboarding→模型→网关→首聊 / 通道→上下文日志 / 技能插件MCP→OpenClaw WebUI 生效） |
+| **合计** | **190** | |
 
 ## 用例格式
 
@@ -102,6 +103,30 @@ page.screenshot({ path: '/tmp/observe-refreshed.png' })
 - After i18n key additions/modifications
 - After adapter/API changes that affect displayed data
 - Before committing structural refactors
+
+## Golden Regression Checklist
+
+发布前，至少手动跑完以下 6 条主流程。优先参考 [19-cross-module-workflows.yaml](/Users/haili/workspaces/clawmaster/tests/ui/19-cross-module-workflows.yaml)：
+
+记录证据时可直接使用 [EVIDENCE_TEMPLATE.md](/Users/haili/workspaces/clawmaster/tests/ui/EVIDENCE_TEMPLATE.md)。
+
+1. Onboarding → 模型配置
+   确认初始化、凭证填写、默认模型选择能够一路完成，没有阻断性报错。
+2. 模型配置 → 网关启动 → OpenClaw WebUI 首聊
+   确认网关能启动，OpenClaw WebUI 能打开并完成首次对话。
+3. 通道配置 → 上下文日志
+   确认推荐入口易于进入，配置失败时能直接看到当前模块相关日志。
+4. 技能安装或启用 → OpenClaw WebUI 生效
+   确认新会话能识别已启用技能，禁用后能力消失。
+5. 插件启用或禁用 → OpenClaw WebUI 生效
+   确认工具、通道或模型相关能力随插件状态同步变化。
+6. MCP 启用 → OpenClaw WebUI 生效
+   确认启用的服务能在 OpenClaw WebUI 被识别，禁用后不可用。
+
+建议每条流程至少保留：
+- 1 张 ClawMaster 截图
+- 1 张 OpenClaw WebUI 截图
+- 1 条能证明状态变化真实生效的文本或行为证据
 
 ## 逐步丰富
 

@@ -79,7 +79,7 @@ cases:
       - 显示 3 个提供商按钮（OpenAI、Anthropic、DeepSeek）
       - OpenAI 默认选中（高亮状态）
       - 显示 API Key 输入框（placeholder 包含"OpenAI"）
-      - "下一步"按钮存在但 disabled（Key 为空）
+      - '“下一步”按钮存在但 disabled（Key 为空）'
       - 显示"跳过剩余步骤"链接
       - 步骤指示器第 2 步"API Key"高亮，第 1 步显示 ✓
 
@@ -106,7 +106,7 @@ cases:
       - action: screenshot
         name: onboard-apikey-filled
     assertions:
-      - "下一步"按钮可点击（不再 disabled）
+      - '“下一步”按钮可点击（不再 disabled）'
       - 输入框显示密码点（type=password）
 
   - id: onboard-07
@@ -162,7 +162,7 @@ cases:
       - 显示绿色 ✓ 图标
       - 显示"网关已启动"文字（绿色）
       - 显示端口号 18789
-      - "下一步"按钮可见可点击
+      - '“下一步”按钮可见可点击'
 
   - id: onboard-11
     name: 步骤 5：通道配置界面

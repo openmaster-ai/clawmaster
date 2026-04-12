@@ -21,8 +21,6 @@ const ALLOWED_COMMANDS = new Set([
   'npm',
   'ollama',
   'openclaw',
-  'pip',
-  'python3',
 ])
 
 function resolveShell(): string {

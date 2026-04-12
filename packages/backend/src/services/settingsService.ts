@@ -1,5 +1,4 @@
 import fs from 'node:fs'
-import path from 'node:path'
 import {
   expandUserPath,
   getDefaultDesktopExportDir,
@@ -13,8 +12,10 @@ import { npmUninstallGlobalRobust } from '../npmUninstallGlobalRobust.js'
 import {
   clearOpenclawProfileSelection,
   getOpenclawDataDirForProfile,
+  getOpenclawPathModule,
   normalizeOpenclawProfileSelection,
   setOpenclawProfileSelection,
+  type OpenclawProfileContext,
   type OpenclawProfileSelection,
 } from '../openclawProfile.js'
 
@@ -81,14 +82,15 @@ function normalizeOpenclawProfileSeedInput(
 }
 
 function resolveProfileSeedSourcePath(
-  seed: Required<OpenclawProfileSeedInput>
+  seed: Required<OpenclawProfileSeedInput>,
+  context: OpenclawProfileContext = {}
 ): string | null {
   if (seed.mode === 'empty') {
     return null
   }
 
   if (seed.mode === 'clone-current') {
-    const sourcePath = getOpenclawConfigResolution().configPath
+    const sourcePath = getOpenclawConfigResolution(context).configPath
     if (!fs.existsSync(sourcePath)) {
       throw new Error('Current OpenClaw config does not exist, so there is nothing to clone yet')
     }
@@ -111,22 +113,26 @@ function resolveProfileSeedSourcePath(
 
 function seedNamedProfileConfig(
   selection: OpenclawProfileSelection,
-  seed: Required<OpenclawProfileSeedInput>
+  seed: Required<OpenclawProfileSeedInput>,
+  context: OpenclawProfileContext = {}
 ): void {
   if (selection.kind !== 'named' || seed.mode === 'empty') {
     return
   }
 
-  const targetDataDir = getOpenclawDataDirForProfile(selection)
+  const targetDataDir = getOpenclawDataDirForProfile(selection, context)
   if (!targetDataDir) {
     throw new Error('Named OpenClaw profile target could not be resolved')
   }
-  const targetConfigPath = path.join(targetDataDir, 'openclaw.json')
+  const targetConfigPath = getOpenclawPathModule(context.platform).join(
+    targetDataDir,
+    'openclaw.json'
+  )
   if (fs.existsSync(targetConfigPath)) {
     throw new Error('Target named profile already has an OpenClaw config. Choose a new profile name or switch directly.')
   }
 
-  const sourcePath = resolveProfileSeedSourcePath(seed)
+  const sourcePath = resolveProfileSeedSourcePath(seed, context)
   if (!sourcePath) {
     return
   }
@@ -144,16 +150,17 @@ function seedNamedProfileConfig(
 
 export function saveOpenclawProfile(
   selection?: Partial<OpenclawProfileSelection> | null,
-  seed?: OpenclawProfileSeedInput | null
+  seed?: OpenclawProfileSeedInput | null,
+  context: OpenclawProfileContext = {}
 ) {
   const normalizedSelection = normalizeOpenclawProfileSelection(selection)
   const normalizedSeed = normalizeOpenclawProfileSeedInput(seed)
-  seedNamedProfileConfig(normalizedSelection, normalizedSeed)
-  return setOpenclawProfileSelection(normalizedSelection)
+  seedNamedProfileConfig(normalizedSelection, normalizedSeed, context)
+  return setOpenclawProfileSelection(normalizedSelection, context)
 }
 
-export function resetOpenclawProfile() {
-  clearOpenclawProfileSelection()
+export function resetOpenclawProfile(context: OpenclawProfileContext = {}) {
+  clearOpenclawProfileSelection(context)
 }
 
 export async function uninstallOpenclaw() {

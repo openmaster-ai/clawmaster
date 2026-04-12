@@ -66,6 +66,19 @@ vi.mock('react-i18next', () => ({
         'settings.profileAutoDetect': 'Default profile detection',
         'settings.profileCandidateIdle': 'Not present',
         'settings.profileApply': 'Apply profile',
+        'logs.settingsTitle': 'Diagnostics',
+        'logs.settingsDescription': 'Open recent system logs here when you need to troubleshoot runtime issues.',
+        'logs.openRecent': 'View Recent Logs',
+        'logs.searchPlaceholder': 'Search logs',
+        'logs.allLevels': 'All Levels',
+        'logs.recentLines': `Last ${opts?.count ?? 0} lines`,
+        'logs.copyVisible': 'Copy Visible',
+        'logs.copied': 'Copied',
+        'logs.loadingRecent': 'Loading recent logs...',
+        'logs.loadFailed': 'Failed to load logs',
+        'logs.noLogs': 'No recent logs',
+        'logs.noScopedLogs': `No matching logs found in the last ${opts?.count ?? 0} lines`,
+        'common.close': 'Close',
         'common.notInstalled': 'Not installed',
         'common.unknownError': 'Unknown error',
         'common.save': 'Save',
@@ -89,6 +102,7 @@ const mockInstall = vi.fn()
 const mockBootstrap = vi.fn()
 const mockSaveProfile = vi.fn()
 const mockClearProfile = vi.fn()
+const mockGetLogsResult = vi.fn()
 
 vi.mock('@/shared/adapters/platformResults', () => ({
   platformResults: {
@@ -99,6 +113,10 @@ vi.mock('@/shared/adapters/platformResults', () => ({
     installOpenclawGlobal: (...args: any[]) => mockInstall(...args),
     bootstrapAfterInstall: (...args: any[]) => mockBootstrap(...args),
   },
+}))
+
+vi.mock('@/shared/adapters/logs', () => ({
+  getLogsResult: (...args: any[]) => mockGetLogsResult(...args),
 }))
 
 vi.mock('@/adapters', () => ({
@@ -134,6 +152,21 @@ describe('UpdateSection', () => {
     mockBootstrap.mockResolvedValue({ success: true })
     mockSaveProfile.mockResolvedValue({ success: true, data: undefined, error: null })
     mockClearProfile.mockResolvedValue({ success: true, data: undefined, error: null })
+    mockGetLogsResult.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          timestamp: '2026-04-07T15:51:05.010Z',
+          level: 'INFO',
+          message: '2026-04-05T20:19:43.900+08:00 [ws] webchat disconnected code=1001',
+        },
+        {
+          timestamp: '2026-04-07T15:51:05.010Z',
+          level: 'INFO',
+          message: '2026-04-06T12:16:01.997+08:00 [gateway] listening on ws://127.0.0.1:18789',
+        },
+      ],
+    })
     // Mock fetch to prevent real GitHub API calls in fetchReleaseNotes()
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify([]), { status: 200 }),
@@ -152,6 +185,19 @@ describe('UpdateSection', () => {
     expect(screen.getByText('Check for updates')).toBeInTheDocument()
     // Version appears in both system info and update section
     expect(screen.getAllByText(/v2026\.3\.28/).length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('opens recent diagnostics logs from settings and keeps the full log stream', async () => {
+    render(<Settings />)
+    await waitFor(() => {
+      expect(screen.getByText('Diagnostics')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'View Recent Logs' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Diagnostics' })).toBeInTheDocument()
+    expect(screen.getByText(/webchat disconnected code=1001/)).toBeInTheDocument()
+    expect(screen.getByText(/\[gateway\] listening on ws:\/\/127\.0\.0\.1:18789/)).toBeInTheDocument()
   })
 
   it('shows checking state when button clicked', async () => {

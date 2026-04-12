@@ -88,3 +88,21 @@ cases:
       - 加载期间可能短暂显示 loading
       - 新日志条目（如果有）出现在列表中
       - 当前过滤条件保持不变
+
+  - id: log-06
+    name: 模块上下文日志入口
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/settings"
+      - action: wait
+        duration: 1200ms
+      - action: click
+        target: text("查看最近日志")
+      - action: wait
+        duration: 800ms
+      - action: screenshot
+        name: logs-contextual-entry
+    assertions:
+      - 可从模块页面打开日志弹层
+      - 弹层优先展示当前模块相关日志
+      - 关闭后返回原模块，不强制跳转独立日志页

@@ -73,15 +73,12 @@ import {
   clawprobeStatusResult,
 } from '@/shared/adapters/clawprobeClient'
 import {
+  deleteOpenclawMemoryFileResult,
+  openclawMemoryFilesResult,
+  openclawMemorySearchCapabilityResult,
   openclawMemorySearchResult,
   openclawMemoryStatusResult,
-  powermemBootstrapStreamResult,
-  powermemDeleteResult,
-  powermemEnvGetResult,
-  powermemEnvPutResult,
-  powermemListResult,
-  powermemMetaResult,
-  powermemSearchResult,
+  reindexOpenclawMemoryResult,
 } from '@/shared/adapters/memory'
 
 export const platformResults = {
@@ -142,14 +139,11 @@ export const platformResults = {
   clawprobeConfig: clawprobeConfigResult,
   clawprobeBootstrap: clawprobeBootstrapResult,
   openclawMemoryStatus: openclawMemoryStatusResult,
+  openclawMemorySearchCapability: openclawMemorySearchCapabilityResult,
   openclawMemorySearch: openclawMemorySearchResult,
-  powermemMeta: powermemMetaResult,
-  powermemBootstrapStream: powermemBootstrapStreamResult,
-  powermemList: powermemListResult,
-  powermemSearch: powermemSearchResult,
-  powermemDelete: powermemDeleteResult,
-  powermemEnvGet: powermemEnvGetResult,
-  powermemEnvPut: powermemEnvPutResult,
+  openclawMemoryFiles: openclawMemoryFilesResult,
+  reindexOpenclawMemory: reindexOpenclawMemoryResult,
+  deleteOpenclawMemoryFile: deleteOpenclawMemoryFileResult,
 } as const
 
 export type PlatformResults = typeof platformResults

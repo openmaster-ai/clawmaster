@@ -1,222 +1,117 @@
 suite: memory-module
 name: 记忆管理模块
 description: |
-  验证记忆管理页面的完整功能：
-  1. 服务状态检测 + 降级 UI
-  2. 记忆列表浏览（含 Ebbinghaus 智能元数据）
-  3. 语义搜索
-  4. 手动添加记忆
-  5. 记忆编辑
-  6. 记忆删除
-  7. 多 Agent 切换
+  验证新的原生 OpenClaw 记忆页面：
+  1. 记忆状态概览与原始状态 JSON
+  2. 原生记忆搜索
+  3. 存储文件列表与详情
+  4. 删除文件确认流程
 
 preconditions:
   - dev server 已启动
   - 已进入主界面
+  - 当前 profile 对应的 ~/.openclaw/memory 下至少存在一个 SQLite 文件
 
 viewport: { width: 1280, height: 800 }
 
 cases:
-  # === 能力未安装场景 ===
-
-  - id: mem-00
-    name: CapabilityGuard 引导安装
-    preconditions:
-      - PowerMem 未安装（openclaw ltm health 失败）
-    steps:
-      - action: navigate_to
-        target: 记忆页面（点击侧边栏"记忆"）
-      - action: wait
-        duration: 2000ms
-      - action: screenshot
-        name: mem-guard
-    assertions:
-      - 页面显示"记忆管理尚未启用"
-      - 显示说明"记忆管理需要安装 PowerMem。安装后可管理 Agent 长期记忆，Token 消耗降低 96%。"
-      - 显示"安装记忆管理"按钮
-      - 显示"重新检测"按钮
-      - 不显示记忆列表/搜索等功能 UI
-
-  # === 已安装但服务未启动场景 ===
-
   - id: mem-01
-    name: PowerMem 已安装但服务未运行
-    preconditions:
-      - PowerMem 已安装（CapabilityGuard 通过）
-      - PowerMem server 未启动（localhost:8000 不可达）
+    name: 页面首次加载显示原生记忆概览
     steps:
       - action: navigate_to
         target: 记忆页面
       - action: wait
-        duration: 2000ms
+        duration: 2500ms
       - action: screenshot
-        name: mem-disconnected
+        name: mem-native-overview
     assertions:
-      - 页面标题"记忆管理"
-      - 显示"无法连接到 PowerMem 记忆服务"错误提示
-      - 显示"一键启动服务"按钮（primary 样式）
-      - 显示"重试"按钮
-      - 无白屏、无 JS 异常
+      - 页面标题显示"记忆管理"
+      - 显示四张摘要卡片：智能体 / 文件数 / 后端 / 状态
+      - 显示"记忆概览"区块
+      - 显示至少一个 agent 的工作区与数据库路径
+      - 显示原始 `openclaw memory status --json` 输出
+      - 页面无空白、无明显布局错位
 
   - id: mem-02
-    name: 一键启动服务按钮交互
-    preconditions:
-      - 处于 mem-01 降级状态
-    steps:
-      - action: click
-        target: text("一键启动服务")
-      - action: observe
-        duration: 3000ms
-    assertions:
-      - 按钮文字变为"启动中..."
-      - 按钮置灰（disabled）
-      - 启动完成后自动刷新健康状态
-
-  # === 服务运行中场景 ===
-
-  - id: mem-03
-    name: 健康状态卡片
-    preconditions:
-      - PowerMem server 运行中（localhost:8000/api/v1/system/health 返回 healthy）
-    steps:
-      - action: navigate_to
-        target: 记忆页面
-      - action: wait
-        duration: 2000ms
-      - action: screenshot
-        name: mem-healthy
-    assertions:
-      - 健康状态卡片显示绿色圆点 + "正常"
-      - 显示存储引擎类型（如"sqlite"）
-      - 显示 LLM 提供商（如"qwen"）
-      - 显示版本号
-
-  - id: mem-04
-    name: 统计卡片
-    preconditions:
-      - PowerMem 有记忆数据
-    steps:
-      - action: observe
-        target: 统计卡片区域
-    assertions:
-      - 显示"总记忆数"数字
-      - 显示"Agent 数"数字
-      - 显示"平均保留率"百分比（如果有智能元数据）
-      - 显示记忆类型分布标签（工作记忆/短期记忆/长期记忆）
-      - 显示 Agent 分布标签（如 main: 120, cipher: 80）
-
-  - id: mem-05
-    name: 记忆列表 + Ebbinghaus 元数据
-    preconditions:
-      - PowerMem 有记忆数据，且部分记忆有 intelligence metadata
-    steps:
-      - action: observe
-        target: 记忆列表区域
-      - action: click
-        target: 列表中第一条记忆（展开详情）
-      - action: screenshot
-        name: mem-detail-expanded
-    assertions:
-      - 列表标题显示"记忆列表 (N)"
-      - 每条记忆显示内容摘要（截断 120 字符）
-      - 显示记忆类型标签：绿色"长期"/黄色"短期"/蓝色"工作"
-      - 显示重要度百分比（如"重要度 80%"）
-      - 显示保留率百分比（如"保留 95%"）
-      - 显示 Agent 归属（如"Agent: main"）
-      - 显示创建日期
-      - 展开后显示完整内容
-      - 展开后显示智能元数据网格：衰减率/复习次数/访问次数/下次复习时间
-      - 展开后显示保留率进度条（绿>70% / 黄>30% / 红<30%）
-      - 展开后显示"编辑"和"删除"按钮
-
-  - id: mem-06
-    name: 语义搜索
+    name: 原生记忆搜索
     steps:
       - action: fill
-        target: input[placeholder*="搜索"]
-        value: "coffee preference"
+        target: input[placeholder*="搜索记忆"]
+        value: "workspace"
       - action: click
         target: text("搜索")
       - action: wait
         duration: 2000ms
       - action: screenshot
-        name: mem-search-results
+        name: mem-native-search
     assertions:
-      - 搜索按钮变为"搜索中..."再恢复
-      - 列表标题变为"搜索结果 (N)"
-      - 搜索结果显示匹配得分（如"匹配 92%"）
-      - 显示"清除"按钮
-      - 点击"清除"后恢复为完整列表
+      - 搜索按钮在请求期间显示"搜索中..."或禁用态
+      - 请求完成后显示搜索结果或"无结果"
+      - 若有结果，显示内容摘要
+      - 若有结果，显示匹配路径或 score 标签
 
-  - id: mem-07
-    name: 手动添加记忆
+  - id: mem-03
+    name: 存储文件列表与详情
     steps:
-      - action: click
-        target: text("+ 添加记忆")
       - action: observe
-        target: 添加表单展开
-      - action: screenshot
-        name: mem-add-form
-      - action: fill
-        target: textarea[placeholder*="记忆"]
-        value: "用户偏好深色主题，常用 VS Code 编辑器"
+        target: 存储文件区域
       - action: click
-        target: text("智能提取并保存")
-      - action: wait
-        duration: 3000ms
+        target: 列表中的第一个文件
+      - action: screenshot
+        name: mem-file-details
     assertions:
-      - 点击"+ 添加记忆"后表单展开
-      - 表单显示说明文字"输入的内容将通过 AI 智能提取关键事实后存储"
-      - textarea 可输入
-      - "智能提取并保存"按钮可点击
-      - 提交后按钮变为"保存中..."
-      - 保存成功后表单收起
-      - 记忆列表刷新，新记忆出现
+      - 显示"存储文件"区块
+      - 显示存储根目录路径
+      - 列表中显示 SQLite 文件或附属文件
+      - 每个文件显示类型、大小、更新时间
+      - 点击后下方详情卡显示绝对路径、扩展名、更新时间
 
-  - id: mem-08
-    name: 记忆编辑
+  - id: mem-04
+    name: 删除文件确认对话框
     steps:
       - action: click
-        target: 列表中某条记忆（展开）
-      - action: click
-        target: text("编辑")
-      - action: observe
-        target: 编辑区域
-      - action: screenshot
-        name: mem-editing
-    assertions:
-      - 内容区变为 textarea 编辑框
-      - textarea 预填充当前记忆内容
-      - 显示"保存"和"取消"按钮
-      - 点击"取消"恢复为查看模式
-      - 修改内容后点击"保存"，记忆内容更新
-
-  - id: mem-09
-    name: 记忆删除
-    steps:
-      - action: click
-        target: 列表中某条记忆（展开）
-      - action: click
-        target: text("删除")
+        target: 存储文件列表中的删除按钮
       - action: observe
         target: 确认对话框
+      - action: screenshot
+        name: mem-file-delete-confirm
     assertions:
-      - 弹出确认对话框"确定删除这条记忆？"
-      - 点击确认后记忆从列表中消失
-      - 统计数字更新
+      - 弹出确认对话框
+      - 对话框文案包含待删除的相对路径
+      - 显示取消与确认按钮
+      - 点击取消后文件仍保留在列表中
 
-  - id: mem-10
-    name: 多 Agent 切换
+  - id: mem-05
+    name: 慢加载时显示区块级 loading 指示
+    preconditions:
+      - 后端响应被人工限速，或首次加载存在可感知延迟
     steps:
-      - action: select
-        target: Agent 下拉选择器
-        value: "cipher"
+      - action: navigate
+        url: "{BASE_URL}/memory"
+      - action: wait
+        duration: 300ms
+      - action: screenshot
+        name: memory-loading
+    assertions:
+      - 页面标题与基础布局先渲染
+      - 概览卡、搜索区、文件列表区各自显示 loading 状态
+      - loading 态不阻塞整页显示
+      - 数据返回后各区块分别替换为真实内容
+
+  - id: mem-06
+    name: 搜索无结果与 FTS 降级提示
+    steps:
+      - action: fill
+        target: input[placeholder*="搜索记忆"]
+        value: "unlikely-memory-query-fts-test"
+      - action: click
+        target: text("搜索")
       - action: wait
         duration: 1500ms
       - action: screenshot
-        name: mem-agent-filter
+        name: memory-search-empty
     assertions:
-      - 下拉选择器显示"全部 Agent"和各 agent_id 选项
-      - 切换后记忆列表仅显示该 Agent 的记忆
-      - 统计数据对应更新
-      - 搜索结果清除（如果之前有搜索）
+      - 页面不会出现崩溃或裸露堆栈
+      - 如有结果：结果列表正常渲染并可查看来源文件
+      - 如无结果：显示明确空状态
+      - 如底层环境缺少 FTS5：显示可理解的降级说明或帮助文案，而非生硬技术报错

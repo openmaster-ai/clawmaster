@@ -14,6 +14,7 @@ import {
   Pin,
   Puzzle,
   Radio,
+  ScrollText,
   Send,
   Shield,
   Sparkles,
@@ -25,7 +26,10 @@ import { platformResults } from '@/adapters'
 import type { OpenClawChannelEntry } from '@/lib/types'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
 import { execCommand, isTauri } from '@/shared/adapters/platform'
+import { ActionBanner } from '@/shared/components/ActionBanner'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { LoadingState } from '@/shared/components/LoadingState'
+import { RecentLogsSheet } from '@/shared/components/RecentLogsSheet'
 import { buildChannelRegistry } from '@/modules/channels/channelRegistry'
 import type { ChannelFieldDef } from '@/modules/channels/channelRegistry'
 
@@ -169,6 +173,10 @@ export default function Channels() {
   const [wechatSetupStage, setWechatSetupStage] = useState<WechatSetupStage>('idle')
   const [wechatSetupError, setWechatSetupError] = useState<string | null>(null)
   const [wechatPluginInstalled, setWechatPluginInstalled] = useState(false)
+  const [logsOpen, setLogsOpen] = useState(false)
+  const [feedback, setFeedback] = useState<{ tone: 'info' | 'success' | 'error'; message: string } | null>(null)
+  const [pendingRemoval, setPendingRemoval] = useState<{ typeId: string; label: string } | null>(null)
+  const [pendingAccountRemoval, setPendingAccountRemoval] = useState<{ typeId: string; accountId: string } | null>(null)
 
   const channels: Record<string, OpenClawChannelEntry> = config?.channels || {}
   const allAgents = config?.agents?.list ?? []
@@ -421,15 +429,12 @@ export default function Channels() {
     }
   }
 
-  async function removeChannelType(typeId: string, label: string) {
-    if (!window.confirm(t('channelsPage.removeConfirm', { label }))) {
-      return
-    }
+  async function removeChannelType(typeId: string) {
     setBusy(true)
     try {
       const r = await platformResults.removeChannel(typeId)
       if (!r.success) {
-        window.alert(r.error ?? t('channelsPage.removeFailed'))
+        setFeedback({ tone: 'error', message: r.error ?? t('channelsPage.removeFailed') })
         return
       }
       await refetch()
@@ -443,7 +448,7 @@ export default function Channels() {
     try {
       const r = await platformResults.setConfig(`channels.${typeId}.enabled`, enabled)
       if (!r.success) {
-        window.alert(r.error ?? t('channelsPage.toggleFailed'))
+        setFeedback({ tone: 'error', message: r.error ?? t('channelsPage.toggleFailed') })
         return
       }
       await refetch()
@@ -454,7 +459,6 @@ export default function Channels() {
 
   async function removeChannelAccount(typeId: string, accountId: string) {
     if (!config) return
-    if (!window.confirm(t('channelsPage.deleteAccountConfirm', { id: accountId }))) return
     const current = channels[typeId]
     if (!current || !isRecord(current) || !isRecord(current.accounts)) return
 
@@ -475,7 +479,7 @@ export default function Channels() {
       }
       const r = await platformResults.saveFullConfig(next)
       if (!r.success) {
-        window.alert(r.error ?? t('channelsPage.deleteAccountFailed'))
+        setFeedback({ tone: 'error', message: r.error ?? t('channelsPage.deleteAccountFailed') })
         return
       }
       await refetch()
@@ -490,9 +494,23 @@ export default function Channels() {
 
   if (error || config === null) {
     return (
-      <div className="state-panel text-sm text-red-500">
-        {error ? `${t('channelsPage.loadFailed')}${error}` : t('channelsPage.noConfig')}
-      </div>
+      <>
+        <div className="state-panel space-y-3 text-sm text-red-500">
+          <div>{error ? `${t('channelsPage.loadFailed')}${error}` : t('channelsPage.noConfig')}</div>
+          <button type="button" onClick={() => setLogsOpen(true)} className="button-secondary">
+            <ScrollText className="h-4 w-4" />
+            {t('logs.openRecent')}
+          </button>
+        </div>
+        <RecentLogsSheet
+          open={logsOpen}
+          onClose={() => setLogsOpen(false)}
+          title={t('logs.channelsTitle')}
+          description={t('logs.channelsDescription')}
+          lines={320}
+          scope="channels"
+        />
+      </>
     )
   }
 
@@ -525,6 +543,9 @@ export default function Channels() {
 
   return (
     <div className="page-shell page-shell-wide">
+      {feedback ? (
+        <ActionBanner tone={feedback.tone} message={feedback.message} onDismiss={() => setFeedback(null)} />
+      ) : null}
       <div className="page-header">
         <div className="page-header-copy">
           <div className="page-header-meta">
@@ -536,6 +557,10 @@ export default function Channels() {
           <p className="page-subtitle">{t('channelsPage.subtitle')}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setLogsOpen(true)} className="button-secondary">
+            <ScrollText className="h-4 w-4" />
+            {t('logs.openRecent')}
+          </button>
           <button type="button" onClick={focusCatalog} className="button-secondary">
             <Layers3 className="h-4 w-4" />
             {t('channelsPage.jumpToCatalog')}
@@ -545,7 +570,7 @@ export default function Channels() {
             disabled={busy || missingTypes.length === 0}
             onClick={() => {
               if (missingTypes.length === 0) {
-                window.alert(t('channelsPage.allTypesPresent'))
+                setFeedback({ tone: 'info', message: t('channelsPage.allTypesPresent') })
                 return
               }
               openChannelSetup(missingTypes[0].id)
@@ -557,7 +582,7 @@ export default function Channels() {
         </div>
       </div>
 
-      <section className="surface-card">
+      <section id="channel-focus" className="surface-card">
         <div className="channel-page-hero">
           <div className="min-w-0 space-y-3">
             <p className="dashboard-section-meta">{t('channelsPage.recommendedTitle')}</p>
@@ -662,7 +687,7 @@ export default function Channels() {
       </section>
 
       {configuredChannels.length > 0 && (
-        <section className="surface-card">
+        <section id="channel-configured" className="surface-card">
           <div className="section-heading">
             <div>
               <h3 className="section-title">{t('channelsPage.configured')}</h3>
@@ -710,7 +735,7 @@ export default function Channels() {
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => void removeChannelType(ch.type, ch.typeName)}
+                      onClick={() => setPendingRemoval({ typeId: ch.type, label: ch.typeName })}
                       className="button-danger px-3 py-1.5 text-sm disabled:opacity-50"
                     >
                       {t('channelsPage.removeChannel')}
@@ -746,7 +771,7 @@ export default function Channels() {
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => void removeChannelAccount(ch.type, acc.id)}
+                              onClick={() => setPendingAccountRemoval({ typeId: ch.type, accountId: acc.id })}
                               className="button-secondary px-2.5 py-1.5 text-xs text-muted-foreground"
                             >
                               {t('channelsPage.removeAccount')}
@@ -1119,6 +1144,16 @@ export default function Channels() {
                 {verifyResult.detail ? (
                   <div className="mt-1 text-xs opacity-90 whitespace-pre-wrap break-all">{verifyResult.detail}</div>
                 ) : null}
+                {!verifyResult.ok ? (
+                  <button
+                    type="button"
+                    className="button-secondary mt-3 px-3 py-1.5 text-xs"
+                    onClick={() => setLogsOpen(true)}
+                  >
+                    <ScrollText className="h-3.5 w-3.5" />
+                    {t('logs.openRecent')}
+                  </button>
+                ) : null}
               </div>
             ) : null}
             <div className="flex justify-end gap-2 pt-2">
@@ -1152,6 +1187,39 @@ export default function Channels() {
           </div>
         </div>
       )}
+
+      <RecentLogsSheet
+        open={logsOpen}
+        onClose={() => setLogsOpen(false)}
+        title={t('logs.channelsTitle')}
+        description={t('logs.channelsDescription')}
+        lines={320}
+        scope="channels"
+      />
+      <ConfirmDialog
+        open={Boolean(pendingRemoval)}
+        title={pendingRemoval ? t('channelsPage.removeConfirm', { label: pendingRemoval.label }) : ''}
+        tone="danger"
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={() => {
+          if (!pendingRemoval) return
+          const current = pendingRemoval
+          setPendingRemoval(null)
+          void removeChannelType(current.typeId)
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingAccountRemoval)}
+        title={pendingAccountRemoval ? t('channelsPage.deleteAccountConfirm', { id: pendingAccountRemoval.accountId }) : ''}
+        tone="danger"
+        onCancel={() => setPendingAccountRemoval(null)}
+        onConfirm={() => {
+          if (!pendingAccountRemoval) return
+          const current = pendingAccountRemoval
+          setPendingAccountRemoval(null)
+          void removeChannelAccount(current.typeId, current.accountId)
+        }}
+      />
     </div>
   )
 }

@@ -3,6 +3,8 @@ import type { CapabilityId } from '@/modules/setup/types'
 
 export const PADDLEOCR_TEXT_SKILL_ID = 'paddleocr-text-recognition' as const
 export const PADDLEOCR_DOC_SKILL_ID = 'paddleocr-doc-parsing' as const
+export const PADDLEOCR_TEXT_SKILL_NAME = 'PaddleOCR Text Recognition' as const
+export const PADDLEOCR_DOC_SKILL_NAME = 'PaddleOCR Document Parsing' as const
 
 export function capabilityToPaddleOcrModuleId(
   capabilityId: Extract<CapabilityId, 'ocr_text' | 'ocr_doc'>,
@@ -29,8 +31,14 @@ export function getPaddleOcrModuleTitleKey(moduleId: PaddleOcrModuleId): string 
 
 export function getPaddleOcrModuleDescriptionKey(moduleId: PaddleOcrModuleId): string {
   return moduleId === PADDLEOCR_TEXT_SKILL_ID
-    ? 'capability.ocrTextDesc'
-    : 'capability.ocrDocDesc'
+    ? 'capability.ocrText.desc'
+    : 'capability.ocrDoc.desc'
+}
+
+export function getPaddleOcrModuleSkillName(moduleId: PaddleOcrModuleId): string {
+  return moduleId === PADDLEOCR_TEXT_SKILL_ID
+    ? PADDLEOCR_TEXT_SKILL_NAME
+    : PADDLEOCR_DOC_SKILL_NAME
 }
 
 export function getPaddleOcrModuleEndpointSuffix(moduleId: PaddleOcrModuleId): string {

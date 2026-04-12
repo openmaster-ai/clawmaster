@@ -68,7 +68,6 @@ describe('PluginsPage', () => {
     mockSetPluginEnabled.mockResolvedValue({ success: true })
     mockInstallPlugin.mockResolvedValue({ success: true })
     mockUninstallPlugin.mockResolvedValue({ success: true })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
   it('shows runtime metrics, keeps loaded plugins visible by default, and supports status and category filters', async () => {
@@ -144,13 +143,15 @@ describe('PluginsPage', () => {
     await screen.findByRole('heading', { name: 'DeepSeek Provider' })
     fireEvent.click(screen.getByLabelText('卸载时保留文件'))
     fireEvent.click(screen.getByRole('button', { name: '卸载 DeepSeek Provider' }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('确定要卸载 DeepSeek Provider（deepseek）吗？')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
 
     await waitFor(() => {
-      expect(window.confirm).toHaveBeenCalledWith('确定要卸载 DeepSeek Provider（deepseek）吗？')
-    })
-    expect(mockUninstallPlugin).toHaveBeenCalledWith('deepseek', {
-      keepFiles: true,
-      disableLoadedFirst: true,
+      expect(mockUninstallPlugin).toHaveBeenCalledWith('deepseek', {
+        keepFiles: true,
+        disableLoadedFirst: true,
+      })
     })
   })
 
