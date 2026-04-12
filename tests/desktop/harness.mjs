@@ -785,44 +785,62 @@ async function runPaletteNavigation(driver, options) {
     expectedAnchorId,
   } = options
 
-  const { panel, input } = await openCommandPalette(driver)
-  await input.clear()
-  await input.sendKeys(query)
-  const targetSelector = getPaletteTargetSelector(expectedPath, expectedHash)
-  const targetCommand = await driver.wait(
-    until.elementLocated(By.css(targetSelector)),
-    NAVIGATION_TIMEOUT_MS,
-  )
-  await targetCommand.click()
-  await driver.wait(async () => {
-    const panels = await driver.findElements(By.css('.command-palette-panel'))
-    if (panels.length === 0) {
-      return true
-    }
-    const location = await readLocation(driver)
-    return location.pathname === expectedPath && (expectedHash == null || location.hash === expectedHash)
-  }, NAVIGATION_TIMEOUT_MS)
+  let stage = 'opening command palette'
 
-  const remainingPanels = await driver.findElements(By.css('.command-palette-panel'))
-  if (remainingPanels.length > 0) {
-    await input.sendKeys(Key.ESCAPE).catch(() => {})
-    await driver.wait(async () => {
-      const panels = await driver.findElements(By.css('.command-palette-panel'))
-      return panels.length === 0
-    }, 3_000).catch(() => {})
-  }
+  try {
+    const { panel, input } = await openCommandPalette(driver)
+    stage = 'typing palette query'
+    await input.clear()
+    await input.sendKeys(query)
 
-  await waitForLocation(driver, expectedPath, expectedHash)
-
-  const titleText = await readTopbarTitle(driver)
-  assert.match(titleText, expectedTitle)
-
-  if (expectedAnchorId) {
-    const anchor = await driver.wait(
-      until.elementLocated(By.id(expectedAnchorId)),
+    const targetSelector = getPaletteTargetSelector(expectedPath, expectedHash)
+    stage = `locating palette command ${targetSelector}`
+    const targetCommand = await driver.wait(
+      until.elementLocated(By.css(targetSelector)),
       NAVIGATION_TIMEOUT_MS,
     )
-    await scrollElementIntoView(driver, anchor)
+
+    stage = 'clicking palette command'
+    await targetCommand.click()
+
+    stage = 'waiting for palette dismissal or navigation'
+    await driver.wait(async () => {
+      const panels = await driver.findElements(By.css('.command-palette-panel'))
+      if (panels.length === 0) {
+        return true
+      }
+      const location = await readLocation(driver)
+      return location.pathname === expectedPath && (expectedHash == null || location.hash === expectedHash)
+    }, NAVIGATION_TIMEOUT_MS)
+
+    stage = 'closing remaining palette panel'
+    const remainingPanels = await driver.findElements(By.css('.command-palette-panel'))
+    if (remainingPanels.length > 0) {
+      await input.sendKeys(Key.ESCAPE).catch(() => {})
+      await driver.wait(async () => {
+        const panels = await driver.findElements(By.css('.command-palette-panel'))
+        return panels.length === 0
+      }, 3_000).catch(() => {})
+    }
+
+    stage = 'waiting for expected location'
+    await waitForLocation(driver, expectedPath, expectedHash)
+
+    stage = 'reading topbar title'
+    const titleText = await readTopbarTitle(driver)
+    assert.match(titleText, expectedTitle)
+
+    if (expectedAnchorId) {
+      stage = `locating anchor #${expectedAnchorId}`
+      const anchor = await driver.wait(
+        until.elementLocated(By.id(expectedAnchorId)),
+        NAVIGATION_TIMEOUT_MS,
+      )
+      await scrollElementIntoView(driver, anchor)
+    }
+  } catch (error) {
+    const details = error instanceof Error ? error.message : String(error)
+    throw new Error(`Palette navigation failed at ${stage}: ${details}`)
   }
 }
 
