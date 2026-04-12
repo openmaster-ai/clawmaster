@@ -76,7 +76,10 @@ async function ensureArtifactDir() {
 
 async function seedDesktopSmokeProfile() {
   if (process.env.CLAWMASTER_DESKTOP_SEED_PROFILE !== '1') {
-    return async () => {}
+    return {
+      restore: async () => {},
+      info: null,
+    }
   }
 
   const configDir = path.join(os.homedir(), '.openclaw')
@@ -88,13 +91,23 @@ async function seedDesktopSmokeProfile() {
   await writeFile(`${configPath}.desktop-smoke-backup`, existingConfig ?? '', 'utf8')
   await writeFile(`${configPath}`, `${JSON.stringify(SEEDED_OPENCLAW_CONFIG, null, 2)}\n`, 'utf8')
 
-  return async () => {
-    if (hadExistingConfig && existingConfig !== null) {
-      await writeFile(configPath, existingConfig, 'utf8')
-    } else {
-      await rm(configPath, { force: true })
-    }
-    await rm(`${configPath}.desktop-smoke-backup`, { force: true })
+  return {
+    info: {
+      enabled: true,
+      homeDir: os.homedir(),
+      configDir,
+      configPath,
+      hadExistingConfig,
+      seededConfigPreview: JSON.stringify(SEEDED_OPENCLAW_CONFIG).slice(0, 500),
+    },
+    restore: async () => {
+      if (hadExistingConfig && existingConfig !== null) {
+        await writeFile(configPath, existingConfig, 'utf8')
+      } else {
+        await rm(configPath, { force: true })
+      }
+      await rm(`${configPath}.desktop-smoke-backup`, { force: true })
+    },
   }
 }
 
@@ -603,7 +616,8 @@ async function persistTextArtifacts(name, payload) {
 }
 
 export async function runDesktopSmoke() {
-  const restoreSeedProfile = await seedDesktopSmokeProfile()
+  const seededProfile = await seedDesktopSmokeProfile()
+  await persistTextArtifacts('desktop-smoke-bootstrap', await collectBootstrapDiagnostics(seededProfile.info))
   const binaryPath = await ensureDesktopBinary()
   const mode = getSmokeMode()
 
@@ -614,6 +628,54 @@ export async function runDesktopSmoke() {
 
     return runWebdriverSmoke(binaryPath)
   } finally {
-    await restoreSeedProfile()
+    await seededProfile.restore()
+  }
+}
+
+async function collectBootstrapDiagnostics(seedInfo) {
+  const configPath = seedInfo?.configPath ?? path.join(os.homedir(), '.openclaw', 'openclaw.json')
+  const configExists = await pathExists(configPath)
+  const configContent = configExists ? await readFile(configPath, 'utf8') : ''
+
+  let openclawVersion = ''
+  try {
+    const output = await new Promise((resolve, reject) => {
+      const child = spawn('openclaw', ['--version'], {
+        cwd: repoRoot,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      let stdout = ''
+      let stderr = ''
+      child.stdout?.on('data', (chunk) => {
+        stdout += String(chunk)
+      })
+      child.stderr?.on('data', (chunk) => {
+        stderr += String(chunk)
+      })
+      child.on('error', reject)
+      child.on('exit', (code) => {
+        if (code === 0) {
+          resolve(stdout.trim())
+          return
+        }
+        reject(new Error(stderr.trim() || `openclaw exited with code ${code}`))
+      })
+    })
+    openclawVersion = String(output)
+  } catch (error) {
+    openclawVersion = `ERROR: ${String(error)}`
+  }
+
+  return {
+    seedInfo,
+    env: {
+      home: os.homedir(),
+      path: process.env.PATH ?? '',
+    },
+    configExists,
+    configPath,
+    configPreview: configContent.slice(0, 2000),
+    openclawVersion,
   }
 }
