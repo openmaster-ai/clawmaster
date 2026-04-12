@@ -665,8 +665,12 @@ async function runWebdriverSmoke(binaryPath) {
 
 async function openCommandPalette(driver) {
   await driver.findElement(By.css('.app-command-trigger')).click()
-  await driver.wait(until.elementLocated(By.css('.command-palette-panel')), NAVIGATION_TIMEOUT_MS)
-  return driver.findElement(By.css('.command-palette-input'))
+  const panel = await driver.wait(
+    until.elementLocated(By.css('.command-palette-panel')),
+    NAVIGATION_TIMEOUT_MS,
+  )
+  const input = await panel.findElement(By.css('.command-palette-input'))
+  return { panel, input }
 }
 
 async function waitForLocation(driver, expectedPath, expectedHash) {
@@ -684,6 +688,10 @@ async function readTopbarTitle(driver) {
     until.elementLocated(By.css('.app-topbar-title')),
     NAVIGATION_TIMEOUT_MS,
   )
+  await driver.wait(async () => {
+    const text = await title.getText()
+    return text.trim().length > 0
+  }, NAVIGATION_TIMEOUT_MS)
   return title.getText()
 }
 
@@ -717,9 +725,16 @@ async function runPaletteNavigation(driver, options) {
     expectedAnchorId,
   } = options
 
-  const input = await openCommandPalette(driver)
+  const { panel, input } = await openCommandPalette(driver)
   await input.clear()
   await input.sendKeys(query, Key.ENTER)
+  await driver.wait(async () => {
+    const panels = await driver.findElements(By.css('.command-palette-panel'))
+    return panels.length === 0
+  }, NAVIGATION_TIMEOUT_MS).catch(async () => {
+    await input.sendKeys(Key.ESCAPE)
+    await driver.wait(until.stalenessOf(panel), NAVIGATION_TIMEOUT_MS)
+  })
   await waitForLocation(driver, expectedPath, expectedHash)
 
   const titleText = await readTopbarTitle(driver)
