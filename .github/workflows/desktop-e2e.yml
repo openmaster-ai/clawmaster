@@ -30,8 +30,13 @@ jobs:
         include:
           - os: ubuntu-22.04
             label: Linux
+            smokeMode: webdriver
           - os: windows-latest
             label: Windows
+            smokeMode: webdriver
+          - os: macos-14
+            label: macOS
+            smokeMode: launch
 
     steps:
       - uses: actions/checkout@v4
@@ -69,6 +74,7 @@ jobs:
       - run: npm ci
 
       - name: Install tauri-driver
+        if: matrix.smokeMode == 'webdriver'
         run: cargo install tauri-driver --locked
 
       - name: Install matching Edge WebDriver
@@ -90,3 +96,9 @@ jobs:
       - name: Run desktop smoke
         if: runner.os == 'Windows'
         run: npm run test:desktop
+
+      - name: Run desktop smoke
+        if: runner.os == 'macOS'
+        run: npm run test:desktop
+        env:
+          CLAWMASTER_DESKTOP_SMOKE_MODE: launch

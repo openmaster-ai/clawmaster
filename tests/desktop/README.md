@@ -8,11 +8,11 @@ The smoke accepts the two valid desktop entry states:
 
 ## Modes
 
-- `darwin`: local launch smoke
+- `darwin`: launch smoke in local dev and GitHub Actions
 - `linux`: native WebDriver smoke through `tauri-driver`
 - `win32`: native WebDriver smoke through `tauri-driver`
 
-The macOS path is intentionally a launch smoke only. Tauri's current official WebDriver guidance covers Linux and Windows, while native macOS desktop WebDriver remains unsupported. The local mac path still gives us a real Tauri build-and-launch check on the machine most contributors use day to day.
+The macOS path is intentionally a launch smoke only. Tauri's current official WebDriver guidance covers Linux and Windows, while native macOS desktop WebDriver remains unsupported. The mac path still gives us a real Tauri build-and-launch check both on contributor machines and in GitHub Actions.
 
 ## Local run
 
