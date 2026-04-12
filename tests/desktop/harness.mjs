@@ -37,10 +37,11 @@ async function pathExists(targetPath) {
 function runCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const timeoutMs = options.timeout
+    const commandRequiresShell = process.platform === 'win32' && /\.cmd$/i.test(command)
     const child = spawn(command, args, {
       cwd: repoRoot,
       stdio: 'inherit',
-      shell: false,
+      shell: commandRequiresShell,
       ...options,
     })
 
