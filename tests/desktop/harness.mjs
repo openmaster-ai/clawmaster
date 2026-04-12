@@ -544,17 +544,26 @@ async function startTauriDriver() {
 async function runWebdriverSmoke(binaryPath) {
   const tauriDriver = await startTauriDriver()
   let driver
+  let currentStep = 'starting webdriver session'
+
+  const setStep = (step) => {
+    currentStep = step
+    console.log(`[desktop-smoke] step=${step}`)
+  }
 
   try {
+    setStep('building webdriver capabilities')
     const capabilities = new Capabilities()
     capabilities.setBrowserName('wry')
     capabilities.set('tauri:options', { application: binaryPath })
 
+    setStep('connecting webdriver session')
     driver = await new Builder()
       .usingServer(`http://127.0.0.1:${TAURI_DRIVER_PORT}`)
       .withCapabilities(capabilities)
       .build()
 
+    setStep('waiting for initial shell')
     await driver.wait(
       until.elementLocated(By.css('.app-shell, .fullscreen-shell')),
       APP_READY_TIMEOUT_MS,
@@ -565,11 +574,13 @@ async function runWebdriverSmoke(binaryPath) {
 
     const appShell = await driver.findElements(By.css('.app-shell'))
     if (appShell.length > 0) {
+      setStep('opening settings from palette')
       await runPaletteNavigation(driver, {
         query: 'settings',
         expectedPath: '/settings',
         expectedTitle: /(Settings|设置|設定)/,
       })
+      setStep('jumping to settings profile section')
       await runPaletteNavigation(driver, {
         query: 'profile',
         expectedPath: '/settings',
@@ -577,8 +588,11 @@ async function runWebdriverSmoke(binaryPath) {
         expectedTitle: /(Settings|设置|設定)/,
         expectedAnchorId: 'settings-profile',
       })
+      setStep('verifying desktop local data controls')
       await verifyDesktopSettingsSurface(driver)
+      setStep('verifying danger confirmation dialog')
       await verifyDangerZoneConfirmation(driver)
+      setStep('opening capability runtime from palette')
       await runPaletteNavigation(driver, {
         query: 'verify',
         expectedPath: '/capabilities',
@@ -586,6 +600,7 @@ async function runWebdriverSmoke(binaryPath) {
         expectedTitle: /(Capability Center|能力中心|機能センター)/,
         expectedAnchorId: 'capability-runtime',
       })
+      setStep('opening gateway from sidebar')
       await clickSidebarLink(driver, '/gateway')
       await waitForLocation(driver, '/gateway')
       await driver.wait(until.elementLocated(By.id('gateway-runtime')), NAVIGATION_TIMEOUT_MS)
@@ -607,15 +622,19 @@ async function runWebdriverSmoke(binaryPath) {
 
     const startupCopy = await driver.findElement(By.css('.fullscreen-shell')).getText()
     const startupDiagnostics = await collectWindowDiagnostics(driver)
+    setStep('attempting setup wizard continuation')
     const resumedFromSetup = await tryContinueFromSetupWizard(driver)
     if (resumedFromSetup) {
       await driver.wait(until.elementLocated(By.css('.app-shell')), NAVIGATION_TIMEOUT_MS)
+      setStep('opening settings after setup continuation')
       await runPaletteNavigation(driver, {
         query: 'settings',
         expectedPath: '/settings',
         expectedTitle: /(Settings|设置|設定)/,
       })
+      setStep('verifying desktop local data controls after setup continuation')
       await verifyDesktopSettingsSurface(driver)
+      setStep('verifying danger confirmation dialog after setup continuation')
       await verifyDangerZoneConfirmation(driver)
       await captureDriverArtifacts(driver, 'desktop-shell-validated', {
         mode: 'webdriver',
@@ -648,9 +667,14 @@ async function runWebdriverSmoke(binaryPath) {
     }
   } catch (error) {
     if (driver) {
+      const diagnostics = await collectWindowDiagnostics(driver).catch((diagnosticError) => ({
+        error: String(diagnosticError),
+      }))
       await captureDriverArtifacts(driver, 'desktop-smoke-failure', {
         mode: 'webdriver',
+        step: currentStep,
         error: error instanceof Error ? error.message : String(error),
+        diagnostics,
       })
     }
     await persistDriverLogs(tauriDriver.getLogs(), 'desktop-smoke-failure')
