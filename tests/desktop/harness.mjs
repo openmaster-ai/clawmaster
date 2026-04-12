@@ -16,6 +16,7 @@ const BUILD_TIMEOUT_MS = 10 * 60_000
 const APP_READY_TIMEOUT_MS = 45_000
 const MAC_LAUNCH_SMOKE_MS = 5_000
 const CLEANUP_TIMEOUT_MS = 10_000
+const NAVIGATION_TIMEOUT_MS = 15_000
 
 function resolveCommand(name) {
   return process.platform === 'win32' ? `${name}.cmd` : name
@@ -266,22 +267,35 @@ async function runWebdriverSmoke(binaryPath) {
 
     const appShell = await driver.findElements(By.css('.app-shell'))
     if (appShell.length > 0) {
-      await driver.findElement(By.css('.app-command-trigger')).click()
-      await driver.wait(until.elementLocated(By.css('.command-palette-panel')), 10_000)
+      await runPaletteNavigation(driver, {
+        query: 'settings',
+        expectedPath: '/settings',
+        expectedTitle: /(Settings|设置|設定)/,
+      })
+      await runPaletteNavigation(driver, {
+        query: 'profile',
+        expectedPath: '/settings',
+        expectedHash: '#settings-profile',
+        expectedTitle: /(Settings|设置|設定)/,
+        expectedAnchorId: 'settings-profile',
+      })
+      await runPaletteNavigation(driver, {
+        query: 'verify',
+        expectedPath: '/capabilities',
+        expectedHash: '#capability-runtime',
+        expectedTitle: /(Capability Center|能力中心|機能センター)/,
+        expectedAnchorId: 'capability-runtime',
+      })
+      await clickSidebarLink(driver, '/gateway')
+      await waitForLocation(driver, '/gateway')
+      await driver.wait(until.elementLocated(By.id('gateway-runtime')), NAVIGATION_TIMEOUT_MS)
 
-      const input = await driver.findElement(By.css('.command-palette-input'))
-      await input.sendKeys('settings', Key.ENTER)
-
-      const title = await driver.wait(
-        until.elementLocated(By.css('.app-topbar-title')),
-        10_000,
-      )
-      const titleText = await title.getText()
-      assert.match(titleText, /(Settings|设置|設定)/)
+      const titleText = await readTopbarTitle(driver)
+      assert.match(titleText, /(Gateway|网关|ゲートウェイ)/)
 
       return {
         mode: 'webdriver',
-        details: `navigated to settings via command palette (${titleText})`,
+        details: `validated desktop shell navigation via palette + sidebar (${titleText})`,
         logs: tauriDriver.getLogs(),
       }
     }
@@ -303,6 +317,75 @@ async function runWebdriverSmoke(binaryPath) {
     }
     await settleWithin(terminateChild(tauriDriver.child), CLEANUP_TIMEOUT_MS)
   }
+}
+
+async function openCommandPalette(driver) {
+  await driver.findElement(By.css('.app-command-trigger')).click()
+  await driver.wait(until.elementLocated(By.css('.command-palette-panel')), NAVIGATION_TIMEOUT_MS)
+  return driver.findElement(By.css('.command-palette-input'))
+}
+
+async function waitForLocation(driver, expectedPath, expectedHash) {
+  await driver.wait(async () => {
+    const location = await driver.executeScript(() => ({
+      pathname: window.location.pathname,
+      hash: window.location.hash,
+    }))
+    return location.pathname === expectedPath && (expectedHash == null || location.hash === expectedHash)
+  }, NAVIGATION_TIMEOUT_MS)
+}
+
+async function readTopbarTitle(driver) {
+  const title = await driver.wait(
+    until.elementLocated(By.css('.app-topbar-title')),
+    NAVIGATION_TIMEOUT_MS,
+  )
+  return title.getText()
+}
+
+async function waitForAnchorInView(driver, anchorId) {
+  await driver.wait(async () => {
+    const result = await driver.executeScript((targetId) => {
+      const target = document.getElementById(targetId)
+      if (!target) return false
+
+      const rect = target.getBoundingClientRect()
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+      return rect.top >= -24 && rect.top <= viewportHeight * 0.6
+    }, anchorId)
+    return result === true
+  }, NAVIGATION_TIMEOUT_MS)
+}
+
+async function runPaletteNavigation(driver, options) {
+  const {
+    query,
+    expectedPath,
+    expectedHash,
+    expectedTitle,
+    expectedAnchorId,
+  } = options
+
+  const input = await openCommandPalette(driver)
+  await input.clear()
+  await input.sendKeys(query, Key.ENTER)
+  await waitForLocation(driver, expectedPath, expectedHash)
+
+  const titleText = await readTopbarTitle(driver)
+  assert.match(titleText, expectedTitle)
+
+  if (expectedAnchorId) {
+    await driver.wait(until.elementLocated(By.id(expectedAnchorId)), NAVIGATION_TIMEOUT_MS)
+    await waitForAnchorInView(driver, expectedAnchorId)
+  }
+}
+
+async function clickSidebarLink(driver, href) {
+  const link = await driver.wait(
+    until.elementLocated(By.css(`.app-sidebar .app-nav-link[href="${href}"]`)),
+    NAVIGATION_TIMEOUT_MS,
+  )
+  await link.click()
 }
 
 export async function runDesktopSmoke() {

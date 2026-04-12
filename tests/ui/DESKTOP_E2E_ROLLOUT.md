@@ -12,6 +12,7 @@ Current slice status:
 - macOS contributors can run a local Tauri build-and-launch smoke via `npm run test:desktop`
 - Linux and Windows CI use native WebDriver smoke
 - macOS CI uses launch smoke only
+- Linux and Windows native smoke now covers command palette page jump, section deep-link, and sidebar navigation
 
 ## Principles
 
@@ -33,6 +34,10 @@ Current slice status:
 - verify sidebar navigation across a few representative modules
 - verify command palette open, search, and route jump
 - verify one hash-section jump on an async page
+
+Status:
+
+- implemented in `tests/desktop/harness.mjs` for Linux and Windows WebDriver smoke
 
 ### Slice 3: Desktop-only confidence
 

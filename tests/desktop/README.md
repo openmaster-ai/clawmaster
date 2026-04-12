@@ -6,6 +6,12 @@ The smoke accepts the two valid desktop entry states:
 - main app shell when an existing OpenClaw profile is already available
 - startup fullscreen when the runtime is clean and needs install or takeover
 
+When the main app shell is available, the native WebDriver smoke now validates:
+- command palette open and page jump to Settings
+- command palette section jump to `#settings-profile`
+- command palette async section jump to `#capability-runtime`
+- sidebar navigation from Capabilities to Gateway
+
 ## Modes
 
 - `darwin`: launch smoke in local dev and GitHub Actions
