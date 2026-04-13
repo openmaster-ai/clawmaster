@@ -240,7 +240,7 @@ describe('MemoryPage', () => {
     render(<MemoryPage />)
 
     expect(await screen.findByRole('heading', { name: 'Memory Management' })).toBeInTheDocument()
-    expect(await screen.findByText('powermem foundation')).toBeInTheDocument()
+    expect(await screen.findByText('PowerMem foundation')).toBeInTheDocument()
     expect(screen.getByText('Why managed memory is better')).toBeInTheDocument()
     expect(screen.getByText('Legacy memory import')).toBeInTheDocument()
     expect(screen.getByText('1 / 2')).toBeInTheDocument()
@@ -308,7 +308,7 @@ describe('MemoryPage', () => {
     expect(await screen.findByText('No results')).toBeInTheDocument()
   })
 
-  it('adds and searches managed powermem memories', async () => {
+  it('adds and searches managed PowerMem memories', async () => {
     mockManagedMemorySearch.mockResolvedValueOnce({
       success: true,
       data: [
@@ -327,7 +327,7 @@ describe('MemoryPage', () => {
 
     render(<MemoryPage />)
 
-    expect(await screen.findByText('powermem foundation')).toBeInTheDocument()
+    expect(await screen.findByText('PowerMem foundation')).toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('User ID for managed memory (optional)'), {
       target: { value: 'alice' },
@@ -336,7 +336,7 @@ describe('MemoryPage', () => {
       target: { value: 'planner' },
     })
     fireEvent.change(
-      screen.getByPlaceholderText('Store a stable fact, preference, or reusable note in managed powermem memory...'),
+      screen.getByPlaceholderText('Store a stable fact, preference, or reusable note in managed PowerMem memory...'),
       { target: { value: 'Alice prefers espresso after lunch.' } },
     )
     fireEvent.click(screen.getByRole('button', { name: 'Add memory' }))
@@ -348,9 +348,9 @@ describe('MemoryPage', () => {
         agentId: 'planner',
       })
     })
-    expect(await screen.findByText('Managed powermem memory saved.')).toBeInTheDocument()
+    expect(await screen.findByText('Managed PowerMem memory saved.')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByPlaceholderText('Search managed powermem memories...'), {
+    fireEvent.change(screen.getByPlaceholderText('Search managed PowerMem memories...'), {
       target: { value: 'espresso lunch' },
     })
     fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0])
@@ -367,7 +367,7 @@ describe('MemoryPage', () => {
     expect(screen.getByText('score: 0.994')).toBeInTheDocument()
   })
 
-  it('imports legacy OpenClaw memory into managed powermem', async () => {
+  it('imports legacy OpenClaw memory into managed PowerMem', async () => {
     render(<MemoryPage />)
 
     const importHeading = await screen.findByText('Legacy memory import')
@@ -381,7 +381,7 @@ describe('MemoryPage', () => {
     await waitFor(() => {
       expect(mockImportOpenclawManagedMemory).toHaveBeenCalledTimes(1)
     })
-    expect(await screen.findByText('Legacy OpenClaw memory imported into managed powermem.')).toBeInTheDocument()
+    expect(await screen.findByText('Legacy OpenClaw memory imported into managed PowerMem.')).toBeInTheDocument()
   })
 
   it('compares managed and legacy recall side by side', async () => {
@@ -614,20 +614,20 @@ describe('MemoryPage', () => {
     mockGetIsTauri.mockReturnValue(true)
     mockManagedMemoryStatus.mockResolvedValueOnce({
       success: false,
-      error: 'Managed powermem memory is available in web/backend mode first.',
+      error: 'Managed PowerMem memory is available in web/backend mode first.',
     })
     mockManagedMemoryStats.mockResolvedValueOnce({
       success: false,
-      error: 'Managed powermem memory is available in web/backend mode first.',
+      error: 'Managed PowerMem memory is available in web/backend mode first.',
     })
     mockManagedMemoryList.mockResolvedValueOnce({
       success: false,
-      error: 'Managed powermem memory is available in web/backend mode first.',
+      error: 'Managed PowerMem memory is available in web/backend mode first.',
     })
 
     render(<MemoryPage />)
 
-    expect(await screen.findByText('Managed powermem memory will arrive in desktop mode in a later PR. Native OpenClaw memory tools below remain available now.')).toBeInTheDocument()
-    expect(screen.queryByText('Managed powermem memory is available in web/backend mode first.')).not.toBeInTheDocument()
+    expect(await screen.findByText('Managed PowerMem memory will arrive in desktop mode in a later PR. Native OpenClaw memory tools below remain available now.')).toBeInTheDocument()
+    expect(screen.queryByText('Managed PowerMem memory is available in web/backend mode first.')).not.toBeInTheDocument()
   })
 })

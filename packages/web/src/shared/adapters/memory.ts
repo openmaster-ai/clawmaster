@@ -49,7 +49,7 @@ function hasFtsUnavailableError(message: string): boolean {
 }
 
 function desktopManagedMemoryUnavailable<T>(): AdapterResult<T> {
-  return fail('Managed powermem memory is available in web/backend mode first. Desktop integration lands in a later PR.')
+  return fail('Managed PowerMem memory is available in web/backend mode first. Desktop integration lands in a later PR.')
 }
 
 async function tauriOpenclawMemoryStatus(): Promise<OpenclawMemoryStatusPayload> {
