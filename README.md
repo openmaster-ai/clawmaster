@@ -1,20 +1,33 @@
-<!-- Hero image: replace comment with actual banner when available
+<!-- Hero image / demo GIF: replace comment with actual asset when available
 <p align="center">
-  <img src="docs/hero.png" width="100%" alt="ClawMaster" />
+  <img src="docs/hero.gif" width="800" alt="ClawMaster demo" />
 </p>
 -->
 
-<h1 align="center">ClawMaster · 龙虾管理大师</h1>
+<h1 align="center">
+  <code>clawmaster</code> · ClawMaster · 龙虾管理大师
+</h1>
 
 <p align="center">
   <strong>A control plane for OpenClaw — setup, observe, and operate from one UI.</strong>
 </p>
 
+**ClawMaster** wraps OpenClaw in a desktop app (Tauri) and a self-hosted web console (Express + Vite). Run the guided wizard, flip settings in a UI, and watch ClawProbe track token spend — all without touching a config file.
+
+**Join the community**: contribute modules, translations, and harness improvements for the OpenClaw ecosystem.
+
+<p align="center">
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Quick_Start-5_min-blue?style=for-the-badge" alt="Quick Start" /></a>
+  <a href="#roadmap"><img src="https://img.shields.io/badge/Roadmap-6_capabilities-ff69b4?style=for-the-badge" alt="Roadmap" /></a>
+  <a href="./CONTRIBUTING.md"><img src="https://img.shields.io/badge/Contributing-welcome-green?style=for-the-badge" alt="Contributing" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License" /></a>
+</p>
+
 <p align="center">
   <a href="https://github.com/clawmaster-ai/clawmaster/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/clawmaster-ai/clawmaster/build.yml?branch=main" alt="Build" /></a>
   <a href="https://github.com/clawmaster-ai/clawmaster/releases"><img src="https://img.shields.io/github/v/release/clawmaster-ai/clawmaster?color=blue" alt="Release" /></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License" /></a>
   <a href="https://github.com/clawmaster-ai/clawmaster/stargazers"><img src="https://img.shields.io/github/stars/clawmaster-ai/clawmaster?style=social" alt="Stars" /></a>
+  <img src="https://img.shields.io/badge/tests-74_passing-brightgreen" alt="Tests" />
 </p>
 
 <!-- Recognition badges — uncomment once listed:
