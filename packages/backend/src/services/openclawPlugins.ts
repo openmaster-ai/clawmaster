@@ -27,6 +27,73 @@ export interface OpenClawPluginRow {
   description?: string
 }
 
+function findBalancedJsonEnd(raw: string, start: number): number | null {
+  const first = raw[start]
+  if (first !== '{' && first !== '[') return null
+
+  const expectedClosers: string[] = [first === '{' ? '}' : ']']
+  let inString = false
+  let escaped = false
+
+  for (let index = start + 1; index < raw.length; index += 1) {
+    const ch = raw[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+        continue
+      }
+      if (ch === '\\') {
+        escaped = true
+        continue
+      }
+      if (ch === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      continue
+    }
+    if (ch === '{') {
+      expectedClosers.push('}')
+      continue
+    }
+    if (ch === '[') {
+      expectedClosers.push(']')
+      continue
+    }
+    if (ch === '}' || ch === ']') {
+      const expected = expectedClosers.pop()
+      if (expected !== ch) {
+        return null
+      }
+      if (expectedClosers.length === 0) {
+        return index
+      }
+    }
+  }
+
+  return null
+}
+
+function extractFirstJsonValue(raw: string): unknown | null {
+  for (let index = 0; index < raw.length; index += 1) {
+    const ch = raw[index]
+    if (ch !== '{' && ch !== '[') continue
+    const end = findBalancedJsonEnd(raw, index)
+    if (end === null) continue
+    const candidate = raw.slice(index, end + 1)
+    try {
+      return JSON.parse(candidate)
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
@@ -50,25 +117,9 @@ function normalizePluginRow(item: unknown): OpenClawPluginRow | null {
 
 /** Parse `plugins list --json` output (array or wrapped in { plugins | items | list }) */
 export function parsePluginsJsonString(raw: string): OpenClawPluginRow[] {
-  const trimmed = raw.trim()
-  if (!trimmed) return []
-  let data: unknown
-  try {
-    if (trimmed.startsWith('[')) {
-      data = JSON.parse(trimmed)
-    } else {
-      const arrM = raw.match(/\[[\s\S]*\]/)
-      if (arrM) {
-        data = JSON.parse(arrM[0])
-      } else {
-        const objM = raw.match(/\{[\s\S]*\}/)
-        if (!objM) return []
-        data = JSON.parse(objM[0])
-      }
-    }
-  } catch {
-    return []
-  }
+  if (!raw.trim()) return []
+  const data = extractFirstJsonValue(raw)
+  if (data === null) return []
   if (Array.isArray(data)) {
     return data.map(normalizePluginRow).filter((x): x is OpenClawPluginRow => x !== null)
   }
@@ -463,6 +514,27 @@ export async function installOpenclawPlugin(id: string): Promise<void> {
     throw new Error('Invalid plugin id')
   }
   const r = await execOpenclaw(['plugins', 'install', x], PLUGIN_INSTALL_CLI_OPTS)
+  if (r.code !== 0) {
+    throw new Error(
+      [r.stderr, r.stdout].filter(Boolean).join('\n').trim() || `openclaw plugins install failed (${r.code})`
+    )
+  }
+}
+
+export async function installOpenclawPluginFromPath(
+  pluginPath: string,
+  options?: { link?: boolean }
+): Promise<void> {
+  const normalized = pluginPath.trim()
+  if (!normalized) {
+    throw new Error('Plugin path is required')
+  }
+  const args = ['plugins', 'install']
+  if (options?.link !== false) {
+    args.push('-l')
+  }
+  args.push(normalized)
+  const r = await execOpenclaw(args, PLUGIN_INSTALL_CLI_OPTS)
   if (r.code !== 0) {
     throw new Error(
       [r.stderr, r.stdout].filter(Boolean).join('\n').trim() || `openclaw plugins install failed (${r.code})`

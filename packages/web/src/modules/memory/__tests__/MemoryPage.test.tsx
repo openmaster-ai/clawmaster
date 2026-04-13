@@ -56,7 +56,9 @@ describe('MemoryPage', () => {
         profileKey: 'default',
         dataRoot: '/tmp/.clawmaster/data/default',
         runtimeRoot: '/tmp/.clawmaster/data/default/memory/powermem',
+        storagePath: '/tmp/.clawmaster/data/default/memory/powermem/powermem.sqlite',
         dbPath: '/tmp/.clawmaster/data/default/memory/powermem/powermem.sqlite',
+        legacyDbPath: '/tmp/.clawmaster/data/default/memory/powermem/powermem.sqlite',
         backend: 'service',
         storageType: 'sqlite',
         provisioned: true,
@@ -70,7 +72,9 @@ describe('MemoryPage', () => {
         profileKey: 'default',
         dataRoot: '/tmp/.clawmaster/data/default',
         runtimeRoot: '/tmp/.clawmaster/data/default/memory/powermem',
+        storagePath: '/tmp/.clawmaster/data/default/memory/powermem/powermem.sqlite',
         dbPath: '/tmp/.clawmaster/data/default/memory/powermem/powermem.sqlite',
+        legacyDbPath: '/tmp/.clawmaster/data/default/memory/powermem/powermem.sqlite',
         storageType: 'sqlite',
         totalMemories: 1,
         userCount: 1,
@@ -506,6 +510,35 @@ describe('MemoryPage', () => {
       expect(mockReindexOpenclawMemory).toHaveBeenCalledTimes(1)
     })
     expect(await screen.findByText('Memory reindex completed and status refreshed.')).toBeInTheDocument()
+  })
+
+  it('hides legacy comparison and disables native search when openclaw memory is unsupported', async () => {
+    mockOpenclawMemoryStatus.mockResolvedValueOnce({
+      success: true,
+      data: {
+        exitCode: 1,
+        data: { raw: '[plugins] memory-clawmaster-powermem: plugin registered' },
+        stderr: "error: unknown command 'memory'",
+      },
+    })
+    mockOpenclawMemorySearchCapability.mockResolvedValueOnce({
+      success: true,
+      data: {
+        mode: 'unsupported',
+        reason: 'command_unavailable',
+        detail: "error: unknown command 'memory'",
+      },
+    })
+
+    render(<MemoryPage />)
+
+    expect(await screen.findByText('Legacy memory unavailable')).toBeInTheDocument()
+    expect(screen.getByText('Unavailable')).toBeInTheDocument()
+    expect(screen.getByText(/does not currently expose the legacy memory CLI/i)).toBeInTheDocument()
+    expect(screen.queryByText('Recall comparison')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Agent ID (optional)')).toBeDisabled()
+    expect(screen.getByPlaceholderText('Search memories...')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Reindex memory' })).toBeDisabled()
   })
 
   it('confirms and deletes a native memory file', async () => {

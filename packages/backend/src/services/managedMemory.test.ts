@@ -12,6 +12,7 @@ import {
   getManagedMemoryStatsPayload,
   listManagedMemories,
   resetManagedMemory,
+  resolveManagedMemoryEngine,
   resolveManagedMemoryStoreContext,
   searchManagedMemories,
 } from './managedMemory.js'
@@ -25,6 +26,7 @@ test('managed memory status and passive reads do not provision storage before fi
   const context = {
     dataRootOverride,
     profileSelection: { kind: 'default' } as const,
+    engineOverride: 'powermem-sqlite' as const,
   }
 
   const status = await getManagedMemoryStatusPayload(context)
@@ -46,6 +48,7 @@ test('resolveManagedMemoryStoreContext scopes storage by OpenClaw profile', () =
   const defaultStore = resolveManagedMemoryStoreContext({
     homeDir,
     profileSelection: { kind: 'default' },
+    engineOverride: 'powermem-sqlite',
   })
   assert.equal(defaultStore.profileKey, 'default')
   assert.equal(defaultStore.runtimeRoot, path.join(homeDir, '.clawmaster', 'data', 'default', 'memory', 'powermem'))
@@ -53,6 +56,7 @@ test('resolveManagedMemoryStoreContext scopes storage by OpenClaw profile', () =
   const namedStore = resolveManagedMemoryStoreContext({
     homeDir,
     profileSelection: { kind: 'named', name: 'research' },
+    engineOverride: 'powermem-sqlite',
   })
   assert.equal(namedStore.profileKey, 'named:research')
   assert.equal(namedStore.dbPath, path.join(homeDir, '.clawmaster', 'data', 'named', 'research', 'memory', 'powermem', 'powermem.sqlite'))
@@ -60,9 +64,17 @@ test('resolveManagedMemoryStoreContext scopes storage by OpenClaw profile', () =
   const devStore = resolveManagedMemoryStoreContext({
     homeDir,
     profileSelection: { kind: 'dev' },
+    engineOverride: 'powermem-sqlite',
   })
   assert.equal(devStore.profileKey, 'dev')
   assert.equal(devStore.runtimeRoot, path.join(homeDir, '.clawmaster', 'data', 'dev', 'memory', 'powermem'))
+})
+
+test('resolveManagedMemoryEngine promotes supported hosts to seekdb and keeps Windows on sqlite', () => {
+  assert.equal(resolveManagedMemoryEngine('linux', 'x64'), 'powermem-seekdb')
+  assert.equal(resolveManagedMemoryEngine('darwin', 'arm64'), 'powermem-sqlite')
+  assert.equal(resolveManagedMemoryEngine('darwin', 'x64'), 'powermem-sqlite')
+  assert.equal(resolveManagedMemoryEngine('win32', 'x64'), 'powermem-sqlite')
 })
 
 test('managed powermem foundation supports add, list, search, delete, and reset', async () => {
@@ -70,6 +82,7 @@ test('managed powermem foundation supports add, list, search, delete, and reset'
   const context = {
     dataRootOverride,
     profileSelection: { kind: 'named', name: 'lab' } as const,
+    engineOverride: 'powermem-sqlite' as const,
   }
 
   const espresso = await addManagedMemory(
@@ -114,7 +127,7 @@ test('managed powermem foundation supports add, list, search, delete, and reset'
   assert.equal(stats.totalMemories, 2)
   assert.equal(stats.userCount, 1)
   assert.equal(stats.profileKey, 'named:lab')
-  assert.match(stats.dbPath, /powermem\.sqlite$/)
+  assert.match(stats.storagePath, /powermem\.sqlite$/)
 
   const deleted = await deleteManagedMemory(espresso.memoryId, context)
   assert.equal(deleted, true)
@@ -132,6 +145,7 @@ test('managed memory stats count distinct users across multiple pages', async ()
   const context = {
     dataRootOverride,
     profileSelection: { kind: 'named', name: 'users' } as const,
+    engineOverride: 'powermem-sqlite' as const,
   }
 
   for (let index = 0; index < 503; index += 1) {

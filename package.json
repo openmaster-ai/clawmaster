@@ -7,6 +7,7 @@
   },
   "files": [
     "bin/clawmaster.mjs",
+    "plugins/memory-clawmaster-powermem/",
     "packages/backend/dist/",
     "packages/backend/package.json",
     "packages/web/dist/",
@@ -47,6 +48,8 @@
     "selenium-webdriver": "^4.34.0"
   },
   "dependencies": {
+    "@langchain/core": "^1.1.38",
+    "@sinclair/typebox": "^0.34.0",
     "@tauri-apps/api": "^2.10.1",
     "cors": "^2.8.5",
     "express": "^4.21.0",

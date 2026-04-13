@@ -15,6 +15,14 @@ function parseJsonLenient(raw: string): unknown {
   }
 }
 
+function pickStructuredJson(rawA: string, rawB: string, matcher: (value: unknown) => boolean): unknown {
+  const parsedA = parseJsonLenient(rawA)
+  if (matcher(parsedA)) return parsedA
+  const parsedB = parseJsonLenient(rawB)
+  if (matcher(parsedB)) return parsedB
+  return parsedA
+}
+
 export interface OpenclawMemoryHit {
   id: string
   content: string
@@ -24,8 +32,8 @@ export interface OpenclawMemoryHit {
 }
 
 export interface OpenclawMemorySearchCapabilityPayload {
-  mode: 'native' | 'fallback'
-  reason?: 'fts5_unavailable'
+  mode: 'native' | 'fallback' | 'unsupported'
+  reason?: 'fts5_unavailable' | 'command_unavailable'
   detail?: string
 }
 
@@ -70,7 +78,7 @@ function normalizeHit(item: unknown, index: number): OpenclawMemoryHit | null {
     item.content ?? item.text ?? item.snippet ?? item.body ?? item.memory ?? item.preview ?? ''
   ).trim()
   if (!content && !item.path && !item.file && !item.id) return null
-  const id = String(item.id ?? item.path ?? item.file ?? item.uri ?? `hit-${index}`)
+  const id = String(item.id ?? item.memoryId ?? item.path ?? item.file ?? item.uri ?? `hit-${index}`)
   const scoreRaw = item.score ?? item.similarity ?? item.rank
   const score =
     typeof scoreRaw === 'number'
@@ -132,9 +140,21 @@ function hasStructuredOpenclawMemorySearchPayload(value: unknown): boolean {
   return Array.isArray(value.hits ?? value.results ?? value.items ?? value.memories ?? value.matches)
 }
 
+function hasStructuredOpenclawMemoryStatusPayload(value: unknown): boolean {
+  return Array.isArray(value)
+}
+
 function hasFtsUnavailableError(message: string): boolean {
   const lower = message.toLowerCase()
   return lower.includes('fts5') && lower.includes('no such module')
+}
+
+function hasUnsupportedOpenclawMemoryError(message: string): boolean {
+  const lower = message.toLowerCase()
+  return (
+    lower.includes("unknown command 'memory'") ||
+    (lower.includes('requires node >=') && lower.includes('upgrade node and re-run openclaw'))
+  )
 }
 
 function resolveMemorySearchProbeDetail(result: {
@@ -335,9 +355,9 @@ export function resolveOpenclawMemorySearchOutput(result: {
   stdout: string
   stderr: string
 }): OpenclawMemoryHit[] {
-  const parsed = parseJsonLenient(result.stdout)
+  const parsed = pickStructuredJson(result.stdout, result.stderr, hasStructuredOpenclawMemorySearchPayload)
   if (result.code === 0 || hasStructuredOpenclawMemorySearchPayload(parsed)) {
-    return parseOpenclawMemorySearchJson(result.stdout)
+    return parseOpenclawMemorySearchJson(JSON.stringify(parsed))
   }
   throw new Error(result.stderr || result.stdout || 'OpenClaw memory search failed')
 }
@@ -359,6 +379,13 @@ export function resolveOpenclawMemorySearchCapability(result: {
       detail,
     }
   }
+  if (detail && hasUnsupportedOpenclawMemoryError(detail)) {
+    return {
+      mode: 'unsupported',
+      reason: 'command_unavailable',
+      detail,
+    }
+  }
   return {
     mode: 'native',
     detail,
@@ -371,7 +398,7 @@ export async function getOpenclawMemoryStatusPayload(): Promise<{
   stderr?: string
 }> {
   const r = await execOpenclaw(['memory', 'status', '--json'])
-  const data = parseJsonLenient(r.stdout)
+  const data = pickStructuredJson(r.stdout, r.stderr, hasStructuredOpenclawMemoryStatusPayload)
   return {
     exitCode: r.code,
     data,

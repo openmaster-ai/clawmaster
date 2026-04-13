@@ -167,8 +167,8 @@ export interface OpenclawMemoryStatusPayload {
 }
 
 export interface OpenclawMemorySearchCapabilityPayload {
-  mode: 'native' | 'fallback'
-  reason?: 'fts5_unavailable'
+  mode: 'native' | 'fallback' | 'unsupported'
+  reason?: 'fts5_unavailable' | 'command_unavailable'
   detail?: string
 }
 
@@ -218,11 +218,56 @@ export interface ManagedMemorySearchHit {
 
 export interface ManagedMemoryStoreContext {
   implementation: 'powermem'
-  engine: 'powermem-sqlite'
+  engine: 'powermem-sqlite' | 'powermem-seekdb'
+  runtimeMode: 'host-managed' | 'wsl-managed'
+  runtimeTarget: 'native' | 'wsl2'
+  hostPlatform: string
+  hostArch: string
+  targetPlatform: string
+  targetArch: string
+  selectedWslDistro: string | null
   profileKey: string
   dataRoot: string
   runtimeRoot: string
-  dbPath: string
+  storagePath: string
+  dbPath?: string
+  legacyDbPath: string
+}
+
+export interface ManagedMemoryBridgeConfig {
+  dataRoot: string
+  engine: ManagedMemoryStoreContext['engine']
+  autoCapture: boolean
+  autoRecall: boolean
+  inferOnAdd: boolean
+  recallLimit: number
+  recallScoreThreshold: number
+  userId?: string
+  agentId?: string
+}
+
+export interface ManagedMemoryBridgeEntry {
+  enabled: boolean
+  config: ManagedMemoryBridgeConfig
+}
+
+export interface ManagedMemoryBridgeStatusPayload {
+  pluginId: 'memory-clawmaster-powermem'
+  slotKey: 'memory'
+  state: 'missing' | 'ready' | 'drifted' | 'unsupported'
+  issues: string[]
+  installed: boolean
+  pluginStatus: string | null
+  runtimePluginPath: string | null
+  pluginPath: string
+  pluginPathExists: boolean
+  store: ManagedMemoryStoreContext
+  currentSlotValue: string | null
+  currentEntry: ManagedMemoryBridgeEntry | null
+  desired: {
+    slotValue: 'memory-clawmaster-powermem'
+    entry: ManagedMemoryBridgeEntry | null
+  }
 }
 
 export interface ManagedMemoryStatusPayload extends ManagedMemoryStoreContext {

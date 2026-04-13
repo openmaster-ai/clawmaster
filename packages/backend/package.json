@@ -10,6 +10,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@langchain/core": "^1.1.38",
     "cors": "^2.8.5",
     "express": "^4.21.0",
     "powermem": "^0.1.0",

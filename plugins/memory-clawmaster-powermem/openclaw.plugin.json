@@ -1,0 +1,68 @@
+{
+  "id": "memory-clawmaster-powermem",
+  "kind": "memory",
+  "uiHints": {
+    "dataRoot": {
+      "label": "Managed data root",
+      "advanced": true,
+      "help": "ClawMaster-managed profile storage root for PowerMem."
+    },
+    "engine": {
+      "label": "Storage engine",
+      "advanced": true,
+      "help": "Managed PowerMem backend selected by ClawMaster."
+    },
+    "userId": {
+      "label": "User ID",
+      "advanced": true,
+      "placeholder": "openclaw-user",
+      "help": "Optional memory user scope."
+    },
+    "agentId": {
+      "label": "Agent ID",
+      "advanced": true,
+      "placeholder": "openclaw-agent",
+      "help": "Optional memory agent scope."
+    },
+    "recallLimit": {
+      "label": "Recall limit",
+      "advanced": true,
+      "placeholder": "5",
+      "help": "Maximum memories to inject or return per recall."
+    },
+    "recallScoreThreshold": {
+      "label": "Recall score threshold",
+      "advanced": true,
+      "placeholder": "0",
+      "help": "Minimum recall score between 0 and 1."
+    },
+    "autoCapture": {
+      "label": "Auto-capture",
+      "help": "Store memory automatically after successful agent turns."
+    },
+    "autoRecall": {
+      "label": "Auto-recall",
+      "help": "Inject relevant memories before the agent starts."
+    },
+    "inferOnAdd": {
+      "label": "Infer on add",
+      "help": "Reserved for future PowerMem extraction modes."
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "dataRoot": { "type": "string" },
+      "engine": { "type": "string", "enum": ["powermem-sqlite", "powermem-seekdb"] },
+      "userId": { "type": "string" },
+      "agentId": { "type": "string" },
+      "recallLimit": { "type": "number" },
+      "recallScoreThreshold": { "type": "number" },
+      "autoCapture": { "type": "boolean" },
+      "autoRecall": { "type": "boolean" },
+      "inferOnAdd": { "type": "boolean" }
+    },
+    "required": []
+  }
+}

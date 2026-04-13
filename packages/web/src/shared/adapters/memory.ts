@@ -1,4 +1,5 @@
 import type {
+  ManagedMemoryBridgeStatusPayload,
   ManagedMemoryImportStatusPayload,
   ManagedMemoryListPayload,
   ManagedMemoryRecord,
@@ -155,6 +156,18 @@ export async function deleteOpenclawMemoryFileResult(relativePath: string): Prom
 export async function managedMemoryStatusResult(): Promise<AdapterResult<ManagedMemoryStatusPayload>> {
   if (getIsTauri()) return desktopManagedMemoryUnavailable()
   return webFetchJson<ManagedMemoryStatusPayload>('/api/memory/managed/status')
+}
+
+export async function managedMemoryBridgeStatusResult(): Promise<AdapterResult<ManagedMemoryBridgeStatusPayload>> {
+  if (getIsTauri()) return desktopManagedMemoryUnavailable()
+  return webFetchJson<ManagedMemoryBridgeStatusPayload>('/api/memory/managed/bridge/status')
+}
+
+export async function syncManagedMemoryBridgeResult(): Promise<AdapterResult<ManagedMemoryBridgeStatusPayload>> {
+  if (getIsTauri()) return desktopManagedMemoryUnavailable()
+  return webFetchJson<ManagedMemoryBridgeStatusPayload>('/api/memory/managed/bridge/sync', {
+    method: 'POST',
+  })
 }
 
 export async function managedMemoryStatsResult(): Promise<AdapterResult<ManagedMemoryStatsPayload>> {

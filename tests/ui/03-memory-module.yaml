@@ -175,3 +175,41 @@ cases:
       - 同时渲染托管 PowerMem 与旧版 OpenClaw 两列结果
       - 若有结果，两列均显示内容摘要而非空白卡片
       - "为什么托管记忆更好"中的同查询召回卡片会反映最近一次对比结果
+
+  - id: mem-10
+    name: OpenClaw bridge 初始漂移态可见
+    preconditions:
+      - 当前为 web/service 模式
+      - 已启用托管 PowerMem 能力，但 OpenClaw 尚未同步 memory-clawmaster-powermem
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/memory"
+      - action: wait
+        duration: 2500ms
+      - action: screenshot
+        name: mem-managed-bridge-missing
+    assertions:
+      - 页面显示"OpenClaw bridge"或等价本地化标题
+      - 桥接状态显示"Needs sync"、"需要同步"或等价文案
+      - 显示插件未安装或 slot 未对齐的状态标签
+      - 显示 shipped plugin path、runtime plugin path、managed data root
+      - Issues 区块列出至少一条待处理问题
+
+  - id: mem-11
+    name: 同步 OpenClaw bridge 后切换为 ready
+    preconditions:
+      - 当前为 web/service 模式
+      - mock 或真实 OpenClaw 允许运行本地插件安装与 enable
+    steps:
+      - action: click
+        target: text("同步桥接")
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: mem-managed-bridge-ready
+    assertions:
+      - 同步按钮在请求期间显示 loading 或禁用态
+      - 页面出现成功反馈，而非静默完成
+      - 桥接状态切换为"Bridge ready"、"桥接已就绪"或等价文案
+      - 页面显示插件已安装，current slot 指向 memory-clawmaster-powermem
+      - Issues 区块清空或只保留非阻断说明

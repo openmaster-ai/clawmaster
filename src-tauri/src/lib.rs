@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
+use tauri::Manager;
 
 const CMD_ERR_PREFIX: &str = "CLAWMASTER_ERR:";
 
@@ -4190,6 +4191,15 @@ pub fn run() {
             run_system_command,
         ])
         .setup(|app| {
+            if let Ok(resource_dir) = app.path().resource_dir() {
+                let plugin_root = resource_dir.join("memory-clawmaster-powermem");
+                if plugin_root.join("openclaw.plugin.json").exists() {
+                    std::env::set_var(
+                        "CLAWMASTER_PACKAGED_MEMORY_PLUGIN_ROOT",
+                        plugin_root.to_string_lossy().to_string(),
+                    );
+                }
+            }
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()

@@ -1,0 +1,34 @@
+{
+  "name": "memory-clawmaster-powermem",
+  "version": "0.1.0",
+  "description": "ClawMaster-managed OpenClaw memory plugin powered by PowerMem.",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "files": [
+    "index.ts",
+    "runtime.ts",
+    "openclaw.plugin.json"
+  ],
+  "dependencies": {
+    "@langchain/core": "^1.1.38",
+    "@sinclair/typebox": "^0.34.0",
+    "powermem": "^0.1.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.1.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "license": "MIT"
+}

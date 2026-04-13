@@ -15,6 +15,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { platformResults } from '@/adapters'
 import type {
+  ManagedMemoryBridgeStatusPayload,
   ManagedMemoryImportStatusPayload,
   ManagedMemoryListPayload,
   ManagedMemorySearchHit,
@@ -100,6 +101,14 @@ function isKnownFtsWarning(message: string): boolean {
   return lower.includes('fts unavailable') || (lower.includes('fts5') && lower.includes('no such module'))
 }
 
+function isKnownLegacyMemoryUnsupported(message: string): boolean {
+  const lower = message.toLowerCase()
+  return (
+    lower.includes("unknown command 'memory'") ||
+    (lower.includes('requires node >=') && lower.includes('upgrade node and re-run openclaw'))
+  )
+}
+
 export default function MemoryPage() {
   const { t } = useTranslation()
   const isDesktopRuntime = getIsTauri()
@@ -112,6 +121,7 @@ export default function MemoryPage() {
   const [managedSearchErr, setManagedSearchErr] = useState<string | null>(null)
   const [managedMutationLoading, setManagedMutationLoading] = useState(false)
   const [managedImportLoading, setManagedImportLoading] = useState(false)
+  const [managedBridgeSyncLoading, setManagedBridgeSyncLoading] = useState(false)
   const [comparisonQuery, setComparisonQuery] = useState('')
   const [comparisonLoading, setComparisonLoading] = useState(false)
   const [comparisonError, setComparisonError] = useState<string | null>(null)
@@ -128,6 +138,7 @@ export default function MemoryPage() {
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
 
   const managedStatusFetcher = useCallback(async () => platformResults.managedMemoryStatus(), [])
+  const managedBridgeStatusFetcher = useCallback(async () => platformResults.managedMemoryBridgeStatus(), [])
   const managedStatsFetcher = useCallback(async () => platformResults.managedMemoryStats(), [])
   const managedImportStatusFetcher = useCallback(async () => platformResults.managedMemoryImportStatus(), [])
   const managedListFetcher = useCallback(async () => platformResults.managedMemoryList({ limit: 8 }), [])
@@ -141,6 +152,13 @@ export default function MemoryPage() {
     error: managedStatusErr,
     refetch: refetchManagedStatus,
   } = useAdapterCall<ManagedMemoryStatusPayload>(managedStatusFetcher)
+
+  const {
+    data: managedBridgeStatus,
+    loading: managedBridgeStatusLoading,
+    error: managedBridgeStatusErr,
+    refetch: refetchManagedBridgeStatus,
+  } = useAdapterCall<ManagedMemoryBridgeStatusPayload>(managedBridgeStatusFetcher)
 
   const {
     data: managedStats,
@@ -206,7 +224,7 @@ export default function MemoryPage() {
 
   const visibleStatusWarning = useMemo(() => {
     const stderr = statusPayload?.stderr?.trim()
-    if (!stderr || isKnownFtsWarning(stderr)) return null
+    if (!stderr || isKnownFtsWarning(stderr) || isKnownLegacyMemoryUnsupported(stderr)) return null
     return stderr
   }, [statusPayload?.stderr])
 
@@ -225,9 +243,13 @@ export default function MemoryPage() {
   const comparisonManagedCount = comparisonManagedHits?.length ?? 0
   const comparisonLegacyCount = comparisonOpenclawHits?.length ?? 0
   const comparisonReady = comparisonManagedHits !== null && comparisonOpenclawHits !== null
+  const legacySearchMode = searchCapability?.mode ?? 'native'
+  const legacyMemoryUnsupported = legacySearchMode === 'unsupported'
   const comparisonValue = comparisonReady
     ? `${comparisonManagedCount} · ${comparisonLegacyCount}`
-    : t('memory.managedProofPending')
+    : legacyMemoryUnsupported
+      ? t('memory.managedProofUnavailableValue')
+      : t('memory.managedProofPending')
   const comparisonDelta = comparisonManagedCount - comparisonLegacyCount
 
   async function handleReindex() {
@@ -282,7 +304,31 @@ export default function MemoryPage() {
   }
 
   async function refreshManagedSection() {
-    await Promise.all([refetchManagedStatus(), refetchManagedStats(), refetchManagedImportStatus(), refetchManagedList()])
+    await Promise.all([
+      refetchManagedStatus(),
+      refetchManagedBridgeStatus(),
+      refetchManagedStats(),
+      refetchManagedImportStatus(),
+      refetchManagedList(),
+    ])
+  }
+
+  async function handleSyncManagedBridge() {
+    setManagedBridgeSyncLoading(true)
+    const result = await platformResults.syncManagedMemoryBridge()
+    setManagedBridgeSyncLoading(false)
+    if (!result.success) {
+      setFeedback({ tone: 'error', message: result.error ?? t('memory.managedBridgeSyncFailed') })
+      return
+    }
+    setFeedback({
+      tone: result.data?.state === 'ready' ? 'success' : 'error',
+      message:
+        result.data?.state === 'ready'
+          ? t('memory.managedBridgeSyncSuccess')
+          : t('memory.managedBridgeSyncDrifted'),
+    })
+    await refreshManagedSection()
   }
 
   async function handleImportOpenclawMemory() {
@@ -425,26 +471,34 @@ export default function MemoryPage() {
     },
   ]
 
-  const searchMode = searchCapability?.mode ?? 'native'
+  const searchMode = legacySearchMode
   const SearchModeIcon =
-    searchCapabilityLoading ? LoaderCircle : searchMode === 'fallback' ? ShieldAlert : CheckCircle2
+    searchCapabilityLoading ? LoaderCircle : searchMode === 'native' ? CheckCircle2 : ShieldAlert
   const searchModeBadgeClass =
-    searchMode === 'fallback'
-      ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400'
-      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+    searchMode === 'native'
+      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+      : searchMode === 'fallback'
+        ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+        : 'border-border/70 bg-muted text-muted-foreground'
   const searchModePanelClass =
-    searchMode === 'fallback'
-      ? 'border-amber-500/20 bg-amber-500/5'
-      : 'border-emerald-500/20 bg-emerald-500/5'
+    searchMode === 'native'
+      ? 'border-emerald-500/20 bg-emerald-500/5'
+      : searchMode === 'fallback'
+        ? 'border-amber-500/20 bg-amber-500/5'
+        : 'border-border/70 bg-muted/30'
   const searchModeLabel = searchCapabilityLoading
     ? t('memory.searchModeChecking')
     : searchMode === 'fallback'
       ? t('memory.searchModeFallback')
+      : searchMode === 'unsupported'
+        ? t('memory.searchModeUnsupported')
       : t('memory.searchModeNative')
   const searchModeHelp = searchCapabilityLoading
     ? t('memory.searchModeLoadingHelp')
     : searchMode === 'fallback'
       ? t('memory.searchModeFallbackHelp')
+      : searchMode === 'unsupported'
+        ? t('memory.searchModeUnsupportedHelp')
       : t('memory.searchModeNativeHelp')
 
   return (
@@ -539,9 +593,99 @@ export default function MemoryPage() {
                       <span className="font-mono break-all">{managedStatus.runtimeRoot}</span>
                     </p>
                     <p>
-                      {t('memory.managedDbPathLabel')}: <span className="font-mono break-all">{managedStatus.dbPath}</span>
+                      {t('memory.managedDbPathLabel')}: <span className="font-mono break-all">{managedStatus.storagePath}</span>
                     </p>
                   </div>
+                </div>
+
+                <div className="section-subcard space-y-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <h4 className="text-sm font-medium text-foreground">{t('memory.managedBridgeTitle')}</h4>
+                      <p className="mt-1 text-sm text-muted-foreground">{t('memory.managedBridgeHelp')}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={managedBridgeSyncLoading || managedBridgeStatusLoading}
+                      onClick={() => void handleSyncManagedBridge()}
+                      className="button-secondary shrink-0 disabled:opacity-50"
+                    >
+                      <Wrench className={`h-4 w-4 ${managedBridgeSyncLoading ? 'animate-spin' : ''}`} />
+                      <span>
+                        {managedBridgeSyncLoading ? t('memory.managedBridgeSyncing') : t('memory.managedBridgeSyncAction')}
+                      </span>
+                    </button>
+                  </div>
+
+                  {managedBridgeStatusLoading ? (
+                    <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+                  ) : managedBridgeStatusErr ? (
+                    <p className="text-sm text-red-500">{managedBridgeStatusErr}</p>
+                  ) : managedBridgeStatus ? (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={
+                            managedBridgeStatus.state === 'ready'
+                              ? 'inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400'
+                              : managedBridgeStatus.state === 'unsupported'
+                                ? 'inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-400'
+                                : 'inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground'
+                          }
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          <span>
+                            {managedBridgeStatus.state === 'ready'
+                              ? t('memory.managedBridgeReady')
+                              : managedBridgeStatus.state === 'unsupported'
+                                ? t('memory.managedBridgeUnsupported')
+                                : t('memory.managedBridgeNeedsSync')}
+                          </span>
+                        </span>
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                          {managedBridgeStatus.pluginId}
+                        </span>
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                          {managedBridgeStatus.installed
+                            ? t('memory.managedBridgeInstalled')
+                            : t('memory.managedBridgeNotInstalled')}
+                        </span>
+                      </div>
+
+                      <div className="grid gap-3 text-xs text-muted-foreground md:grid-cols-2">
+                        <p>
+                          {t('memory.managedBridgeSlotLabel')}: <span className="font-mono">{managedBridgeStatus.currentSlotValue ?? '—'}</span>
+                        </p>
+                        <p>
+                          {t('memory.managedBridgeRuntimePathLabel')}:{' '}
+                          <span className="font-mono break-all">{managedBridgeStatus.runtimePluginPath ?? '—'}</span>
+                        </p>
+                        <p>
+                          {t('memory.managedBridgePluginPathLabel')}:{' '}
+                          <span className="font-mono break-all">{managedBridgeStatus.pluginPath}</span>
+                        </p>
+                        <p>
+                          {t('memory.managedBridgeDataRootLabel')}:{' '}
+                          <span className="font-mono break-all">{managedBridgeStatus.desired.entry?.config.dataRoot ?? '—'}</span>
+                        </p>
+                      </div>
+
+                      {managedBridgeStatus.issues.length > 0 ? (
+                        <div className="rounded-[1rem] border border-border/70 bg-background/70 px-4 py-3">
+                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                            {t('memory.managedBridgeIssuesTitle')}
+                          </p>
+                          <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                            {managedBridgeStatus.issues.map((issue) => (
+                              <li key={issue} className="list-disc ml-5">
+                                {issue}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
                 </div>
 
                 <div className="section-subcard space-y-3">
@@ -672,7 +816,9 @@ export default function MemoryPage() {
                       </p>
                       <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{comparisonValue}</p>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {comparisonReady
+                        {legacyMemoryUnsupported
+                          ? t('memory.managedProofRecallUnavailable')
+                          : comparisonReady
                           ? comparisonDelta > 0
                             ? t('memory.managedProofRecallAhead', {
                                 managed: comparisonManagedCount,
@@ -692,75 +838,77 @@ export default function MemoryPage() {
                   </div>
                 </div>
 
-                <div className="section-subcard space-y-3">
-                  <div>
-                    <h4 className="text-sm font-medium text-foreground">{t('memory.managedComparisonTitle')}</h4>
-                    <p className="mt-1 text-sm text-muted-foreground">{t('memory.managedComparisonHelp')}</p>
-                  </div>
-
-                  <div className="flex flex-col gap-2 lg:flex-row">
-                    <input
-                      type="text"
-                      placeholder={t('memory.managedComparisonPlaceholder')}
-                      value={comparisonQuery}
-                      onChange={(event) => setComparisonQuery(event.target.value)}
-                      className="control-input flex-1"
-                    />
-                    <button
-                      type="button"
-                      disabled={comparisonLoading}
-                      onClick={() => void handleComparisonSearch()}
-                      className="button-secondary shrink-0 disabled:opacity-50"
-                    >
-                      {comparisonLoading ? t('memory.managedComparisonRunning') : t('memory.managedComparisonAction')}
-                    </button>
-                  </div>
-
-                  {comparisonError ? <p className="text-sm text-red-500">{comparisonError}</p> : null}
-                  {comparisonManagedHits || comparisonOpenclawHits ? (
-                    <div className="grid gap-3 lg:grid-cols-2">
-                      <div className="rounded-[1rem] border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <h5 className="text-sm font-medium text-foreground">{t('memory.managedComparisonManaged')}</h5>
-                          <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700 dark:text-emerald-400">
-                            {comparisonManagedHits?.length ?? 0}
-                          </span>
-                        </div>
-                        {comparisonManagedHits && comparisonManagedHits.length > 0 ? (
-                          <ul className="mt-3 space-y-3">
-                            {comparisonManagedHits.map((hit) => (
-                              <li key={hit.memoryId} className="text-sm">
-                                <p className="whitespace-pre-wrap">{hit.content}</p>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="mt-3 text-sm text-muted-foreground">{t('memory.managedComparisonEmptyManaged')}</p>
-                        )}
-                      </div>
-
-                      <div className="rounded-[1rem] border border-border/70 bg-background/70 px-4 py-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <h5 className="text-sm font-medium text-foreground">{t('memory.managedComparisonLegacy')}</h5>
-                          <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-                            {comparisonOpenclawHits?.length ?? 0}
-                          </span>
-                        </div>
-                        {comparisonOpenclawHits && comparisonOpenclawHits.length > 0 ? (
-                          <ul className="mt-3 space-y-3">
-                            {comparisonOpenclawHits.map((hit) => (
-                              <li key={hit.id} className="text-sm">
-                                <p className="whitespace-pre-wrap">{hit.content}</p>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="mt-3 text-sm text-muted-foreground">{t('memory.managedComparisonEmptyLegacy')}</p>
-                        )}
-                      </div>
+                {!legacyMemoryUnsupported ? (
+                  <div className="section-subcard space-y-3">
+                    <div>
+                      <h4 className="text-sm font-medium text-foreground">{t('memory.managedComparisonTitle')}</h4>
+                      <p className="mt-1 text-sm text-muted-foreground">{t('memory.managedComparisonHelp')}</p>
                     </div>
-                  ) : null}
-                </div>
+
+                    <div className="flex flex-col gap-2 lg:flex-row">
+                      <input
+                        type="text"
+                        placeholder={t('memory.managedComparisonPlaceholder')}
+                        value={comparisonQuery}
+                        onChange={(event) => setComparisonQuery(event.target.value)}
+                        className="control-input flex-1"
+                      />
+                      <button
+                        type="button"
+                        disabled={comparisonLoading}
+                        onClick={() => void handleComparisonSearch()}
+                        className="button-secondary shrink-0 disabled:opacity-50"
+                      >
+                        {comparisonLoading ? t('memory.managedComparisonRunning') : t('memory.managedComparisonAction')}
+                      </button>
+                    </div>
+
+                    {comparisonError ? <p className="text-sm text-red-500">{comparisonError}</p> : null}
+                    {comparisonManagedHits || comparisonOpenclawHits ? (
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        <div className="rounded-[1rem] border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <h5 className="text-sm font-medium text-foreground">{t('memory.managedComparisonManaged')}</h5>
+                            <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700 dark:text-emerald-400">
+                              {comparisonManagedHits?.length ?? 0}
+                            </span>
+                          </div>
+                          {comparisonManagedHits && comparisonManagedHits.length > 0 ? (
+                            <ul className="mt-3 space-y-3">
+                              {comparisonManagedHits.map((hit) => (
+                                <li key={hit.memoryId} className="text-sm">
+                                  <p className="whitespace-pre-wrap">{hit.content}</p>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-3 text-sm text-muted-foreground">{t('memory.managedComparisonEmptyManaged')}</p>
+                          )}
+                        </div>
+
+                        <div className="rounded-[1rem] border border-border/70 bg-background/70 px-4 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <h5 className="text-sm font-medium text-foreground">{t('memory.managedComparisonLegacy')}</h5>
+                            <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                              {comparisonOpenclawHits?.length ?? 0}
+                            </span>
+                          </div>
+                          {comparisonOpenclawHits && comparisonOpenclawHits.length > 0 ? (
+                            <ul className="mt-3 space-y-3">
+                              {comparisonOpenclawHits.map((hit) => (
+                                <li key={hit.id} className="text-sm">
+                                  <p className="whitespace-pre-wrap">{hit.content}</p>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-3 text-sm text-muted-foreground">{t('memory.managedComparisonEmptyLegacy')}</p>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div className="grid gap-2 md:grid-cols-2">
                   <input
@@ -910,7 +1058,14 @@ export default function MemoryPage() {
               </div>
             ) : (
               <>
-                {statusEntries.length > 0 ? (
+                {legacyMemoryUnsupported ? (
+                  <div className="rounded-[1rem] border border-border/70 bg-muted/30 px-4 py-3">
+                    <p className="text-sm text-muted-foreground">{t('memory.openclawUnavailableHelp')}</p>
+                    {searchCapability?.detail ? (
+                      <p className="mt-2 text-xs whitespace-pre-wrap text-muted-foreground">{searchCapability.detail}</p>
+                    ) : null}
+                  </div>
+                ) : statusEntries.length > 0 ? (
                   <div className="grid gap-3">
                     {statusEntries.map((entry) => (
                       <div key={entry.agentId} className="list-card bg-background/70">
@@ -972,7 +1127,7 @@ export default function MemoryPage() {
                 </div>
                 <button
                   type="button"
-                  disabled={reindexLoading}
+                  disabled={reindexLoading || legacyMemoryUnsupported}
                   onClick={() => void handleReindex()}
                   className="button-secondary shrink-0 disabled:opacity-50"
                 >
@@ -988,6 +1143,7 @@ export default function MemoryPage() {
                 placeholder={t('memory.agentPlaceholder')}
                 value={agentFilter}
                 onChange={(event) => setAgentFilter(event.target.value)}
+                disabled={legacyMemoryUnsupported}
                 className="control-input"
               />
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -996,11 +1152,12 @@ export default function MemoryPage() {
                   placeholder={t('memory.openclawSearchPlaceholder')}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
+                  disabled={legacyMemoryUnsupported}
                   className="control-input flex-1"
                 />
                 <button
                   type="button"
-                  disabled={searchLoading}
+                  disabled={searchLoading || legacyMemoryUnsupported}
                   onClick={() => void runSearch()}
                   className="button-primary shrink-0 disabled:opacity-50"
                 >

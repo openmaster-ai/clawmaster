@@ -14,6 +14,10 @@ import {
   importOpenclawWorkspaceMemories,
 } from '../services/managedMemoryImport.js'
 import {
+  getManagedMemoryBridgeStatusPayload,
+  syncManagedMemoryBridge,
+} from '../services/managedMemoryBridge.js'
+import {
   deleteOpenclawMemoryFile,
   getOpenclawMemorySearchCapability,
   getOpenclawMemoryStatusPayload,
@@ -154,6 +158,24 @@ export function registerMemoryRoutes(app: express.Express): void {
   app.post('/api/memory/managed/reset', requireDangerousServiceAuth, async (_req, res) => {
     try {
       const payload = await resetManagedMemory()
+      res.json(payload)
+    } catch (error: unknown) {
+      sendManagedMemoryFailure(res, error)
+    }
+  })
+
+  app.get('/api/memory/managed/bridge/status', async (_req, res) => {
+    try {
+      const payload = await getManagedMemoryBridgeStatusPayload()
+      res.json(payload)
+    } catch (error: unknown) {
+      sendManagedMemoryFailure(res, error)
+    }
+  })
+
+  app.post('/api/memory/managed/bridge/sync', async (_req, res) => {
+    try {
+      const payload = await syncManagedMemoryBridge()
       res.json(payload)
     } catch (error: unknown) {
       sendManagedMemoryFailure(res, error)
