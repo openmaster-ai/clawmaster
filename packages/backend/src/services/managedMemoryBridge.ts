@@ -9,11 +9,7 @@ import {
   type ManagedMemoryContext,
   type ManagedMemoryStoreContext,
 } from './managedMemory.js'
-import {
-  installOpenclawPluginFromPath,
-  listOpenclawPlugins,
-  setOpenclawPluginEnabled,
-} from './openclawPlugins.js'
+import * as openclawPlugins from './openclawPlugins.js'
 
 export interface ManagedMemoryBridgeConfig {
   dataRoot: string
@@ -63,6 +59,7 @@ const MEMORY_BRIDGE_PLUGIN_ID = 'memory-clawmaster-powermem' as const
 const MEMORY_BRIDGE_SLOT_KEY = 'memory' as const
 const ROOT_PLUGIN_PATH = fileURLToPath(new URL('../../../../plugins/memory-clawmaster-powermem', import.meta.url))
 const PACKAGED_PLUGIN_ROOT_ENV = 'CLAWMASTER_PACKAGED_MEMORY_PLUGIN_ROOT'
+const READY_PLUGIN_STATUSES = new Set(['loaded', 'enabled', 'active', 'ready', 'ok'])
 
 export function resolveManagedMemoryPluginRootPath(): string {
   const packagedRoot = process.env[PACKAGED_PLUGIN_ROOT_ENV]?.trim()
@@ -205,7 +202,7 @@ function bridgeEntriesMatch(left: ManagedMemoryBridgeEntry | null, right: Manage
 
 async function getInstalledPluginStatus(): Promise<{ installed: boolean; pluginStatus: string | null }> {
   try {
-    const { rows } = await listOpenclawPlugins()
+    const { rows } = await openclawPlugins.listOpenclawPlugins()
     const plugin = rows.find((row) => row.id === MEMORY_BRIDGE_PLUGIN_ID) ?? null
     return {
       installed: Boolean(plugin),
@@ -217,6 +214,27 @@ async function getInstalledPluginStatus(): Promise<{ installed: boolean; pluginS
       pluginStatus: null,
     }
   }
+}
+
+export function isManagedMemoryBridgePluginReady(pluginStatus: string | null): boolean {
+  const normalized = pluginStatus?.trim().toLowerCase()
+  return normalized ? READY_PLUGIN_STATUSES.has(normalized) : false
+}
+
+export function getManagedMemoryBridgePluginIssue(
+  installed: boolean,
+  pluginStatus: string | null,
+): string | null {
+  if (!installed) {
+    return `${MEMORY_BRIDGE_PLUGIN_ID} is not installed in OpenClaw yet.`
+  }
+  if (isManagedMemoryBridgePluginReady(pluginStatus)) {
+    return null
+  }
+  if (pluginStatus) {
+    return `${MEMORY_BRIDGE_PLUGIN_ID} is installed but currently ${pluginStatus}.`
+  }
+  return `${MEMORY_BRIDGE_PLUGIN_ID} is installed but its runtime status is unknown.`
 }
 
 export async function getManagedMemoryBridgeStatusPayload(
@@ -240,8 +258,9 @@ export async function getManagedMemoryBridgeStatusPayload(
   if (!pluginPathExists) {
     issues.push('The managed PowerMem plugin files are missing from the ClawMaster package.')
   }
-  if (!installed) {
-    issues.push(`${MEMORY_BRIDGE_PLUGIN_ID} is not installed in OpenClaw yet.`)
+  const pluginIssue = getManagedMemoryBridgePluginIssue(installed, pluginStatus)
+  if (pluginIssue) {
+    issues.push(pluginIssue)
   }
   if (currentSlotValue !== MEMORY_BRIDGE_PLUGIN_ID) {
     issues.push(`plugins.slots.${MEMORY_BRIDGE_SLOT_KEY} is not set to ${MEMORY_BRIDGE_PLUGIN_ID}`)
@@ -255,7 +274,12 @@ export async function getManagedMemoryBridgeStatusPayload(
   const state: ManagedMemoryBridgeStatusPayload['state'] =
     paths.unsupportedReason
       ? 'unsupported'
-      : desiredEntry && installed && currentEntry && currentSlotValue === MEMORY_BRIDGE_PLUGIN_ID && bridgeEntriesMatch(currentEntry, desiredEntry)
+      : desiredEntry
+        && installed
+        && isManagedMemoryBridgePluginReady(pluginStatus)
+        && currentEntry
+        && currentSlotValue === MEMORY_BRIDGE_PLUGIN_ID
+        && bridgeEntriesMatch(currentEntry, desiredEntry)
         ? 'ready'
         : currentEntry || currentSlotValue || installed
           ? 'drifted'
@@ -294,9 +318,9 @@ export async function syncManagedMemoryBridge(
 
   await fs.stat(paths.pluginManifestPath)
   if (!installed) {
-    await installOpenclawPluginFromPath(paths.runtimePluginPath, { link: true })
+    await openclawPlugins.installOpenclawPluginFromPath(paths.runtimePluginPath, { link: true })
   }
-  await setOpenclawPluginEnabled(MEMORY_BRIDGE_PLUGIN_ID, true).catch(() => undefined)
+  await openclawPlugins.setOpenclawPluginEnabled(MEMORY_BRIDGE_PLUGIN_ID, true).catch(() => undefined)
   await updateConfigJson((config) => {
     setConfigAtPath(config, `plugins.slots.${MEMORY_BRIDGE_SLOT_KEY}`, MEMORY_BRIDGE_PLUGIN_ID)
     setConfigAtPath(config, `plugins.entries.${MEMORY_BRIDGE_PLUGIN_ID}`, desiredEntry)

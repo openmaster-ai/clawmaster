@@ -297,7 +297,7 @@ export function resolveManagedMemoryEngine(
   if (engineOverride) {
     return engineOverride
   }
-  if (hostPlatform === 'linux') {
+  if (hostPlatform === 'linux' && (hostArch === 'x64' || hostArch === 'arm64')) {
     return 'powermem-seekdb'
   }
   return 'powermem-sqlite'

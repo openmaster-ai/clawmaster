@@ -7,6 +7,8 @@ import test from 'node:test'
 import {
   buildManagedMemoryBridgeEntry,
   getManagedMemoryBridgeStatusPayload,
+  getManagedMemoryBridgePluginIssue,
+  isManagedMemoryBridgePluginReady,
   resolveManagedMemoryPluginRootPath,
   windowsPathToWslPath,
 } from './managedMemoryBridge.js'
@@ -101,4 +103,28 @@ test('bridge status stays non-ready until the managed bridge config is synced', 
     status.issues.join('\n'),
     /not installed in OpenClaw yet|plugins\.slots\.memory is not set|plugins\.entries\.memory-clawmaster-powermem/
   )
+})
+
+test('isManagedMemoryBridgePluginReady only treats active plugin states as ready', () => {
+  assert.equal(isManagedMemoryBridgePluginReady('loaded'), true)
+  assert.equal(isManagedMemoryBridgePluginReady(' enabled '), true)
+  assert.equal(isManagedMemoryBridgePluginReady('disabled'), false)
+  assert.equal(isManagedMemoryBridgePluginReady('error'), false)
+  assert.equal(isManagedMemoryBridgePluginReady(null), false)
+})
+
+test('getManagedMemoryBridgePluginIssue flags disabled installed plugins as drifted input', () => {
+  assert.equal(
+    getManagedMemoryBridgePluginIssue(true, 'disabled'),
+    'memory-clawmaster-powermem is installed but currently disabled.',
+  )
+  assert.equal(
+    getManagedMemoryBridgePluginIssue(true, null),
+    'memory-clawmaster-powermem is installed but its runtime status is unknown.',
+  )
+  assert.equal(
+    getManagedMemoryBridgePluginIssue(false, null),
+    'memory-clawmaster-powermem is not installed in OpenClaw yet.',
+  )
+  assert.equal(getManagedMemoryBridgePluginIssue(true, 'loaded'), null)
 })

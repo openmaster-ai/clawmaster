@@ -29,8 +29,6 @@ type ManagedPluginConfig = {
 
 const DEFAULT_RECALL_LIMIT = 5
 const DEFAULT_RECALL_SCORE_THRESHOLD = 0
-const DEFAULT_USER_ID = 'openclaw-user'
-const DEFAULT_AGENT_ID = 'openclaw-agent'
 
 function defaultManagedEngine(): ManagedMemoryEngine {
   if (process.platform === 'linux') return 'powermem-seekdb'
@@ -124,12 +122,22 @@ function buildManagedContext(cfg: ManagedPluginConfig): ManagedMemoryContext {
   }
 }
 
-function resolveUserId(cfg: ManagedPluginConfig): string {
-  return cfg.userId ?? DEFAULT_USER_ID
+function describeScopeValue(value: string | undefined): string {
+  return value ? value : 'unscoped'
 }
 
-function resolveAgentId(cfg: ManagedPluginConfig): string {
-  return cfg.agentId ?? DEFAULT_AGENT_ID
+function withManagedScope<T extends object>(
+  scope: {
+    userId?: string
+    agentId?: string
+  },
+  extra?: T,
+): T & { userId?: string; agentId?: string } {
+  return {
+    ...(extra ?? {}),
+    ...(scope.userId ? { userId: scope.userId } : {}),
+    ...(scope.agentId ? { agentId: scope.agentId } : {}),
+  }
 }
 
 function lastUserMessageText(messages: unknown[] | undefined): string {
@@ -167,11 +175,11 @@ function resolveOpenclawWorkspaceDir(): string {
 function buildManagedStatusEntries(
   cfg: ManagedPluginConfig,
   status: Awaited<ReturnType<typeof getManagedMemoryStatusPayload>>,
-  agentId: string,
+  agentId?: string,
 ) {
   return [
     {
-      agentId,
+      ...(agentId ? { agentId } : {}),
       status: {
         backend: status.engine,
         dirty: false,
@@ -214,11 +222,13 @@ const plugin = {
   register(api: OpenClawPluginApi) {
     const cfg = managedPluginConfigSchema.parse(api.pluginConfig)
     const managedContext = buildManagedContext(cfg)
-    const userId = resolveUserId(cfg)
-    const agentId = resolveAgentId(cfg)
+    const scope = {
+      userId: cfg.userId,
+      agentId: cfg.agentId,
+    }
 
     api.logger.info(
-      `memory-clawmaster-powermem: plugin registered (dataRoot: ${cfg.dataRoot}, engine: ${cfg.engine}, user: ${userId}, agent: ${agentId})`,
+      `memory-clawmaster-powermem: plugin registered (dataRoot: ${cfg.dataRoot}, engine: ${cfg.engine}, user: ${describeScopeValue(scope.userId)}, agent: ${describeScopeValue(scope.agentId)})`,
     )
 
     api.registerTool(
@@ -245,11 +255,9 @@ const plugin = {
           try {
             const results = (await searchManagedMemories(
               query,
-              {
-                userId,
-                agentId,
+              withManagedScope(scope, {
                 limit: Math.min(100, Math.max(limit * 2, limit + 10)),
-              },
+              }),
               managedContext,
             ))
               .filter((item) => (item.score ?? 0) >= scoreThreshold)
@@ -306,8 +314,7 @@ const plugin = {
             const created = await addManagedMemory(
               {
                 content: text,
-                userId,
-                agentId,
+                ...withManagedScope(scope),
                 metadata: { importance },
               },
               managedContext,
@@ -357,7 +364,7 @@ const plugin = {
             if (query) {
               const candidates = await searchManagedMemories(
                 query,
-                { userId, agentId, limit: 5 },
+                withManagedScope(scope, { limit: 5 }),
                 managedContext,
               )
               if (candidates.length === 0) {
@@ -422,7 +429,7 @@ const plugin = {
             const limit = Number.parseInt(opts.limit ?? '5', 10)
             const results = await searchManagedMemories(
               query,
-              { userId, agentId, limit },
+              withManagedScope(scope, { limit }),
               managedContext,
             )
             if (opts.json) {
@@ -455,8 +462,7 @@ const plugin = {
               const created = await addManagedMemory(
                 {
                   content: text,
-                  userId,
-                  agentId,
+                  ...withManagedScope(scope),
                 },
                 managedContext,
               )
@@ -481,7 +487,7 @@ const plugin = {
               const opts = (args[0] ?? {}) as { json?: boolean }
               try {
                 const status = await getManagedMemoryStatusPayload(managedContext)
-                const payload = buildManagedStatusEntries(cfg, status, agentId)
+                const payload = buildManagedStatusEntries(cfg, status, scope.agentId)
                 if (opts.json) {
                   console.log(JSON.stringify(payload, null, 2))
                   return
@@ -513,11 +519,13 @@ const plugin = {
               try {
                 const results = await searchManagedMemories(
                   query,
-                  {
-                    userId,
-                    agentId: opts.agent?.trim() || agentId,
-                    limit,
-                  },
+                  withManagedScope(
+                    {
+                      userId: scope.userId,
+                      agentId: opts.agent?.trim() || scope.agentId,
+                    },
+                    { limit },
+                  ),
                   managedContext,
                 )
                 if (opts.json) {
@@ -566,11 +574,9 @@ const plugin = {
         try {
           const results = (await searchManagedMemories(
             query,
-            {
-              userId,
-              agentId,
+            withManagedScope(scope, {
               limit: Math.min(100, Math.max(cfg.recallLimit * 2, cfg.recallLimit + 10)),
-            },
+            }),
             managedContext,
           ))
             .filter((item) => (item.score ?? 0) >= cfg.recallScoreThreshold)
@@ -642,8 +648,7 @@ const plugin = {
             await addManagedMemory(
               {
                 content: chunk,
-                userId,
-                agentId,
+                ...withManagedScope(scope),
               },
               managedContext,
             )

@@ -72,6 +72,9 @@ test('resolveManagedMemoryStoreContext scopes storage by OpenClaw profile', () =
 
 test('resolveManagedMemoryEngine promotes supported hosts to seekdb and keeps Windows on sqlite', () => {
   assert.equal(resolveManagedMemoryEngine('linux', 'x64'), 'powermem-seekdb')
+  assert.equal(resolveManagedMemoryEngine('linux', 'arm64'), 'powermem-seekdb')
+  assert.equal(resolveManagedMemoryEngine('linux', 'ia32'), 'powermem-sqlite')
+  assert.equal(resolveManagedMemoryEngine('linux', 'riscv64'), 'powermem-sqlite')
   assert.equal(resolveManagedMemoryEngine('darwin', 'arm64'), 'powermem-sqlite')
   assert.equal(resolveManagedMemoryEngine('darwin', 'x64'), 'powermem-sqlite')
   assert.equal(resolveManagedMemoryEngine('win32', 'x64'), 'powermem-sqlite')
