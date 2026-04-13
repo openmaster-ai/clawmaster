@@ -31,7 +31,7 @@ test('buildManagedMemoryBridgeEntry points native runtimes at the managed data r
   assert.deepEqual(entry, {
     enabled: true,
     config: {
-      dataRoot: path.join(homeDir, '.clawmaster', 'data', 'default'),
+      dataRoot: path.posix.join(homeDir, '.clawmaster', 'data', 'default'),
       engine: 'powermem-seekdb',
       autoCapture: true,
       autoRecall: true,
