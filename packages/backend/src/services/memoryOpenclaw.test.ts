@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  parseOpenclawMemorySearchJson,
   resolveOpenclawMemorySearchCapability,
   resolveOpenclawMemorySearchOutput,
 } from './memoryOpenclaw.js'
@@ -52,6 +53,23 @@ test('resolveOpenclawMemorySearchOutput accepts structured results from stderr w
       id: 'managed-1',
       content: 'Remember espresso',
       score: 0.9,
+      path: undefined,
+      metadata: undefined,
+    },
+  ])
+})
+
+test('parseOpenclawMemorySearchJson extracts array payloads after plugin log preambles', () => {
+  const result = parseOpenclawMemorySearchJson(
+    '[plugins] memory-clawmaster-powermem: plugin registered\n' +
+      '[{"id":"managed-2","content":"Remember pour-over","score":0.8}]',
+  )
+
+  assert.deepEqual(result, [
+    {
+      id: 'managed-2',
+      content: 'Remember pour-over',
+      score: 0.8,
       path: undefined,
       metadata: undefined,
     },

@@ -116,6 +116,18 @@ class ClawmasterSeekdbStore implements VectorStore {
     return this.inner.search(...args)
   }
 
+  async hybridSearch(...args: unknown[]) {
+    const hybridSearch = (this.inner as SeekDBStore & {
+      hybridSearch?: (...callArgs: unknown[]) => Promise<unknown>
+    }).hybridSearch
+    if (!hybridSearch) {
+      return this.inner.search(
+        ...(args as Parameters<VectorStore['search']>)
+      )
+    }
+    return hybridSearch.apply(this.inner, args)
+  }
+
   async count(...args: Parameters<VectorStore['count']>) {
     return this.inner.count(...args)
   }

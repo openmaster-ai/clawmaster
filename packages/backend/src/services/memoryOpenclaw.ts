@@ -1,16 +1,86 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { execOpenclaw, extractFirstJsonObject } from '../execOpenclaw.js'
+import { execOpenclaw } from '../execOpenclaw.js'
 import { getOpenclawDataDir } from '../paths.js'
 import { isRecord } from '../serverUtils.js'
+
+function findBalancedJsonEnd(raw: string, start: number): number | null {
+  const first = raw[start]
+  if (first !== '{' && first !== '[') return null
+
+  const expectedClosers: string[] = [first === '{' ? '}' : ']']
+  let inString = false
+  let escaped = false
+
+  for (let index = start + 1; index < raw.length; index += 1) {
+    const ch = raw[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+        continue
+      }
+      if (ch === '\\') {
+        escaped = true
+        continue
+      }
+      if (ch === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      continue
+    }
+    if (ch === '{') {
+      expectedClosers.push('}')
+      continue
+    }
+    if (ch === '[') {
+      expectedClosers.push(']')
+      continue
+    }
+    if (ch === '}' || ch === ']') {
+      const expected = expectedClosers.pop()
+      if (expected !== ch) {
+        return null
+      }
+      if (expectedClosers.length === 0) {
+        return index
+      }
+    }
+  }
+
+  return null
+}
+
+function extractFirstJsonValue(raw: string): unknown | null {
+  for (let index = 0; index < raw.length; index += 1) {
+    const ch = raw[index]
+    if (ch !== '{' && ch !== '[') continue
+    const end = findBalancedJsonEnd(raw, index)
+    if (end === null) continue
+    const candidate = raw.slice(index, end + 1)
+    try {
+      return JSON.parse(candidate)
+    } catch {
+      continue
+    }
+  }
+  return null
+}
 
 function parseJsonLenient(raw: string): unknown {
   const t = raw.trim()
   if (!t) return null
-  const candidate = t.startsWith('{') || t.startsWith('[') ? t : extractFirstJsonObject(t) ?? t
   try {
-    return JSON.parse(candidate)
+    return JSON.parse(t)
   } catch {
+    const extracted = extractFirstJsonValue(t)
+    if (extracted !== null) {
+      return extracted
+    }
     return { raw: t }
   }
 }

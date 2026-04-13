@@ -10,6 +10,7 @@
   "files": [
     "index.ts",
     "runtime.ts",
+    "workspaceImport.ts",
     "openclaw.plugin.json"
   ],
   "dependencies": {
