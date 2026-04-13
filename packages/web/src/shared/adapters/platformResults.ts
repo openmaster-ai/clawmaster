@@ -76,6 +76,8 @@ import {
 import {
   addManagedMemoryResult,
   deleteManagedMemoryResult,
+  importOpenclawManagedMemoryResult,
+  managedMemoryImportStatusResult,
   managedMemoryListResult,
   managedMemorySearchResult,
   managedMemoryStatsResult,
@@ -149,6 +151,8 @@ export const platformResults = {
   clawprobeBootstrap: clawprobeBootstrapResult,
   managedMemoryStatus: managedMemoryStatusResult,
   managedMemoryStats: managedMemoryStatsResult,
+  managedMemoryImportStatus: managedMemoryImportStatusResult,
+  importOpenclawManagedMemory: importOpenclawManagedMemoryResult,
   managedMemoryList: managedMemoryListResult,
   managedMemorySearch: managedMemorySearchResult,
   addManagedMemory: addManagedMemoryResult,

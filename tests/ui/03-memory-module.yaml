@@ -1,9 +1,9 @@
 suite: memory-module
 name: 记忆管理模块
 description: |
-  验证新的原生 OpenClaw 记忆页面：
-  1. 记忆状态概览与原始状态 JSON
-  2. 原生记忆搜索
+  验证记忆页面的双轨能力：
+  1. 托管 PowerMem 基础层、旧版记忆导入与对比证明
+  2. 原生 OpenClaw 记忆概览与搜索
   3. 存储文件列表与详情
   4. 删除文件确认流程
 
@@ -11,6 +11,7 @@ preconditions:
   - dev server 已启动
   - 已进入主界面
   - 当前 profile 对应的 ~/.openclaw/memory 下至少存在一个 SQLite 文件
+  - 如需验证托管 PowerMem 区块，使用 web/service 模式而非 Tauri 桌面模式
 
 viewport: { width: 1280, height: 800 }
 
@@ -115,3 +116,62 @@ cases:
       - 如有结果：结果列表正常渲染并可查看来源文件
       - 如无结果：显示明确空状态
       - 如底层环境缺少 FTS5：显示可理解的降级说明或帮助文案，而非生硬技术报错
+
+  - id: mem-07
+    name: 托管 PowerMem 基础层与导入状态
+    preconditions:
+      - 当前为 web/service 模式
+      - 后端已启用托管 PowerMem 能力
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/memory"
+      - action: wait
+        duration: 2500ms
+      - action: screenshot
+        name: mem-managed-foundation
+    assertions:
+      - 页面显示"PowerMem 基础层"或等价本地化标题
+      - 显示托管运行时就绪标识、engine 与 storageType
+      - 显示"旧版记忆导入"区块
+      - 显示可导入来源、已跟踪来源、已导入记录、最近导入
+      - 显示"为什么托管记忆更好"区块
+      - 该证明区块至少包含旧版记忆承接、直接托管记忆、同查询召回三张卡片
+
+  - id: mem-08
+    name: 旧版 OpenClaw 记忆导入托管 PowerMem
+    preconditions:
+      - 当前为 web/service 模式
+      - workspace 下存在至少一条可导入 markdown 记忆
+    steps:
+      - action: click
+        target: text("导入 OpenClaw 记忆")
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: mem-managed-import
+    assertions:
+      - 导入按钮在请求期间显示 loading 或禁用态
+      - 导入完成后出现成功反馈，而非静默失败
+      - 已导入记录或最近导入时间发生变化
+      - 再次执行导入时不会无限累加重复记录
+
+  - id: mem-09
+    name: 托管与旧版记忆同查询对比
+    preconditions:
+      - 当前为 web/service 模式
+      - 已经存在至少一条托管记忆或已执行过旧版记忆导入
+    steps:
+      - action: fill
+        target: input[placeholder*="比较"]
+        value: "espresso preference"
+      - action: click
+        target: text("对比召回效果")
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: mem-managed-compare
+    assertions:
+      - 显示"召回对比"区块
+      - 同时渲染托管 PowerMem 与旧版 OpenClaw 两列结果
+      - 若有结果，两列均显示内容摘要而非空白卡片
+      - "为什么托管记忆更好"中的同查询召回卡片会反映最近一次对比结果

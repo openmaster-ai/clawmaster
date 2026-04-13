@@ -15,6 +15,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { platformResults } from '@/adapters'
 import type {
+  ManagedMemoryImportStatusPayload,
   ManagedMemoryListPayload,
   ManagedMemorySearchHit,
   ManagedMemoryStatsPayload,
@@ -110,6 +111,12 @@ export default function MemoryPage() {
   const [managedSearchLoading, setManagedSearchLoading] = useState(false)
   const [managedSearchErr, setManagedSearchErr] = useState<string | null>(null)
   const [managedMutationLoading, setManagedMutationLoading] = useState(false)
+  const [managedImportLoading, setManagedImportLoading] = useState(false)
+  const [comparisonQuery, setComparisonQuery] = useState('')
+  const [comparisonLoading, setComparisonLoading] = useState(false)
+  const [comparisonError, setComparisonError] = useState<string | null>(null)
+  const [comparisonManagedHits, setComparisonManagedHits] = useState<ManagedMemorySearchHit[] | null>(null)
+  const [comparisonOpenclawHits, setComparisonOpenclawHits] = useState<OpenclawMemoryHit[] | null>(null)
   const [agentFilter, setAgentFilter] = useState('')
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<OpenclawMemoryHit[] | null>(null)
@@ -122,6 +129,7 @@ export default function MemoryPage() {
 
   const managedStatusFetcher = useCallback(async () => platformResults.managedMemoryStatus(), [])
   const managedStatsFetcher = useCallback(async () => platformResults.managedMemoryStats(), [])
+  const managedImportStatusFetcher = useCallback(async () => platformResults.managedMemoryImportStatus(), [])
   const managedListFetcher = useCallback(async () => platformResults.managedMemoryList({ limit: 8 }), [])
   const statusFetcher = useCallback(async () => platformResults.openclawMemoryStatus(), [])
   const searchCapabilityFetcher = useCallback(async () => platformResults.openclawMemorySearchCapability(), [])
@@ -147,6 +155,13 @@ export default function MemoryPage() {
     error: managedListErr,
     refetch: refetchManagedList,
   } = useAdapterCall<ManagedMemoryListPayload>(managedListFetcher)
+
+  const {
+    data: managedImportStatus,
+    loading: managedImportStatusLoading,
+    error: managedImportStatusErr,
+    refetch: refetchManagedImportStatus,
+  } = useAdapterCall<ManagedMemoryImportStatusPayload>(managedImportStatusFetcher)
 
   const {
     data: statusPayload,
@@ -195,10 +210,25 @@ export default function MemoryPage() {
     return stderr
   }, [statusPayload?.stderr])
 
-  const managedSectionError = managedStatusErr || managedStatsErr || managedListErr
+  const managedSectionError = managedStatusErr || managedStatsErr || managedListErr || managedImportStatusErr
   const managedRuntimeNote = managedStatus?.provisioned
     ? t('memory.managedProvisionedNote')
     : t('memory.managedUnprovisionedNote')
+  const managedImportedCount = managedImportStatus?.importedMemoryCount ?? 0
+  const managedAvailableSourceCount = managedImportStatus?.availableSourceCount ?? 0
+  const managedTrackedSourceCount = managedImportStatus?.trackedSources ?? 0
+  const managedOnlyCount = Math.max((managedStats?.totalMemories ?? 0) - managedImportedCount, 0)
+  const managedCoverageValue =
+    managedAvailableSourceCount > 0
+      ? `${managedImportedCount} / ${managedAvailableSourceCount}`
+      : t('memory.managedProofNone')
+  const comparisonManagedCount = comparisonManagedHits?.length ?? 0
+  const comparisonLegacyCount = comparisonOpenclawHits?.length ?? 0
+  const comparisonReady = comparisonManagedHits !== null && comparisonOpenclawHits !== null
+  const comparisonValue = comparisonReady
+    ? `${comparisonManagedCount} · ${comparisonLegacyCount}`
+    : t('memory.managedProofPending')
+  const comparisonDelta = comparisonManagedCount - comparisonLegacyCount
 
   async function handleReindex() {
     setReindexLoading(true)
@@ -252,7 +282,53 @@ export default function MemoryPage() {
   }
 
   async function refreshManagedSection() {
-    await Promise.all([refetchManagedStatus(), refetchManagedStats(), refetchManagedList()])
+    await Promise.all([refetchManagedStatus(), refetchManagedStats(), refetchManagedImportStatus(), refetchManagedList()])
+  }
+
+  async function handleImportOpenclawMemory() {
+    setManagedImportLoading(true)
+    const result = await platformResults.importOpenclawManagedMemory()
+    setManagedImportLoading(false)
+    if (!result.success) {
+      setFeedback({ tone: 'error', message: result.error ?? t('memory.managedImportFailed') })
+      return
+    }
+    setFeedback({ tone: 'success', message: t('memory.managedImportSuccess') })
+    await refreshManagedSection()
+  }
+
+  async function handleComparisonSearch() {
+    const trimmed = comparisonQuery.trim()
+    if (!trimmed) {
+      setComparisonManagedHits([])
+      setComparisonOpenclawHits([])
+      setComparisonError(null)
+      return
+    }
+
+    setComparisonLoading(true)
+    setComparisonError(null)
+    const [managedResult, openclawResult] = await Promise.all([
+      platformResults.managedMemorySearch(trimmed, { limit: 6 }),
+      platformResults.openclawMemorySearch(trimmed, { maxResults: 6 }),
+    ])
+    setComparisonLoading(false)
+
+    if (!managedResult.success) {
+      setComparisonError(managedResult.error ?? t('memory.managedComparisonFailed'))
+      setComparisonManagedHits(null)
+      setComparisonOpenclawHits(null)
+      return
+    }
+    if (!openclawResult.success) {
+      setComparisonError(openclawResult.error ?? t('memory.managedComparisonFailed'))
+      setComparisonManagedHits(null)
+      setComparisonOpenclawHits(null)
+      return
+    }
+
+    setComparisonManagedHits(managedResult.data ?? [])
+    setComparisonOpenclawHits(openclawResult.data ?? [])
   }
 
   async function runManagedSearch() {
@@ -427,14 +503,14 @@ export default function MemoryPage() {
               <div className="rounded-[1.15rem] border border-border/70 bg-muted/30 px-4 py-3">
                 <p className="text-sm text-muted-foreground">{t('memory.managedDesktopUnavailable')}</p>
               </div>
-            ) : managedStatusLoading || managedStatsLoading || managedListLoading ? (
+            ) : managedStatusLoading || managedStatsLoading || managedImportStatusLoading || managedListLoading ? (
               <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
             ) : managedSectionError ? (
               <div className="space-y-2">
                 <p className="text-sm text-red-500">{managedSectionError}</p>
                 <p className="text-xs text-muted-foreground">{t('memory.managedFoundationUnavailable')}</p>
               </div>
-            ) : managedStatus && managedStats && managedList ? (
+            ) : managedStatus && managedStats && managedImportStatus && managedList ? (
               <>
                 <div className="rounded-[1.15rem] border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -468,6 +544,78 @@ export default function MemoryPage() {
                   </div>
                 </div>
 
+                <div className="section-subcard space-y-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <h4 className="text-sm font-medium text-foreground">{t('memory.managedImportTitle')}</h4>
+                      <p className="mt-1 text-sm text-muted-foreground">{t('memory.managedImportHelp')}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={managedImportLoading}
+                      onClick={() => void handleImportOpenclawMemory()}
+                      className="button-secondary shrink-0 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${managedImportLoading ? 'animate-spin' : ''}`} />
+                      <span>{managedImportLoading ? t('memory.managedImporting') : t('memory.managedImportAction')}</span>
+                    </button>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedImportAvailableSources')}</p>
+                      <p className="mt-2 text-xl font-semibold text-foreground">{managedImportStatus.availableSourceCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedImportTrackedSources')}</p>
+                      <p className="mt-2 text-xl font-semibold text-foreground">{managedImportStatus.trackedSources}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedImportImportedCount')}</p>
+                      <p className="mt-2 text-xl font-semibold text-foreground">{managedImportStatus.importedMemoryCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedImportLastRun')}</p>
+                      <p className="mt-2 text-sm text-foreground">
+                        {managedImportStatus.lastImportedAt ? new Date(managedImportStatus.lastImportedAt).toLocaleString() : '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {managedImportStatus.lastRun ? (
+                    <div className="rounded-[1rem] border border-border/70 bg-background/70 px-4 py-3">
+                      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedImportScanned')}</p>
+                          <p className="mt-2 text-lg font-semibold text-foreground">{managedImportStatus.lastRun.scanned}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedImportImported')}</p>
+                          <p className="mt-2 text-lg font-semibold text-foreground">{managedImportStatus.lastRun.imported}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedImportUpdated')}</p>
+                          <p className="mt-2 text-lg font-semibold text-foreground">{managedImportStatus.lastRun.updated}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedImportSkipped')}</p>
+                          <p className="mt-2 text-lg font-semibold text-foreground">{managedImportStatus.lastRun.skipped}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedImportDuplicate')}</p>
+                          <p className="mt-2 text-lg font-semibold text-foreground">{managedImportStatus.lastRun.duplicate}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedImportFailedMetric')}</p>
+                          <p className="mt-2 text-lg font-semibold text-foreground">{managedImportStatus.lastRun.failed}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t('memory.managedImportIdle')}</p>
+                  )}
+                </div>
+
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="section-subcard">
                     <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedStatsTotal')}</p>
@@ -481,6 +629,137 @@ export default function MemoryPage() {
                     <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('memory.managedStatsStorage')}</p>
                     <p className="mt-3 text-sm font-medium text-foreground">{managedStats.storageType}</p>
                   </div>
+                </div>
+
+                <div className="section-subcard space-y-3">
+                  <div>
+                    <h4 className="text-sm font-medium text-foreground">{t('memory.managedProofTitle')}</h4>
+                    <p className="mt-1 text-sm text-muted-foreground">{t('memory.managedProofHelp')}</p>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-[1rem] border border-border/70 bg-background/70 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                        {t('memory.managedProofCoverageTitle')}
+                      </p>
+                      <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{managedCoverageValue}</p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {managedAvailableSourceCount > 0
+                          ? t('memory.managedProofCoverageReady', {
+                              imported: managedImportedCount,
+                              available: managedAvailableSourceCount,
+                              tracked: managedTrackedSourceCount,
+                            })
+                          : t('memory.managedProofCoverageIdle')}
+                      </p>
+                    </div>
+
+                    <div className="rounded-[1rem] border border-border/70 bg-background/70 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                        {t('memory.managedProofDirectTitle')}
+                      </p>
+                      <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{managedOnlyCount}</p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {managedOnlyCount > 0
+                          ? t('memory.managedProofDirectReady', { count: managedOnlyCount })
+                          : t('memory.managedProofDirectIdle')}
+                      </p>
+                    </div>
+
+                    <div className="rounded-[1rem] border border-border/70 bg-background/70 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                        {t('memory.managedProofRecallTitle')}
+                      </p>
+                      <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{comparisonValue}</p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {comparisonReady
+                          ? comparisonDelta > 0
+                            ? t('memory.managedProofRecallAhead', {
+                                managed: comparisonManagedCount,
+                                legacy: comparisonLegacyCount,
+                              })
+                            : comparisonDelta < 0
+                              ? t('memory.managedProofRecallBehind', {
+                                  managed: comparisonManagedCount,
+                                  legacy: comparisonLegacyCount,
+                                })
+                              : t('memory.managedProofRecallEven', {
+                                  managed: comparisonManagedCount,
+                                })
+                          : t('memory.managedProofRecallPending')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="section-subcard space-y-3">
+                  <div>
+                    <h4 className="text-sm font-medium text-foreground">{t('memory.managedComparisonTitle')}</h4>
+                    <p className="mt-1 text-sm text-muted-foreground">{t('memory.managedComparisonHelp')}</p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 lg:flex-row">
+                    <input
+                      type="text"
+                      placeholder={t('memory.managedComparisonPlaceholder')}
+                      value={comparisonQuery}
+                      onChange={(event) => setComparisonQuery(event.target.value)}
+                      className="control-input flex-1"
+                    />
+                    <button
+                      type="button"
+                      disabled={comparisonLoading}
+                      onClick={() => void handleComparisonSearch()}
+                      className="button-secondary shrink-0 disabled:opacity-50"
+                    >
+                      {comparisonLoading ? t('memory.managedComparisonRunning') : t('memory.managedComparisonAction')}
+                    </button>
+                  </div>
+
+                  {comparisonError ? <p className="text-sm text-red-500">{comparisonError}</p> : null}
+                  {comparisonManagedHits || comparisonOpenclawHits ? (
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <div className="rounded-[1rem] border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <h5 className="text-sm font-medium text-foreground">{t('memory.managedComparisonManaged')}</h5>
+                          <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700 dark:text-emerald-400">
+                            {comparisonManagedHits?.length ?? 0}
+                          </span>
+                        </div>
+                        {comparisonManagedHits && comparisonManagedHits.length > 0 ? (
+                          <ul className="mt-3 space-y-3">
+                            {comparisonManagedHits.map((hit) => (
+                              <li key={hit.memoryId} className="text-sm">
+                                <p className="whitespace-pre-wrap">{hit.content}</p>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-3 text-sm text-muted-foreground">{t('memory.managedComparisonEmptyManaged')}</p>
+                        )}
+                      </div>
+
+                      <div className="rounded-[1rem] border border-border/70 bg-background/70 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <h5 className="text-sm font-medium text-foreground">{t('memory.managedComparisonLegacy')}</h5>
+                          <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                            {comparisonOpenclawHits?.length ?? 0}
+                          </span>
+                        </div>
+                        {comparisonOpenclawHits && comparisonOpenclawHits.length > 0 ? (
+                          <ul className="mt-3 space-y-3">
+                            {comparisonOpenclawHits.map((hit) => (
+                              <li key={hit.id} className="text-sm">
+                                <p className="whitespace-pre-wrap">{hit.content}</p>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-3 text-sm text-muted-foreground">{t('memory.managedComparisonEmptyLegacy')}</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-2 md:grid-cols-2">

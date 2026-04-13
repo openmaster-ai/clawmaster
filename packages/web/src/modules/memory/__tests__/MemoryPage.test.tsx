@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { changeLanguage } from '@/i18n'
 import MemoryPage from '../MemoryPage'
 
 const mockGetIsTauri = vi.fn(() => false)
 const mockManagedMemoryStatus = vi.fn()
 const mockManagedMemoryStats = vi.fn()
+const mockManagedMemoryImportStatus = vi.fn()
+const mockImportOpenclawManagedMemory = vi.fn()
 const mockManagedMemoryList = vi.fn()
 const mockManagedMemorySearch = vi.fn()
 const mockAddManagedMemory = vi.fn()
@@ -25,6 +27,8 @@ vi.mock('@/adapters', () => ({
   platformResults: {
     managedMemoryStatus: (...args: any[]) => mockManagedMemoryStatus(...args),
     managedMemoryStats: (...args: any[]) => mockManagedMemoryStats(...args),
+    managedMemoryImportStatus: (...args: any[]) => mockManagedMemoryImportStatus(...args),
+    importOpenclawManagedMemory: (...args: any[]) => mockImportOpenclawManagedMemory(...args),
     managedMemoryList: (...args: any[]) => mockManagedMemoryList(...args),
     managedMemorySearch: (...args: any[]) => mockManagedMemorySearch(...args),
     addManagedMemory: (...args: any[]) => mockAddManagedMemory(...args),
@@ -72,6 +76,50 @@ describe('MemoryPage', () => {
         userCount: 1,
         oldestMemory: '2026-04-12T17:00:00.000Z',
         newestMemory: '2026-04-12T17:00:00.000Z',
+      },
+    })
+    mockManagedMemoryImportStatus.mockResolvedValue({
+      success: true,
+      data: {
+        profileKey: 'default',
+        runtimeRoot: '/tmp/.clawmaster/data/default/memory/powermem',
+        stateFile: '/tmp/.clawmaster/data/default/memory/powermem/openclaw-import-state.json',
+        availableSourceCount: 2,
+        trackedSources: 1,
+        importedMemoryCount: 1,
+        lastImportedAt: '2026-04-12T17:10:00.000Z',
+        lastRun: {
+          scanned: 2,
+          imported: 1,
+          updated: 0,
+          skipped: 1,
+          duplicate: 0,
+          failed: 0,
+          importedMemoryCount: 1,
+          lastImportedAt: '2026-04-12T17:10:00.000Z',
+        },
+      },
+    })
+    mockImportOpenclawManagedMemory.mockResolvedValue({
+      success: true,
+      data: {
+        profileKey: 'default',
+        runtimeRoot: '/tmp/.clawmaster/data/default/memory/powermem',
+        stateFile: '/tmp/.clawmaster/data/default/memory/powermem/openclaw-import-state.json',
+        availableSourceCount: 2,
+        trackedSources: 2,
+        importedMemoryCount: 2,
+        lastImportedAt: '2026-04-12T17:20:00.000Z',
+        lastRun: {
+          scanned: 2,
+          imported: 1,
+          updated: 0,
+          skipped: 1,
+          duplicate: 0,
+          failed: 0,
+          importedMemoryCount: 2,
+          lastImportedAt: '2026-04-12T17:20:00.000Z',
+        },
       },
     })
     mockManagedMemoryList.mockResolvedValue({
@@ -192,7 +240,12 @@ describe('MemoryPage', () => {
     render(<MemoryPage />)
 
     expect(await screen.findByRole('heading', { name: 'Memory Management' })).toBeInTheDocument()
-    expect(await screen.findByText('powermem foundation')).toBeInTheDocument()
+    expect(await screen.findByText('PowerMem foundation')).toBeInTheDocument()
+    expect(screen.getByText('Why managed memory is better')).toBeInTheDocument()
+    expect(screen.getByText('Legacy memory import')).toBeInTheDocument()
+    expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    expect(screen.getByText('Once you add a managed memory here, it stays queryable without touching workspace markdown files.')).toBeInTheDocument()
+    expect(screen.getByText('Run compare')).toBeInTheDocument()
     expect(screen.getByText('Alice prefers espresso after lunch.')).toBeInTheDocument()
     expect(await screen.findByText('Memory Overview')).toBeInTheDocument()
     expect(screen.getAllByText('Storage Files').length).toBeGreaterThan(0)
@@ -255,7 +308,7 @@ describe('MemoryPage', () => {
     expect(await screen.findByText('No results')).toBeInTheDocument()
   })
 
-  it('adds and searches managed powermem memories', async () => {
+  it('adds and searches managed PowerMem memories', async () => {
     mockManagedMemorySearch.mockResolvedValueOnce({
       success: true,
       data: [
@@ -274,7 +327,7 @@ describe('MemoryPage', () => {
 
     render(<MemoryPage />)
 
-    expect(await screen.findByText('powermem foundation')).toBeInTheDocument()
+    expect(await screen.findByText('PowerMem foundation')).toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('User ID for managed memory (optional)'), {
       target: { value: 'alice' },
@@ -283,7 +336,7 @@ describe('MemoryPage', () => {
       target: { value: 'planner' },
     })
     fireEvent.change(
-      screen.getByPlaceholderText('Store a stable fact, preference, or reusable note in managed powermem memory...'),
+      screen.getByPlaceholderText('Store a stable fact, preference, or reusable note in managed PowerMem memory...'),
       { target: { value: 'Alice prefers espresso after lunch.' } },
     )
     fireEvent.click(screen.getByRole('button', { name: 'Add memory' }))
@@ -295,9 +348,9 @@ describe('MemoryPage', () => {
         agentId: 'planner',
       })
     })
-    expect(await screen.findByText('Managed powermem memory saved.')).toBeInTheDocument()
+    expect(await screen.findByText('Managed PowerMem memory saved.')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByPlaceholderText('Search managed powermem memories...'), {
+    fireEvent.change(screen.getByPlaceholderText('Search managed PowerMem memories...'), {
       target: { value: 'espresso lunch' },
     })
     fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0])
@@ -312,6 +365,68 @@ describe('MemoryPage', () => {
 
     expect(await screen.findByText('Managed search results')).toBeInTheDocument()
     expect(screen.getByText('score: 0.994')).toBeInTheDocument()
+  })
+
+  it('imports legacy OpenClaw memory into managed PowerMem', async () => {
+    render(<MemoryPage />)
+
+    const importHeading = await screen.findByText('Legacy memory import')
+    const importCard = importHeading.closest('.section-subcard')
+    expect(importCard).not.toBeNull()
+    expect(within(importCard!).getByText('Available sources')).toBeInTheDocument()
+    expect(within(importCard!).getAllByText('2').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import OpenClaw memory' }))
+
+    await waitFor(() => {
+      expect(mockImportOpenclawManagedMemory).toHaveBeenCalledTimes(1)
+    })
+    expect(await screen.findByText('Legacy OpenClaw memory imported into managed PowerMem.')).toBeInTheDocument()
+  })
+
+  it('compares managed and legacy recall side by side', async () => {
+    mockManagedMemorySearch.mockResolvedValueOnce({
+      success: true,
+      data: [
+        {
+          memoryId: 'managed-1',
+          content: 'Managed memory keeps the imported espresso preference.',
+          userId: 'alice',
+          agentId: 'planner',
+          metadata: {},
+          score: 0.991,
+        },
+      ],
+    })
+    mockOpenclawMemorySearch.mockResolvedValueOnce({
+      success: true,
+      data: [
+        {
+          id: 'legacy-1',
+          content: 'Legacy markdown note mentions espresso.',
+          path: '/tmp/openclaw/workspace/memory/coffee.md',
+          score: 1,
+        },
+      ],
+    })
+
+    render(<MemoryPage />)
+
+    expect(await screen.findByText('Recall comparison')).toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText('Compare the same query across managed and legacy memory...'), {
+      target: { value: 'espresso preference' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Compare recall' }))
+
+    await waitFor(() => {
+      expect(mockManagedMemorySearch).toHaveBeenCalledWith('espresso preference', { limit: 6 })
+      expect(mockOpenclawMemorySearch).toHaveBeenCalledWith('espresso preference', { maxResults: 6 })
+    })
+
+    expect(await screen.findByText('Managed memory keeps the imported espresso preference.')).toBeInTheDocument()
+    expect(screen.getByText('Legacy markdown note mentions espresso.')).toBeInTheDocument()
+    expect(screen.getByText('1 · 1')).toBeInTheDocument()
+    expect(screen.getByText('Managed and legacy memory both returned 1 hits on the last comparison query.')).toBeInTheDocument()
   })
 
   it('retries after a status failure', async () => {
@@ -499,20 +614,20 @@ describe('MemoryPage', () => {
     mockGetIsTauri.mockReturnValue(true)
     mockManagedMemoryStatus.mockResolvedValueOnce({
       success: false,
-      error: 'Managed powermem memory is available in web/backend mode first.',
+      error: 'Managed PowerMem memory is available in web/backend mode first.',
     })
     mockManagedMemoryStats.mockResolvedValueOnce({
       success: false,
-      error: 'Managed powermem memory is available in web/backend mode first.',
+      error: 'Managed PowerMem memory is available in web/backend mode first.',
     })
     mockManagedMemoryList.mockResolvedValueOnce({
       success: false,
-      error: 'Managed powermem memory is available in web/backend mode first.',
+      error: 'Managed PowerMem memory is available in web/backend mode first.',
     })
 
     render(<MemoryPage />)
 
-    expect(await screen.findByText('Managed powermem memory will arrive in desktop mode in a later PR. Native OpenClaw memory tools below remain available now.')).toBeInTheDocument()
-    expect(screen.queryByText('Managed powermem memory is available in web/backend mode first.')).not.toBeInTheDocument()
+    expect(await screen.findByText('Managed PowerMem memory will arrive in desktop mode in a later PR. Native OpenClaw memory tools below remain available now.')).toBeInTheDocument()
+    expect(screen.queryByText('Managed PowerMem memory is available in web/backend mode first.')).not.toBeInTheDocument()
   })
 })

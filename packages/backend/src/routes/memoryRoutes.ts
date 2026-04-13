@@ -10,6 +10,10 @@ import {
   searchManagedMemories,
 } from '../services/managedMemory.js'
 import {
+  getManagedMemoryImportStatus,
+  importOpenclawWorkspaceMemories,
+} from '../services/managedMemoryImport.js'
+import {
   deleteOpenclawMemoryFile,
   getOpenclawMemorySearchCapability,
   getOpenclawMemoryStatusPayload,
@@ -43,6 +47,24 @@ export function registerMemoryRoutes(app: express.Express): void {
   app.get('/api/memory/managed/stats', async (_req, res) => {
     try {
       const payload = await getManagedMemoryStatsPayload()
+      res.json(payload)
+    } catch (error: unknown) {
+      sendManagedMemoryFailure(res, error)
+    }
+  })
+
+  app.get('/api/memory/managed/import/status', async (_req, res) => {
+    try {
+      const payload = await getManagedMemoryImportStatus()
+      res.json(payload)
+    } catch (error: unknown) {
+      sendManagedMemoryFailure(res, error)
+    }
+  })
+
+  app.post('/api/memory/managed/import/openclaw', async (_req, res) => {
+    try {
+      const payload = await importOpenclawWorkspaceMemories()
       res.json(payload)
     } catch (error: unknown) {
       sendManagedMemoryFailure(res, error)

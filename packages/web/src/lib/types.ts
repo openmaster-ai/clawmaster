@@ -247,6 +247,28 @@ export interface ManagedMemoryListPayload {
   offset: number
 }
 
+export interface ManagedMemoryImportRunSummary {
+  scanned: number
+  imported: number
+  updated: number
+  skipped: number
+  duplicate: number
+  failed: number
+  importedMemoryCount: number
+  lastImportedAt: string
+}
+
+export interface ManagedMemoryImportStatusPayload {
+  profileKey: string
+  runtimeRoot: string
+  stateFile: string
+  availableSourceCount: number
+  trackedSources: number
+  importedMemoryCount: number
+  lastImportedAt: string | null
+  lastRun: ManagedMemoryImportRunSummary | null
+}
+
 export interface ChannelInfo {
   id: string
   name: string
