@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { parseWslListVerbose, resolveSelectedWslDistroFromList } from './wslRuntime.js'
+import {
+  parseWslListVerbose,
+  resolveSelectedWslDistroFromList,
+} from './wslRuntime.js'
 
 test('parseWslListVerbose extracts distro state, version, and default flag', () => {
   const distros = parseWslListVerbose(`

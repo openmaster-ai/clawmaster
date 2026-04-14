@@ -10,6 +10,7 @@ build/
 # Tauri
 src-tauri/target/
 src-tauri/Cargo.lock
+.tauri-resources/
 
 # Environment
 .env

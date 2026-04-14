@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
+use tauri::Manager;
 
 const CMD_ERR_PREFIX: &str = "CLAWMASTER_ERR:";
 
@@ -912,7 +913,6 @@ fn run_host_ollama_fallback_install() -> Result<String, String> {
     }
 }
 
-#[cfg(target_os = "windows")]
 fn join_posix(base: &str, child: &str) -> String {
     let normalized_base = base.trim_end_matches('/');
     if normalized_base.is_empty() {
@@ -1704,6 +1704,77 @@ struct OpenclawMemoryReindexPayload {
     stderr: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ManagedMemoryStoreContextPayload {
+    implementation: String,
+    engine: String,
+    runtime_mode: String,
+    runtime_target: String,
+    host_platform: String,
+    host_arch: String,
+    target_platform: String,
+    target_arch: String,
+    selected_wsl_distro: Option<String>,
+    profile_key: String,
+    data_root: String,
+    runtime_root: String,
+    storage_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    db_path: Option<String>,
+    legacy_db_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ManagedMemoryBridgeConfigPayload {
+    data_root: String,
+    engine: String,
+    auto_capture: bool,
+    auto_recall: bool,
+    infer_on_add: bool,
+    recall_limit: u32,
+    recall_score_threshold: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    agent_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ManagedMemoryBridgeEntryPayload {
+    enabled: bool,
+    config: ManagedMemoryBridgeConfigPayload,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ManagedMemoryBridgeDesiredPayload {
+    slot_value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    entry: Option<ManagedMemoryBridgeEntryPayload>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ManagedMemoryBridgeStatusPayload {
+    plugin_id: String,
+    slot_key: String,
+    state: String,
+    issues: Vec<String>,
+    installed: bool,
+    plugin_status: Option<String>,
+    installed_plugin_path: Option<String>,
+    runtime_plugin_path: Option<String>,
+    plugin_path: String,
+    plugin_path_exists: bool,
+    store: ManagedMemoryStoreContextPayload,
+    current_slot_value: Option<String>,
+    current_entry: Option<ManagedMemoryBridgeEntryPayload>,
+    desired: ManagedMemoryBridgeDesiredPayload,
+}
+
 fn classify_openclaw_memory_file(name: &str) -> &'static str {
     let lower = name.to_ascii_lowercase();
     if lower.ends_with(".sqlite") || lower.ends_with(".db") {
@@ -1957,6 +2028,17 @@ fn has_fts_unavailable_error(message: &str) -> bool {
     lower.contains("fts5") && lower.contains("no such module")
 }
 
+fn has_unsupported_openclaw_memory_error(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("unknown command 'memory'")
+        || (lower.contains("requires node >=")
+            && lower.contains("upgrade node and re-run openclaw"))
+}
+
+fn should_ignore_managed_memory_bridge_reindex_error(message: &str) -> bool {
+    has_unsupported_openclaw_memory_error(message)
+}
+
 fn has_structured_memory_search_payload(stdout: &str) -> bool {
     let trimmed = stdout.trim();
     if trimmed.is_empty() {
@@ -2010,6 +2092,14 @@ fn resolve_openclaw_memory_search_capability_from_output(
         };
     }
 
+    if has_unsupported_openclaw_memory_error(detail) {
+        return OpenclawMemorySearchCapabilityPayload {
+            mode: "unsupported".to_string(),
+            reason: Some("command_unavailable".to_string()),
+            detail: Some(detail.to_string()),
+        };
+    }
+
     OpenclawMemorySearchCapabilityPayload {
         mode: "native".to_string(),
         reason: None,
@@ -2019,6 +2109,1193 @@ fn resolve_openclaw_memory_search_capability_from_output(
             Some(detail.to_string())
         },
     }
+}
+
+const MEMORY_BRIDGE_PLUGIN_ID: &str = "memory-clawmaster-powermem";
+const MEMORY_BRIDGE_SLOT_KEY: &str = "memory";
+
+fn resolve_managed_memory_engine_for_desktop(host_platform: &str, host_arch: &str) -> String {
+    if host_platform == "linux" && (host_arch == "x64" || host_arch == "arm64") {
+        "powermem-seekdb".to_string()
+    } else {
+        "powermem-sqlite".to_string()
+    }
+}
+
+#[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+fn windows_path_to_wsl_path(value: &str) -> Option<String> {
+    let normalized = value.trim();
+    let bytes = normalized.as_bytes();
+    if bytes.len() < 3 || bytes[1] != b':' || (bytes[2] != b'\\' && bytes[2] != b'/') {
+        return None;
+    }
+    let drive = (bytes[0] as char).to_ascii_lowercase();
+    let tail = normalized[3..].replace('\\', "/");
+    if tail.is_empty() {
+        Some(format!("/mnt/{drive}"))
+    } else {
+        Some(format!("/mnt/{drive}/{tail}"))
+    }
+}
+
+#[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+fn managed_memory_windows_wsl_data_root(
+    profile_selection: &OpenclawProfileSelection,
+    home_dir: &Path,
+) -> String {
+    let host_data_root = clawmaster_data_root_native(profile_selection, home_dir)
+        .to_string_lossy()
+        .to_string();
+    windows_path_to_wsl_path(&host_data_root).unwrap_or(host_data_root)
+}
+
+fn find_balanced_json_end(raw: &str, start: usize) -> Option<usize> {
+    let first = raw.as_bytes().get(start).copied()? as char;
+    if first != '{' && first != '[' {
+        return None;
+    }
+    let mut expected_closers = vec![if first == '{' { '}' } else { ']' }];
+    let mut in_string = false;
+    let mut escaped = false;
+    for (index, ch) in raw.char_indices().skip_while(|(index, _)| *index <= start) {
+        if in_string {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            if ch == '\\' {
+                escaped = true;
+                continue;
+            }
+            if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '{' => expected_closers.push('}'),
+            '[' => expected_closers.push(']'),
+            '}' | ']' => {
+                let expected = expected_closers.pop()?;
+                if expected != ch {
+                    return None;
+                }
+                if expected_closers.is_empty() {
+                    return Some(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn extract_first_json_value(raw: &str) -> Option<serde_json::Value> {
+    for (index, ch) in raw.char_indices() {
+        if ch != '{' && ch != '[' {
+            continue;
+        }
+        let Some(end) = find_balanced_json_end(raw, index) else {
+            continue;
+        };
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw[index..=end]) {
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn parse_json_lenient(raw: &str) -> Option<serde_json::Value> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    serde_json::from_str::<serde_json::Value>(trimmed)
+        .ok()
+        .or_else(|| extract_first_json_value(trimmed))
+}
+
+fn managed_memory_runtime_data_root(
+    profile_selection: &OpenclawProfileSelection,
+) -> (String, String, Option<String>, String, String, String, String) {
+    let host_platform = normalize_local_data_target_platform(std::env::consts::OS).to_string();
+    let host_arch = normalize_arch_label(std::env::consts::ARCH);
+
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        let data_root = managed_memory_windows_wsl_data_root(profile_selection, &home_dir);
+        return (
+            data_root,
+            "wsl-managed".to_string(),
+            Some(distro),
+            "wsl2".to_string(),
+            "linux".to_string(),
+            host_platform,
+            host_arch,
+        );
+    }
+
+    let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    (
+        clawmaster_data_root_native(profile_selection, &home_dir)
+            .to_string_lossy()
+            .to_string(),
+        "host-managed".to_string(),
+        None,
+        "native".to_string(),
+        host_platform.clone(),
+        host_platform,
+        host_arch,
+    )
+}
+
+fn build_managed_memory_store_context() -> ManagedMemoryStoreContextPayload {
+    let profile_selection = get_openclaw_profile_selection();
+    let profile_key = local_data_profile_key(&profile_selection);
+    let (
+        data_root,
+        runtime_mode,
+        selected_wsl_distro,
+        runtime_target,
+        target_platform,
+        host_platform,
+        host_arch,
+    ) = managed_memory_runtime_data_root(&profile_selection);
+    let engine = resolve_managed_memory_engine_for_desktop(&host_platform, &host_arch);
+    let runtime_root = join_posix(&join_posix(&data_root, "memory"), "powermem");
+    let legacy_db_path = join_posix(&runtime_root, "powermem.sqlite");
+    let storage_path = if engine == "powermem-seekdb" {
+        join_posix(&runtime_root, "seekdb")
+    } else {
+        legacy_db_path.clone()
+    };
+
+    ManagedMemoryStoreContextPayload {
+        implementation: "powermem".to_string(),
+        engine: engine.clone(),
+        runtime_mode,
+        runtime_target,
+        host_platform,
+        host_arch: host_arch.clone(),
+        target_platform,
+        target_arch: host_arch,
+        selected_wsl_distro,
+        profile_key,
+        data_root,
+        runtime_root,
+        storage_path: storage_path.clone(),
+        db_path: if engine == "powermem-sqlite" {
+            Some(storage_path)
+        } else {
+            None
+        },
+        legacy_db_path,
+    }
+}
+
+fn resolve_managed_memory_plugin_root_path() -> PathBuf {
+    if let Some(packaged_root) = std::env::var_os("CLAWMASTER_PACKAGED_MEMORY_PLUGIN_ROOT") {
+        let root = PathBuf::from(packaged_root);
+        if root.join("openclaw.plugin.json").exists() {
+            return root;
+        }
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("plugins")
+        .join(MEMORY_BRIDGE_PLUGIN_ID)
+}
+
+fn normalize_comparable_plugin_path(value: &str) -> String {
+    let mut normalized = value.trim().to_string();
+    if normalized.is_empty() {
+        return String::new();
+    }
+    for prefix in ["global:", "stock:", "file:"] {
+        if normalized.to_ascii_lowercase().starts_with(prefix) {
+            normalized = normalized[prefix.len()..].trim().to_string();
+            break;
+        }
+    }
+    normalized = normalized.replace('\\', "/");
+    let lower_leaf = normalized.rsplit('/').next().unwrap_or("").to_ascii_lowercase();
+    if lower_leaf == "openclaw.plugin.json"
+        || lower_leaf == "index.js"
+        || lower_leaf == "index.mjs"
+        || lower_leaf == "index.cjs"
+        || lower_leaf == "index.ts"
+    {
+        if let Some(index) = normalized.rfind('/') {
+            normalized.truncate(index);
+        }
+    }
+    while normalized.ends_with('/') {
+        normalized.pop();
+    }
+    let bytes = normalized.as_bytes();
+    if bytes.len() >= 3 && bytes[1] == b':' && bytes[2] == b'/' {
+        let mut chars = normalized.chars();
+        if let Some(first) = chars.next() {
+            normalized = first.to_ascii_lowercase().to_string() + chars.as_str();
+        }
+    }
+    normalized
+}
+
+fn run_openclaw_command_with_stdin(
+    args: &[String],
+    stdin_payload: &str,
+) -> Result<OpenclawCapturedOutput, String> {
+    let mut command = openclaw_cmd();
+    let mut child = command
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| cmd_err_d("OPENCLAW_CMD_SPAWN_FAILED", e))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(stdin_payload.as_bytes())
+            .map_err(|e| cmd_err_d("OPENCLAW_CMD_STDIN_WRITE_FAILED", e))?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| cmd_err_d("OPENCLAW_CMD_WAIT_FAILED", e))?;
+
+    Ok(OpenclawCapturedOutput {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    })
+}
+
+#[derive(Debug, Clone)]
+struct InstalledManagedMemoryPluginStatus {
+    installed: bool,
+    plugin_status: Option<String>,
+    installed_plugin_path: Option<String>,
+}
+
+fn parse_openclaw_plugin_rows(raw: &str) -> Vec<serde_json::Value> {
+    let Some(value) = parse_json_lenient(raw) else {
+        return Vec::new();
+    };
+    if let Some(items) = value.as_array() {
+        return items.clone();
+    }
+    for key in ["plugins", "items", "list"] {
+        if let Some(items) = value.get(key).and_then(|item| item.as_array()) {
+            return items.clone();
+        }
+    }
+    Vec::new()
+}
+
+fn strip_ansi(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' {
+            if matches!(chars.peek(), Some('[')) {
+                chars.next();
+                while let Some(next) = chars.next() {
+                    if ('@'..='~').contains(&next) {
+                        break;
+                    }
+                }
+                continue;
+            }
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn line_has_table_pipe(line: &str) -> bool {
+    line.contains('|') || line.contains('│') || line.contains('┃')
+}
+
+fn is_box_char(ch: char) -> bool {
+    matches!(
+        ch,
+        '│' | '┃'
+            | '┌'
+            | '┐'
+            | '└'
+            | '┘'
+            | '├'
+            | '┤'
+            | '┬'
+            | '┴'
+            | '┼'
+            | '─'
+            | '═'
+            | '╌'
+            | '┄'
+            | '╔'
+            | '╗'
+            | '╚'
+            | '╝'
+            | '╠'
+            | '╣'
+            | '╦'
+            | '╩'
+            | '╬'
+    )
+}
+
+fn split_pipe_row_preserving_cells(line: &str) -> Vec<String> {
+    let mut cells = Vec::new();
+    let mut current = String::new();
+    for ch in line.chars() {
+        if ch == '|' || ch == '│' || ch == '┃' {
+            cells.push(current.trim().to_string());
+            current.clear();
+        } else if is_box_char(ch) {
+            current.push(' ');
+        } else {
+            current.push(ch);
+        }
+    }
+    cells.push(current.trim().to_string());
+    let has_leading_pipe = line
+        .trim_start()
+        .chars()
+        .next()
+        .map(|ch| ch == '|' || ch == '│' || ch == '┃')
+        .unwrap_or(false);
+    let has_trailing_pipe = line
+        .trim_end()
+        .chars()
+        .last()
+        .map(|ch| ch == '|' || ch == '│' || ch == '┃')
+        .unwrap_or(false);
+    if !has_leading_pipe {
+        cells.insert(0, String::new());
+    }
+    if !has_trailing_pipe {
+        cells.push(String::new());
+    }
+    cells
+}
+
+fn looks_like_plugin_id(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.len() > 80 || trimmed.chars().any(char::is_whitespace) {
+        return false;
+    }
+    trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+}
+
+fn extract_plugin_id_from_source_cell(source: &str) -> Option<String> {
+    let trimmed = source.trim();
+    for prefix in ["global:", "stock:"] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            let slug = rest.split('/').next().unwrap_or("").trim();
+            if looks_like_plugin_id(slug) {
+                return Some(slug.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn resolve_table_row_plugin_id(name: &str, id: &str, source: &str) -> Option<String> {
+    let id_trim = id.trim();
+    if looks_like_plugin_id(id_trim) {
+        return Some(id_trim.to_string());
+    }
+    if let Some(from_source) = extract_plugin_id_from_source_cell(source) {
+        return Some(from_source);
+    }
+    let name_trim = name.trim();
+    if looks_like_plugin_id(name_trim) {
+        return Some(name_trim.to_string());
+    }
+    None
+}
+
+fn merge_wrapped_plugin_name(prev: &str, next: &str) -> String {
+    let prev_trim = prev.trim_end();
+    let next_trim = next.trim();
+    if next_trim.is_empty() {
+        return prev_trim.to_string();
+    }
+    if prev_trim.ends_with('/') || prev_trim.ends_with('-') {
+        format!("{prev_trim}{next_trim}")
+    } else {
+        format!("{prev_trim} {next_trim}").trim().to_string()
+    }
+}
+
+fn row_is_table_separator(cells: &[String]) -> bool {
+    let inner = if cells.len() > 2 {
+        &cells[1..cells.len() - 1]
+    } else {
+        cells
+    };
+    if inner.is_empty() {
+        return true;
+    }
+    inner.iter().all(|cell| {
+        let trimmed = cell.chars().filter(|ch| !ch.is_whitespace()).collect::<String>();
+        trimmed.is_empty() || trimmed.chars().all(|ch| matches!(ch, '-' | '─' | '═' | '┼' | '+'))
+    })
+}
+
+fn find_openclaw_plugins_table_layout(
+    lines: &[String],
+) -> Option<(usize, usize, Option<usize>, usize)> {
+    for (index, line) in lines.iter().enumerate() {
+        if !line_has_table_pipe(line) {
+            continue;
+        }
+        let cells = split_pipe_row_preserving_cells(line);
+        if cells.len() < 6 {
+            continue;
+        }
+        let c1 = cells.get(1).map(|value| value.to_ascii_lowercase()).unwrap_or_default();
+        let c2 = cells.get(2).map(|value| value.to_ascii_lowercase()).unwrap_or_default();
+        let c3 = cells.get(3).map(|value| value.to_ascii_lowercase()).unwrap_or_default();
+        let c4 = cells.get(4).map(|value| value.to_ascii_lowercase()).unwrap_or_default();
+        if c1 != "name" || c2 != "id" {
+            continue;
+        }
+        if c3 == "format" && c4.starts_with("status") {
+            return Some((index, 4, Some(5), 6));
+        }
+        if c3.starts_with("status") && c4 == "version" {
+            return Some((index, 3, None, 4));
+        }
+        if c3.starts_with("status") {
+            return Some((index, 3, Some(4), 5));
+        }
+    }
+    None
+}
+
+fn parse_openclaw_plugin_rows_plain_text(raw: &str) -> Vec<serde_json::Value> {
+    let lines = strip_ansi(raw)
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .map(|line| line.to_string())
+        .collect::<Vec<_>>();
+
+    let Some((header_idx, status_index, source_index, version_index)) =
+        find_openclaw_plugins_table_layout(&lines)
+    else {
+        return Vec::new();
+    };
+
+    let mut rows = Vec::new();
+    let mut current_name = String::new();
+    let mut current_id = String::new();
+    let mut current_status = String::new();
+    let mut current_source = String::new();
+    let mut current_version: Option<String> = None;
+    let mut seen = std::collections::HashSet::new();
+
+    let flush = |rows: &mut Vec<serde_json::Value>,
+                 seen: &mut std::collections::HashSet<String>,
+                 name: &mut String,
+                 id: &mut String,
+                 status: &mut String,
+                 source: &mut String,
+                 version: &mut Option<String>| {
+        if id.is_empty() || seen.contains(id) {
+            name.clear();
+            id.clear();
+            status.clear();
+            source.clear();
+            *version = None;
+            return;
+        }
+        seen.insert(id.clone());
+        rows.push(serde_json::json!({
+            "id": id.clone(),
+            "name": if name.is_empty() { id.clone() } else { name.clone() },
+            "status": if status.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(status.clone()) },
+            "source": if source.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(source.clone()) },
+            "version": version.clone(),
+        }));
+        name.clear();
+        id.clear();
+        status.clear();
+        source.clear();
+        *version = None;
+    };
+
+    for line in lines.iter().skip(header_idx + 1) {
+        if !line_has_table_pipe(line) {
+            continue;
+        }
+        let cells = split_pipe_row_preserving_cells(line);
+        if cells.len() <= status_index || cells.len() <= version_index || row_is_table_separator(&cells) {
+            continue;
+        }
+        if let Some(source_index) = source_index {
+            if cells.len() <= source_index {
+                continue;
+            }
+        }
+
+        let name = cells.get(1).map(String::as_str).unwrap_or("").trim();
+        let id = cells.get(2).map(String::as_str).unwrap_or("").trim();
+        let status_cell = cells
+            .get(status_index)
+            .map(String::as_str)
+            .unwrap_or("")
+            .trim();
+        let source = source_index
+            .and_then(|index| cells.get(index))
+            .map(String::as_str)
+            .unwrap_or("")
+            .trim();
+        let version_cell = cells
+            .get(version_index)
+            .map(String::as_str)
+            .unwrap_or("")
+            .trim();
+
+        if !current_id.is_empty() && status_cell.is_empty() {
+            if !name.is_empty() {
+                current_name = merge_wrapped_plugin_name(&current_name, name);
+            }
+            if !id.is_empty() && current_id.len() + id.len() <= 80 {
+                let merged = format!("{current_id}{id}");
+                if looks_like_plugin_id(&merged) {
+                    current_id = merged;
+                }
+            }
+            if !source.is_empty() {
+                if current_source.is_empty() {
+                    current_source = source.to_string();
+                } else {
+                    current_source = merge_wrapped_plugin_name(&current_source, source);
+                }
+            }
+            if current_version.is_none() && !version_cell.is_empty() {
+                current_version = Some(version_cell.to_string());
+            }
+            continue;
+        }
+
+        if status_cell.is_empty() {
+            continue;
+        }
+
+        let Some(resolved_id) = resolve_table_row_plugin_id(name, id, source) else {
+            continue;
+        };
+        if name.is_empty() && id.is_empty() && source.is_empty() {
+            continue;
+        }
+
+        flush(
+            &mut rows,
+            &mut seen,
+            &mut current_name,
+            &mut current_id,
+            &mut current_status,
+            &mut current_source,
+            &mut current_version,
+        );
+        current_name = if name.is_empty() {
+            resolved_id.clone()
+        } else {
+            name.to_string()
+        };
+        current_id = resolved_id;
+        current_status = status_cell.to_string();
+        current_source = source.to_string();
+        current_version = if version_cell.is_empty() {
+            None
+        } else {
+            Some(version_cell.to_string())
+        };
+    }
+
+    flush(
+        &mut rows,
+        &mut seen,
+        &mut current_name,
+        &mut current_id,
+        &mut current_status,
+        &mut current_source,
+        &mut current_version,
+    );
+
+    rows
+}
+
+fn resolve_installed_plugin_path(plugin: &serde_json::Value) -> Option<String> {
+    let source_candidate = plugin
+        .get("source")
+        .or_else(|| plugin.get("sourcePath"))
+        .or_else(|| plugin.get("path"))
+        .and_then(|value| value.as_str());
+    let description_candidate = plugin.get("description").and_then(|value| value.as_str());
+
+    source_candidate
+        .or_else(|| {
+            let description = description_candidate?.trim();
+            let looks_path_like = description.starts_with('/')
+                || description.starts_with("./")
+                || description.starts_with("../")
+                || description.starts_with("~/")
+                || description.starts_with("global:")
+                || description.starts_with("stock:")
+                || description.starts_with("file:")
+                || description
+                    .as_bytes()
+                    .get(1)
+                    .copied()
+                    .map(|byte| byte == b':')
+                    .unwrap_or(false);
+            if looks_path_like {
+                Some(description)
+            } else {
+                None
+            }
+        })
+        .map(normalize_comparable_plugin_path)
+        .filter(|value| !value.is_empty())
+}
+
+fn get_installed_managed_memory_plugin_status() -> InstalledManagedMemoryPluginStatus {
+    let captured = match run_openclaw_command_captured(vec![
+        "plugins".to_string(),
+        "list".to_string(),
+        "--json".to_string(),
+    ]) {
+        Ok(value) => value,
+        Err(_) => {
+            return InstalledManagedMemoryPluginStatus {
+                installed: false,
+                plugin_status: None,
+                installed_plugin_path: None,
+            }
+        }
+    };
+
+    let mut rows = parse_openclaw_plugin_rows(&captured.stdout);
+    if rows.is_empty() {
+        rows = parse_openclaw_plugin_rows(&captured.stderr);
+    }
+    if rows.is_empty() {
+        if let Ok(plain_text) =
+            run_openclaw_command_captured(vec!["plugins".to_string(), "list".to_string()])
+        {
+            rows = parse_openclaw_plugin_rows_plain_text(&plain_text.stdout);
+            if rows.is_empty() {
+                let combined = [plain_text.stdout, plain_text.stderr]
+                    .into_iter()
+                    .filter(|part| !part.trim().is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                rows = parse_openclaw_plugin_rows_plain_text(&combined);
+            }
+        }
+    }
+    let plugin = rows.into_iter().find(|row| {
+        row.get("id")
+            .and_then(|value| value.as_str())
+            .map(|value| value.trim() == MEMORY_BRIDGE_PLUGIN_ID)
+            .unwrap_or(false)
+    });
+
+    InstalledManagedMemoryPluginStatus {
+        installed: plugin.is_some(),
+        plugin_status: plugin
+            .as_ref()
+            .and_then(|row| row.get("status"))
+            .and_then(|value| value.as_str())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        installed_plugin_path: plugin.as_ref().and_then(resolve_installed_plugin_path),
+    }
+}
+
+fn is_managed_memory_bridge_plugin_ready(plugin_status: Option<&str>) -> bool {
+    matches!(
+        plugin_status.map(|value| value.trim().to_ascii_lowercase()).as_deref(),
+        Some("loaded") | Some("enabled") | Some("active") | Some("ready") | Some("ok")
+    )
+}
+
+fn managed_memory_bridge_plugin_issue(
+    installed: bool,
+    plugin_status: Option<&str>,
+) -> Option<String> {
+    if !installed {
+        return Some(format!("{MEMORY_BRIDGE_PLUGIN_ID} is not installed in OpenClaw yet."));
+    }
+    if is_managed_memory_bridge_plugin_ready(plugin_status) {
+        return None;
+    }
+    if let Some(status) = plugin_status {
+        return Some(format!(
+            "{MEMORY_BRIDGE_PLUGIN_ID} is installed but currently {}.",
+            status.trim()
+        ));
+    }
+    Some(format!(
+        "{MEMORY_BRIDGE_PLUGIN_ID} is installed but its runtime status is unknown."
+    ))
+}
+
+fn managed_memory_bridge_plugin_path_issue(
+    installed: bool,
+    installed_plugin_path: Option<&str>,
+    runtime_plugin_path: Option<&str>,
+) -> Option<String> {
+    if !installed {
+        return None;
+    }
+    let runtime = runtime_plugin_path.map(normalize_comparable_plugin_path)?;
+    let Some(installed) = installed_plugin_path
+        .map(normalize_comparable_plugin_path)
+        .filter(|value| !value.is_empty())
+    else {
+        return Some(format!(
+            "{MEMORY_BRIDGE_PLUGIN_ID} is installed but its linked source path is unknown."
+        ));
+    };
+    if installed == runtime {
+        None
+    } else {
+        Some(format!(
+            "{MEMORY_BRIDGE_PLUGIN_ID} is linked to {installed} instead of {runtime}."
+        ))
+    }
+}
+
+fn normalize_managed_memory_bridge_entry(
+    value: Option<&serde_json::Value>,
+) -> Option<ManagedMemoryBridgeEntryPayload> {
+    let value = value?.as_object()?;
+    let config = value.get("config")?.as_object()?;
+    let data_root = config.get("dataRoot")?.as_str()?.trim().to_string();
+    if data_root.is_empty() {
+        return None;
+    }
+    Some(ManagedMemoryBridgeEntryPayload {
+        enabled: value.get("enabled").and_then(|item| item.as_bool()).unwrap_or(true),
+        config: ManagedMemoryBridgeConfigPayload {
+            data_root,
+            engine: config
+                .get("engine")
+                .and_then(|item| item.as_str())
+                .map(|item| {
+                    if item == "powermem-seekdb" {
+                        "powermem-seekdb".to_string()
+                    } else {
+                        "powermem-sqlite".to_string()
+                    }
+                })
+                .unwrap_or_else(|| "powermem-sqlite".to_string()),
+            auto_capture: config
+                .get("autoCapture")
+                .and_then(|item| item.as_bool())
+                .unwrap_or(true),
+            auto_recall: config
+                .get("autoRecall")
+                .and_then(|item| item.as_bool())
+                .unwrap_or(true),
+            infer_on_add: config
+                .get("inferOnAdd")
+                .and_then(|item| item.as_bool())
+                .unwrap_or(false),
+            recall_limit: config
+                .get("recallLimit")
+                .and_then(|item| item.as_u64())
+                .map(|item| item.clamp(1, 100) as u32)
+                .unwrap_or(5),
+            recall_score_threshold: config
+                .get("recallScoreThreshold")
+                .and_then(|item| item.as_f64())
+                .map(|item| item.clamp(0.0, 1.0))
+                .unwrap_or(0.0),
+            user_id: config
+                .get("userId")
+                .and_then(|item| item.as_str())
+                .map(|item| item.trim().to_string())
+                .filter(|item| !item.is_empty()),
+            agent_id: config
+                .get("agentId")
+                .and_then(|item| item.as_str())
+                .map(|item| item.trim().to_string())
+                .filter(|item| !item.is_empty()),
+        },
+    })
+}
+
+fn managed_memory_bridge_entries_match(
+    left: Option<&ManagedMemoryBridgeEntryPayload>,
+    right: &ManagedMemoryBridgeEntryPayload,
+) -> bool {
+    let Some(left) = left else {
+        return false;
+    };
+    left.enabled == right.enabled
+        && left.config.data_root == right.config.data_root
+        && left.config.engine == right.config.engine
+        && left.config.auto_capture == right.config.auto_capture
+        && left.config.auto_recall == right.config.auto_recall
+        && left.config.infer_on_add == right.config.infer_on_add
+        && left.config.recall_limit == right.config.recall_limit
+        && (left.config.recall_score_threshold - right.config.recall_score_threshold).abs()
+            < f64::EPSILON
+        && left.config.user_id == right.config.user_id
+        && left.config.agent_id == right.config.agent_id
+}
+
+fn build_managed_memory_bridge_entry() -> ManagedMemoryBridgeEntryPayload {
+    let store = build_managed_memory_store_context();
+    ManagedMemoryBridgeEntryPayload {
+        enabled: true,
+        config: ManagedMemoryBridgeConfigPayload {
+            data_root: store.data_root,
+            engine: store.engine,
+            auto_capture: true,
+            auto_recall: true,
+            infer_on_add: false,
+            recall_limit: 5,
+            recall_score_threshold: 0.0,
+            user_id: None,
+            agent_id: None,
+        },
+    }
+}
+
+fn resolve_managed_memory_bridge_runtime_paths(
+) -> (String, String, Option<String>, Option<String>, PathBuf) {
+    let host_plugin_path = resolve_managed_memory_plugin_root_path();
+    let host_plugin_path_string = host_plugin_path.to_string_lossy().to_string();
+    let store = build_managed_memory_store_context();
+
+    #[cfg(target_os = "windows")]
+    if store.runtime_target == "wsl2" {
+        return (
+            host_plugin_path_string.clone(),
+            host_plugin_path.join("openclaw.plugin.json").to_string_lossy().to_string(),
+            windows_path_to_wsl_path(&host_plugin_path_string),
+            windows_path_to_wsl_path(&store.data_root),
+            host_plugin_path,
+        );
+    }
+
+    (
+        host_plugin_path_string.clone(),
+        host_plugin_path.join("openclaw.plugin.json").to_string_lossy().to_string(),
+        Some(host_plugin_path_string),
+        Some(store.data_root),
+        host_plugin_path,
+    )
+}
+
+fn read_config_json_or_empty() -> serde_json::Value {
+    let config_path = get_config_path();
+    let Some(content) = read_active_openclaw_text_file(&config_path).ok().flatten() else {
+        return serde_json::json!({});
+    };
+    serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}))
+}
+
+fn write_config_json(config_root: &serde_json::Value) -> Result<(), String> {
+    let config_path = get_config_path();
+    let content = serde_json::to_string_pretty(config_root)
+        .map_err(|e| cmd_err_d("CONFIG_SERIALIZE_FAILED", e))?;
+    write_active_openclaw_text_file(&config_path, &content)
+}
+
+fn get_current_managed_memory_bridge_state(
+    config_root: &serde_json::Value,
+) -> (Option<String>, Option<ManagedMemoryBridgeEntryPayload>) {
+    let plugins = config_root.get("plugins").and_then(|value| value.as_object());
+    let slots = plugins
+        .and_then(|value| value.get("slots"))
+        .and_then(|value| value.as_object());
+    let entries = plugins
+        .and_then(|value| value.get("entries"))
+        .and_then(|value| value.as_object());
+    let current_slot_value = slots
+        .and_then(|value| value.get(MEMORY_BRIDGE_SLOT_KEY))
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_string());
+    let current_entry = entries
+        .and_then(|value| value.get(MEMORY_BRIDGE_PLUGIN_ID))
+        .and_then(|value| normalize_managed_memory_bridge_entry(Some(value)));
+    (current_slot_value, current_entry)
+}
+
+fn set_managed_memory_bridge_config(
+    config_root: &mut serde_json::Value,
+    desired_entry: &ManagedMemoryBridgeEntryPayload,
+) {
+    if !config_root.is_object() {
+        *config_root = serde_json::json!({});
+    }
+    let root = config_root.as_object_mut().expect("config object");
+    if !root.contains_key("plugins") || !root.get("plugins").is_some_and(|value| value.is_object())
+    {
+        root.insert("plugins".to_string(), serde_json::json!({}));
+    }
+    let plugins = root
+        .get_mut("plugins")
+        .and_then(|value| value.as_object_mut())
+        .expect("plugins object");
+    if !plugins.contains_key("slots") || !plugins.get("slots").is_some_and(|value| value.is_object()) {
+        plugins.insert("slots".to_string(), serde_json::json!({}));
+    }
+    if !plugins.contains_key("entries")
+        || !plugins.get("entries").is_some_and(|value| value.is_object())
+    {
+        plugins.insert("entries".to_string(), serde_json::json!({}));
+    }
+    let slots = plugins
+        .get_mut("slots")
+        .and_then(|value| value.as_object_mut())
+        .expect("slots object");
+    slots.insert(
+        MEMORY_BRIDGE_SLOT_KEY.to_string(),
+        serde_json::Value::String(MEMORY_BRIDGE_PLUGIN_ID.to_string()),
+    );
+    let entries = plugins
+        .get_mut("entries")
+        .and_then(|value| value.as_object_mut())
+        .expect("entries object");
+    entries.insert(
+        MEMORY_BRIDGE_PLUGIN_ID.to_string(),
+        serde_json::to_value(desired_entry).unwrap_or_else(|_| serde_json::json!({})),
+    );
+}
+
+fn get_managed_memory_bridge_status_payload() -> Result<ManagedMemoryBridgeStatusPayload, String> {
+    let store = build_managed_memory_store_context();
+    let desired_entry = build_managed_memory_bridge_entry();
+    let (plugin_path, plugin_manifest_path, runtime_plugin_path, runtime_data_root, _host_plugin_path) =
+        resolve_managed_memory_bridge_runtime_paths();
+    let plugin_path_exists = PathBuf::from(&plugin_manifest_path).exists();
+    let config_root = read_config_json_or_empty();
+    let (current_slot_value, current_entry) = get_current_managed_memory_bridge_state(&config_root);
+    let installed_status = get_installed_managed_memory_plugin_status();
+    let mut desired_entry = desired_entry;
+    if let Some(runtime_data_root) = runtime_data_root {
+        desired_entry.config.data_root = runtime_data_root;
+    }
+
+    let mut issues = Vec::new();
+    if !plugin_path_exists {
+        issues.push("The managed PowerMem plugin files are missing from the ClawMaster package.".to_string());
+    }
+    if let Some(plugin_issue) = managed_memory_bridge_plugin_issue(
+        installed_status.installed,
+        installed_status.plugin_status.as_deref(),
+    ) {
+        issues.push(plugin_issue);
+    }
+    let plugin_path_issue = managed_memory_bridge_plugin_path_issue(
+        installed_status.installed,
+        installed_status.installed_plugin_path.as_deref(),
+        runtime_plugin_path.as_deref(),
+    );
+    if let Some(issue) = plugin_path_issue.clone() {
+        issues.push(issue);
+    }
+    if current_slot_value.as_deref() != Some(MEMORY_BRIDGE_PLUGIN_ID) {
+        issues.push(format!(
+            "plugins.slots.{MEMORY_BRIDGE_SLOT_KEY} is not set to {MEMORY_BRIDGE_PLUGIN_ID}"
+        ));
+    }
+    if current_entry.is_none() {
+        issues.push(format!(
+            "plugins.entries.{MEMORY_BRIDGE_PLUGIN_ID} is missing or invalid"
+        ));
+    } else if !managed_memory_bridge_entries_match(current_entry.as_ref(), &desired_entry) {
+        issues.push(format!(
+            "plugins.entries.{MEMORY_BRIDGE_PLUGIN_ID} does not match the ClawMaster-managed config"
+        ));
+    }
+
+    let state = if runtime_plugin_path.is_none() || !plugin_path_exists {
+        "unsupported".to_string()
+    } else if installed_status.installed
+        && is_managed_memory_bridge_plugin_ready(installed_status.plugin_status.as_deref())
+        && plugin_path_issue.is_none()
+        && current_slot_value.as_deref() == Some(MEMORY_BRIDGE_PLUGIN_ID)
+        && managed_memory_bridge_entries_match(current_entry.as_ref(), &desired_entry)
+    {
+        "ready".to_string()
+    } else if current_entry.is_some() || current_slot_value.is_some() || installed_status.installed {
+        "drifted".to_string()
+    } else {
+        "missing".to_string()
+    };
+
+    Ok(ManagedMemoryBridgeStatusPayload {
+        plugin_id: MEMORY_BRIDGE_PLUGIN_ID.to_string(),
+        slot_key: MEMORY_BRIDGE_SLOT_KEY.to_string(),
+        state,
+        issues,
+        installed: installed_status.installed,
+        plugin_status: installed_status.plugin_status,
+        installed_plugin_path: installed_status.installed_plugin_path,
+        runtime_plugin_path,
+        plugin_path,
+        plugin_path_exists,
+        store,
+        current_slot_value,
+        current_entry,
+        desired: ManagedMemoryBridgeDesiredPayload {
+            slot_value: MEMORY_BRIDGE_PLUGIN_ID.to_string(),
+            entry: Some(desired_entry),
+        },
+    })
+}
+
+fn run_openclaw_plugins_command_with_optional_confirm(
+    args: Vec<String>,
+    require_confirm: bool,
+) -> Result<(), String> {
+    let captured = if require_confirm {
+        run_openclaw_command_with_stdin(&args, "y\n")?
+    } else {
+        run_openclaw_command_captured(args)?
+    };
+    if captured.code == 0 {
+        Ok(())
+    } else {
+        Err(cmd_err_d(
+            "OPENCLAW_CMD_FAILED",
+            captured.stderr.trim().to_string() + captured.stdout.trim(),
+        ))
+    }
+}
+
+fn managed_memory_bridge_post_sync_commands() -> Vec<Vec<String>> {
+    vec![
+        vec!["ltm".to_string(), "import".to_string()],
+        vec![
+            "memory".to_string(),
+            "index".to_string(),
+            "--force".to_string(),
+            "--verbose".to_string(),
+        ],
+    ]
+}
+
+fn run_managed_memory_bridge_post_sync_command(args: Vec<String>) -> Result<(), String> {
+    match run_openclaw_plugins_command_with_optional_confirm(args.clone(), false) {
+        Ok(()) => Ok(()),
+        Err(error)
+            if args.first().map(String::as_str) == Some("memory")
+                && should_ignore_managed_memory_bridge_reindex_error(&error) =>
+        {
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+#[tauri::command]
+fn get_managed_memory_bridge_status() -> Result<ManagedMemoryBridgeStatusPayload, String> {
+    get_managed_memory_bridge_status_payload()
+}
+
+#[tauri::command]
+fn sync_managed_memory_bridge() -> Result<ManagedMemoryBridgeStatusPayload, String> {
+    let (
+        _plugin_path,
+        plugin_manifest_path,
+        runtime_plugin_path,
+        runtime_data_root,
+        _host_plugin_path,
+    ) = resolve_managed_memory_bridge_runtime_paths();
+    let runtime_plugin_path = runtime_plugin_path
+        .ok_or_else(|| cmd_err_d("MANAGED_MEMORY_BRIDGE_UNSUPPORTED", "Runtime plugin path is unavailable"))?;
+    if !PathBuf::from(&plugin_manifest_path).exists() {
+        return Err(cmd_err("MANAGED_MEMORY_BRIDGE_PLUGIN_MISSING"));
+    }
+
+    let status = get_managed_memory_bridge_status_payload()?;
+    let path_issue = managed_memory_bridge_plugin_path_issue(
+        status.installed,
+        status.installed_plugin_path.as_deref(),
+        Some(&runtime_plugin_path),
+    );
+
+    if status.installed && path_issue.is_some() {
+        let _ = run_openclaw_plugins_command_with_optional_confirm(
+            vec![
+                "plugins".to_string(),
+                "disable".to_string(),
+                MEMORY_BRIDGE_PLUGIN_ID.to_string(),
+            ],
+            false,
+        );
+        run_openclaw_plugins_command_with_optional_confirm(
+            vec![
+                "plugins".to_string(),
+                "uninstall".to_string(),
+                MEMORY_BRIDGE_PLUGIN_ID.to_string(),
+                "--keep-files".to_string(),
+            ],
+            true,
+        )?;
+    }
+
+    if !status.installed || path_issue.is_some() {
+        run_openclaw_plugins_command_with_optional_confirm(
+            vec![
+                "plugins".to_string(),
+                "install".to_string(),
+                "-l".to_string(),
+                runtime_plugin_path.clone(),
+            ],
+            true,
+        )?;
+    }
+
+    let mut config_root = read_config_json_or_empty();
+    let mut desired_entry = build_managed_memory_bridge_entry();
+    if let Some(runtime_data_root) = runtime_data_root {
+        desired_entry.config.data_root = runtime_data_root;
+    }
+    set_managed_memory_bridge_config(&mut config_root, &desired_entry);
+    write_config_json(&config_root)?;
+
+    if status.installed && path_issue.is_none() {
+        let _ = run_openclaw_plugins_command_with_optional_confirm(
+            vec![
+                "plugins".to_string(),
+                "disable".to_string(),
+                MEMORY_BRIDGE_PLUGIN_ID.to_string(),
+            ],
+            false,
+        );
+    }
+    run_openclaw_plugins_command_with_optional_confirm(
+        vec![
+            "plugins".to_string(),
+            "enable".to_string(),
+            MEMORY_BRIDGE_PLUGIN_ID.to_string(),
+        ],
+        false,
+    )?;
+    for args in managed_memory_bridge_post_sync_commands() {
+        run_managed_memory_bridge_post_sync_command(args)?;
+    }
+
+    get_managed_memory_bridge_status_payload()
 }
 
 #[tauri::command]
@@ -2138,10 +3415,12 @@ fn reindex_openclaw_memory() -> Result<OpenclawMemoryReindexPayload, String> {
 mod tests {
     use super::{
         get_config_path_candidates_for, get_openclaw_profile_args, get_openclaw_profile_data_dir,
-        local_data_profile_key, normalize_clawmaster_runtime_selection,
-        normalize_local_data_target_platform, parse_node_major, parse_wsl_list_verbose,
+        local_data_profile_key, managed_memory_windows_wsl_data_root,
+        normalize_clawmaster_runtime_selection, normalize_local_data_target_platform,
+        parse_json_lenient, parse_node_major, parse_wsl_list_verbose,
         resolve_config_path_from_candidates, resolve_local_data_status,
-        resolve_selected_wsl_distro_from_list, supports_seekdb_embedded, OpenclawProfileSelection,
+        resolve_selected_wsl_distro_from_list, supports_seekdb_embedded,
+        OpenclawProfileSelection,
     };
     use std::fs;
     use std::path::Path;
@@ -2370,6 +3649,187 @@ mod tests {
             resolve_selected_wsl_distro_from_list(&distros, &selection),
             Some("Ubuntu-24.04".to_string())
         );
+    }
+
+    #[test]
+    fn parse_json_lenient_skips_unbalanced_log_preambles_before_valid_json() {
+        let raw = "[plugins memory-clawmaster-powermem: plugin registered\n[{\"id\":\"memory-clawmaster-powermem\",\"status\":\"loaded\"}]";
+
+        let parsed = parse_json_lenient(raw).expect("should extract the later valid JSON payload");
+        let items = parsed.as_array().expect("payload should be an array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"], "memory-clawmaster-powermem");
+    }
+
+    #[test]
+    fn parse_openclaw_plugin_rows_plain_text_reads_table_output() {
+        let raw = "
+        [plugins] warning: falling back to plain text
+        | Name | ID | Status | Source | Version |
+        | ClawMaster PowerMem | memory-clawmaster-powermem | loaded | global:/tmp/plugins/memory-clawmaster-powermem/index.ts | 0.1.0 |
+        ";
+
+        let rows = super::parse_openclaw_plugin_rows_plain_text(raw);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["id"], "memory-clawmaster-powermem");
+        assert_eq!(rows[0]["status"], "loaded");
+        assert_eq!(
+            rows[0]["source"],
+            "global:/tmp/plugins/memory-clawmaster-powermem/index.ts"
+        );
+    }
+
+    #[test]
+    fn parse_openclaw_plugin_rows_plain_text_reads_four_column_status_version_table() {
+        let raw = "
+        [plugins] warning: falling back to plain text
+        | Name | ID | Status | Version |
+        | ClawMaster PowerMem | memory-clawmaster-powermem | loaded | 0.1.0 |
+        ";
+
+        let rows = super::parse_openclaw_plugin_rows_plain_text(raw);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["id"], "memory-clawmaster-powermem");
+        assert_eq!(rows[0]["status"], "loaded");
+        assert!(rows[0]["source"].is_null());
+        assert_eq!(rows[0]["version"], "0.1.0");
+    }
+
+    #[test]
+    fn parse_openclaw_plugin_rows_plain_text_preserves_wrapped_source_paths() {
+        let raw = "
+        [plugins] warning: falling back to plain text
+        | Name | ID | Status | Source | Version |
+        | ClawMaster PowerMem | memory-clawmaster-powermem | loaded | global:/tmp/plugins/memory-clawmaster- | 0.1.0 |
+        |  |  |  | powermem/index.ts |  |
+        ";
+
+        let rows = super::parse_openclaw_plugin_rows_plain_text(raw);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0]["source"],
+            "global:/tmp/plugins/memory-clawmaster-powermem/index.ts"
+        );
+    }
+
+    #[test]
+    fn parse_openclaw_plugin_rows_plain_text_reads_unfenced_four_column_table() {
+        let raw = "
+        [plugins] warning: falling back to plain text
+        Name | ID | Status | Version
+        ClawMaster PowerMem | memory-clawmaster-powermem | loaded | 0.1.0
+        ";
+
+        let rows = super::parse_openclaw_plugin_rows_plain_text(raw);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["id"], "memory-clawmaster-powermem");
+        assert_eq!(rows[0]["status"], "loaded");
+        assert!(rows[0]["source"].is_null());
+        assert_eq!(rows[0]["version"], "0.1.0");
+    }
+
+    #[test]
+    fn parse_openclaw_plugin_rows_plain_text_reads_unfenced_five_column_table() {
+        let raw = "
+        [plugins] warning: falling back to plain text
+        Name | ID | Status | Source | Version
+        ClawMaster PowerMem | memory-clawmaster-powermem | loaded | global:/tmp/plugins/memory-clawmaster-powermem/index.ts | 0.1.0
+        ";
+
+        let rows = super::parse_openclaw_plugin_rows_plain_text(raw);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["id"], "memory-clawmaster-powermem");
+        assert_eq!(rows[0]["status"], "loaded");
+        assert_eq!(
+            rows[0]["source"],
+            "global:/tmp/plugins/memory-clawmaster-powermem/index.ts"
+        );
+        assert_eq!(rows[0]["version"], "0.1.0");
+    }
+
+    #[test]
+    fn managed_memory_bridge_plugin_path_issue_flags_unknown_link_source() {
+        assert_eq!(
+            super::managed_memory_bridge_plugin_path_issue(
+                true,
+                None,
+                Some("/tmp/plugins/memory-clawmaster-powermem"),
+            ),
+            Some(
+                "memory-clawmaster-powermem is installed but its linked source path is unknown."
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn resolve_installed_plugin_path_accepts_description_only_link_paths() {
+        let plugin = serde_json::json!({
+            "id": "memory-clawmaster-powermem",
+            "description": "/opt/clawmaster/plugins/memory-clawmaster-powermem",
+        });
+
+        assert_eq!(
+            super::resolve_installed_plugin_path(&plugin),
+            Some("/opt/clawmaster/plugins/memory-clawmaster-powermem".to_string())
+        );
+    }
+
+    #[test]
+    fn managed_memory_bridge_post_sync_commands_import_then_reindex() {
+        assert_eq!(
+            super::managed_memory_bridge_post_sync_commands(),
+            vec![
+                vec!["ltm".to_string(), "import".to_string()],
+                vec![
+                    "memory".to_string(),
+                    "index".to_string(),
+                    "--force".to_string(),
+                    "--verbose".to_string(),
+                ],
+            ]
+        );
+    }
+
+    #[test]
+    fn managed_memory_bridge_reindex_errors_ignore_unsupported_legacy_memory_commands() {
+        assert!(super::should_ignore_managed_memory_bridge_reindex_error(
+            "error: unknown command 'memory'"
+        ));
+        assert!(super::should_ignore_managed_memory_bridge_reindex_error(
+            "OpenClaw requires Node >= 20. Upgrade Node and re-run OpenClaw."
+        ));
+        assert!(!super::should_ignore_managed_memory_bridge_reindex_error(
+            "permission denied"
+        ));
+    }
+
+    #[test]
+    fn openclaw_memory_search_capability_reports_unsupported_for_missing_memory_command() {
+        let payload = super::resolve_openclaw_memory_search_capability_from_output(
+            1,
+            "",
+            "error: unknown command 'memory'",
+        );
+
+        assert_eq!(payload.mode, "unsupported");
+        assert_eq!(payload.reason.as_deref(), Some("command_unavailable"));
+        assert_eq!(payload.detail.as_deref(), Some("error: unknown command 'memory'"));
+    }
+
+    #[test]
+    fn managed_memory_wsl_root_reuses_host_profile_data_root() {
+        let selection = OpenclawProfileSelection {
+            kind: "named".to_string(),
+            name: Some("team-a".to_string()),
+        };
+
+        let root = managed_memory_windows_wsl_data_root(
+            &selection,
+            Path::new(r"C:\Users\alice"),
+        );
+
+        assert_eq!(root, "/mnt/c/Users/alice/.clawmaster/data/named/team-a");
     }
 }
 
@@ -4176,6 +5636,8 @@ pub fn run() {
             get_logs,
             run_openclaw_command,
             run_openclaw_command_captured,
+            get_managed_memory_bridge_status,
+            sync_managed_memory_bridge,
             list_openclaw_memory_files,
             delete_openclaw_memory_file,
             get_openclaw_memory_search_capability,
@@ -4190,6 +5652,15 @@ pub fn run() {
             run_system_command,
         ])
         .setup(|app| {
+            if let Ok(resource_dir) = app.path().resource_dir() {
+                let plugin_root = resource_dir.join("memory-clawmaster-powermem");
+                if plugin_root.join("openclaw.plugin.json").exists() {
+                    std::env::set_var(
+                        "CLAWMASTER_PACKAGED_MEMORY_PLUGIN_ROOT",
+                        plugin_root.to_string_lossy().to_string(),
+                    );
+                }
+            }
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()

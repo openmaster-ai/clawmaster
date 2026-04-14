@@ -10,13 +10,15 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "express": "^4.21.0",
+    "@langchain/core": "^1.1.38",
     "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "powermem": "^0.1.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
     "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
     "@types/ws": "^8.5.12",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"

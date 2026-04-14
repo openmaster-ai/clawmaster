@@ -131,12 +131,28 @@ function resolveDarwinCompatibleNodeBin(): string | null {
     return cachedDarwinCompatibleNodeBin
   }
 
-  let best: { bin: string; version: { major: number; minor: number; patch: number } } | null = null
+  const supported: Array<{ bin: string; version: { major: number; minor: number; patch: number } }> = []
   for (const candidate of collectDarwinNodeCandidates()) {
     const version = getNodeVersionForBin(candidate)
     if (!version || !isSupportedOpenclawNodeVersion(version)) continue
-    if (!best || compareNodeVersions(version, best.version) > 0) {
-      best = { bin: candidate, version }
+    supported.push({ bin: candidate, version })
+  }
+
+  let best: { bin: string; version: { major: number; minor: number; patch: number } } | null = null
+  if (supported.length > 0) {
+    const preferredMajor = Math.min(...supported.map((entry) => entry.version.major))
+    for (const entry of supported) {
+      if (entry.version.major !== preferredMajor) continue
+      if (!best || compareNodeVersions(entry.version, best.version) > 0) {
+        best = entry
+      }
+    }
+    if (!best) {
+      for (const entry of supported) {
+        if (!best || compareNodeVersions(entry.version, best.version) > 0) {
+          best = entry
+        }
+      }
     }
   }
 

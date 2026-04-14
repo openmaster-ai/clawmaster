@@ -1,18 +1,96 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { execOpenclaw, extractFirstJsonObject } from '../execOpenclaw.js'
+import { execOpenclaw } from '../execOpenclaw.js'
 import { getOpenclawDataDir } from '../paths.js'
 import { isRecord } from '../serverUtils.js'
+
+function findBalancedJsonEnd(raw: string, start: number): number | null {
+  const first = raw[start]
+  if (first !== '{' && first !== '[') return null
+
+  const expectedClosers: string[] = [first === '{' ? '}' : ']']
+  let inString = false
+  let escaped = false
+
+  for (let index = start + 1; index < raw.length; index += 1) {
+    const ch = raw[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+        continue
+      }
+      if (ch === '\\') {
+        escaped = true
+        continue
+      }
+      if (ch === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      continue
+    }
+    if (ch === '{') {
+      expectedClosers.push('}')
+      continue
+    }
+    if (ch === '[') {
+      expectedClosers.push(']')
+      continue
+    }
+    if (ch === '}' || ch === ']') {
+      const expected = expectedClosers.pop()
+      if (expected !== ch) {
+        return null
+      }
+      if (expectedClosers.length === 0) {
+        return index
+      }
+    }
+  }
+
+  return null
+}
+
+function extractFirstJsonValue(raw: string): unknown | null {
+  for (let index = 0; index < raw.length; index += 1) {
+    const ch = raw[index]
+    if (ch !== '{' && ch !== '[') continue
+    const end = findBalancedJsonEnd(raw, index)
+    if (end === null) continue
+    const candidate = raw.slice(index, end + 1)
+    try {
+      return JSON.parse(candidate)
+    } catch {
+      continue
+    }
+  }
+  return null
+}
 
 function parseJsonLenient(raw: string): unknown {
   const t = raw.trim()
   if (!t) return null
-  const candidate = t.startsWith('{') || t.startsWith('[') ? t : extractFirstJsonObject(t) ?? t
   try {
-    return JSON.parse(candidate)
+    return JSON.parse(t)
   } catch {
+    const extracted = extractFirstJsonValue(t)
+    if (extracted !== null) {
+      return extracted
+    }
     return { raw: t }
   }
+}
+
+function pickStructuredJson(rawA: string, rawB: string, matcher: (value: unknown) => boolean): unknown {
+  const parsedA = parseJsonLenient(rawA)
+  if (matcher(parsedA)) return parsedA
+  const parsedB = parseJsonLenient(rawB)
+  if (matcher(parsedB)) return parsedB
+  return parsedA
 }
 
 export interface OpenclawMemoryHit {
@@ -24,8 +102,8 @@ export interface OpenclawMemoryHit {
 }
 
 export interface OpenclawMemorySearchCapabilityPayload {
-  mode: 'native' | 'fallback'
-  reason?: 'fts5_unavailable'
+  mode: 'native' | 'fallback' | 'unsupported'
+  reason?: 'fts5_unavailable' | 'command_unavailable'
   detail?: string
 }
 
@@ -55,13 +133,22 @@ interface OpenclawMemoryStatusEntry {
   workspaceDir?: string
 }
 
+export interface OpenclawWorkspaceMemoryDocument {
+  id: string
+  agentId: string
+  workspaceDir: string
+  sourcePath: string
+  title: string
+  content: string
+}
+
 function normalizeHit(item: unknown, index: number): OpenclawMemoryHit | null {
   if (!isRecord(item)) return null
   const content = String(
     item.content ?? item.text ?? item.snippet ?? item.body ?? item.memory ?? item.preview ?? ''
   ).trim()
   if (!content && !item.path && !item.file && !item.id) return null
-  const id = String(item.id ?? item.path ?? item.file ?? item.uri ?? `hit-${index}`)
+  const id = String(item.id ?? item.memoryId ?? item.path ?? item.file ?? item.uri ?? `hit-${index}`)
   const scoreRaw = item.score ?? item.similarity ?? item.rank
   const score =
     typeof scoreRaw === 'number'
@@ -110,15 +197,34 @@ function parseOpenclawMemoryStatusEntries(data: unknown): OpenclawMemoryStatusEn
   return entries
 }
 
+function titleFromWorkspaceMemoryFile(sourcePath: string, content: string): string {
+  const heading = content.match(/^\s*#\s+(.+)$/m)?.[1]?.trim()
+  if (heading) return heading
+  const baseName = path.basename(sourcePath).replace(/\.[^.]+$/, '')
+  return baseName || 'Imported OpenClaw memory'
+}
+
 function hasStructuredOpenclawMemorySearchPayload(value: unknown): boolean {
   if (Array.isArray(value)) return true
   if (!isRecord(value)) return false
   return Array.isArray(value.hits ?? value.results ?? value.items ?? value.memories ?? value.matches)
 }
 
+function hasStructuredOpenclawMemoryStatusPayload(value: unknown): boolean {
+  return Array.isArray(value)
+}
+
 function hasFtsUnavailableError(message: string): boolean {
   const lower = message.toLowerCase()
   return lower.includes('fts5') && lower.includes('no such module')
+}
+
+function hasUnsupportedOpenclawMemoryError(message: string): boolean {
+  const lower = message.toLowerCase()
+  return (
+    lower.includes("unknown command 'memory'") ||
+    (lower.includes('requires node >=') && lower.includes('upgrade node and re-run openclaw'))
+  )
 }
 
 function resolveMemorySearchProbeDetail(result: {
@@ -176,7 +282,11 @@ function countOccurrences(text: string, query: string): number {
   return count
 }
 
-async function resolveWorkspaceDirs(agent?: string): Promise<string[]> {
+async function resolveWorkspaceDirs(agent?: string, openclawDataRootOverride?: string): Promise<string[]> {
+  if (openclawDataRootOverride) {
+    return [path.join(openclawDataRootOverride, 'workspace')]
+  }
+
   const status = await getOpenclawMemoryStatusPayload()
   const entries = parseOpenclawMemoryStatusEntries(status.data)
   const dirs = entries
@@ -186,7 +296,48 @@ async function resolveWorkspaceDirs(agent?: string): Promise<string[]> {
   if (dirs.length > 0) {
     return Array.from(new Set(dirs))
   }
-  return [path.join(getOpenclawDataDir(), 'workspace')]
+  return [path.join(openclawDataRootOverride ?? getOpenclawDataDir(), 'workspace')]
+}
+
+async function resolveWorkspaceStatusEntries(agent?: string, openclawDataRootOverride?: string): Promise<Array<{
+  agentId: string
+  workspaceDir: string
+}>> {
+  if (openclawDataRootOverride) {
+    return [
+      {
+        agentId: agent?.trim() || 'main',
+        workspaceDir: path.join(openclawDataRootOverride, 'workspace'),
+      },
+    ]
+  }
+
+  let matches: Array<{ agentId: string; workspaceDir: string }> = []
+  try {
+    const status = await getOpenclawMemoryStatusPayload()
+    const entries = parseOpenclawMemoryStatusEntries(status.data)
+    matches = entries
+      .filter((entry) => !agent || entry.agentId === agent)
+      .filter((entry): entry is { agentId: string; workspaceDir: string } => Boolean(entry.workspaceDir))
+      .map((entry) => ({ agentId: entry.agentId, workspaceDir: entry.workspaceDir! }))
+  } catch {
+    matches = []
+  }
+
+  if (matches.length > 0) {
+    const deduped = new Map<string, { agentId: string; workspaceDir: string }>()
+    for (const item of matches) {
+      deduped.set(`${item.agentId}:${item.workspaceDir}`, item)
+    }
+    return Array.from(deduped.values())
+  }
+
+  return [
+    {
+      agentId: agent?.trim() || 'main',
+      workspaceDir: path.join(openclawDataRootOverride ?? getOpenclawDataDir(), 'workspace'),
+    },
+  ]
 }
 
 export async function searchWorkspaceMemoryFiles(
@@ -233,11 +384,58 @@ export async function searchWorkspaceMemoryFiles(
   return hits.slice(0, max).map(({ rank: _rank, ...hit }) => hit)
 }
 
+export async function listWorkspaceMemoryDocuments(
+  options?: { agent?: string; openclawDataRootOverride?: string }
+): Promise<OpenclawWorkspaceMemoryDocument[]> {
+  const workspaceEntries = await resolveWorkspaceStatusEntries(
+    options?.agent?.trim() || undefined,
+    options?.openclawDataRootOverride,
+  )
+  const documents: OpenclawWorkspaceMemoryDocument[] = []
+
+  for (const entry of workspaceEntries) {
+    const markdownFiles: string[] = []
+    const rootMemoryFile = path.join(entry.workspaceDir, 'MEMORY.md')
+    try {
+      const stat = await fs.stat(rootMemoryFile)
+      if (stat.isFile()) markdownFiles.push(rootMemoryFile)
+    } catch {
+      /* ignore */
+    }
+    await collectMarkdownFiles(path.join(entry.workspaceDir, 'memory'), markdownFiles)
+
+    const dedupedPaths = Array.from(new Set(markdownFiles)).sort((a, b) => a.localeCompare(b, 'en'))
+    for (const sourcePath of dedupedPaths) {
+      let content = ''
+      try {
+        content = await fs.readFile(sourcePath, 'utf8')
+      } catch {
+        continue
+      }
+      const trimmed = content.trim()
+      if (!trimmed) continue
+      documents.push({
+        id: `${entry.agentId}:${sourcePath}`,
+        agentId: entry.agentId,
+        workspaceDir: entry.workspaceDir,
+        sourcePath,
+        title: titleFromWorkspaceMemoryFile(sourcePath, trimmed),
+        content: trimmed,
+      })
+    }
+  }
+
+  return documents
+}
+
 export async function searchOpenclawMemoryFallback(
   query: string,
-  options?: { agent?: string; maxResults?: number }
+  options?: { agent?: string; maxResults?: number; openclawDataRootOverride?: string }
 ): Promise<OpenclawMemoryHit[]> {
-  const workspaceDirs = await resolveWorkspaceDirs(options?.agent?.trim() || undefined)
+  const workspaceDirs = await resolveWorkspaceDirs(
+    options?.agent?.trim() || undefined,
+    options?.openclawDataRootOverride,
+  )
   return searchWorkspaceMemoryFiles(query, workspaceDirs, options?.maxResults ?? 20)
 }
 
@@ -246,9 +444,9 @@ export function resolveOpenclawMemorySearchOutput(result: {
   stdout: string
   stderr: string
 }): OpenclawMemoryHit[] {
-  const parsed = parseJsonLenient(result.stdout)
+  const parsed = pickStructuredJson(result.stdout, result.stderr, hasStructuredOpenclawMemorySearchPayload)
   if (result.code === 0 || hasStructuredOpenclawMemorySearchPayload(parsed)) {
-    return parseOpenclawMemorySearchJson(result.stdout)
+    return parseOpenclawMemorySearchJson(JSON.stringify(parsed))
   }
   throw new Error(result.stderr || result.stdout || 'OpenClaw memory search failed')
 }
@@ -270,6 +468,13 @@ export function resolveOpenclawMemorySearchCapability(result: {
       detail,
     }
   }
+  if (detail && hasUnsupportedOpenclawMemoryError(detail)) {
+    return {
+      mode: 'unsupported',
+      reason: 'command_unavailable',
+      detail,
+    }
+  }
   return {
     mode: 'native',
     detail,
@@ -282,7 +487,7 @@ export async function getOpenclawMemoryStatusPayload(): Promise<{
   stderr?: string
 }> {
   const r = await execOpenclaw(['memory', 'status', '--json'])
-  const data = parseJsonLenient(r.stdout)
+  const data = pickStructuredJson(r.stdout, r.stderr, hasStructuredOpenclawMemoryStatusPayload)
   return {
     exitCode: r.code,
     data,

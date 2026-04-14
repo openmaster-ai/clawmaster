@@ -8,7 +8,7 @@
 |------|--------|---------|
 | `01-setup-wizard.yaml` | 7 | 安装向导 demo 全流程（检测→就绪→进入主界面/CapabilityGuard/回归用例） |
 | `02-page-navigation.yaml` | 15 | 全部 15 个页面导航可达性 + 渲染验证 |
-| `03-memory-module.yaml` | 6 | 原生记忆管理（概览/搜索/文件详情/删除确认/区块 loading/FTS 降级提示） |
+| `03-memory-module.yaml` | 11 | 记忆管理（托管 PowerMem 基础层/旧版导入与对比证明 + OpenClaw bridge 漂移/同步就绪 + 原生概览/搜索/文件详情/删除确认/区块 loading/FTS 降级提示） |
 | `04-observe-module.yaml` | 10 | 可观测 Dashboard（CapabilityGuard/费用卡片/图表/健康度/建议/会话） |
 | `05-config-and-security.yaml` | 18 | 配置编辑 + API Key 脱敏 + 主题切换 + 版本更新 + Profile 与横幅联动 |
 | `06-skills-marketplace.yaml` | 13 | 技能市场（ClawHub 前置/4 个重点技能/过滤/SkillGuard/运行时启停/OpenClaw WebUI 效果） |
@@ -26,7 +26,7 @@
 | `18-dashboard-module.yaml` | 11 | 概览页面（系统信息/网关状态/通道/速览卡片/快捷操作/任务清单/页脚一致性） |
 | `19-cross-module-workflows.yaml` | 6 | 跨模块主流程（onboarding→模型→网关→首聊 / 通道→上下文日志 / 技能插件MCP→OpenClaw WebUI 生效） |
 | `20-command-palette.yaml` | 7 | 共享命令面板（快捷键打开/页面跳转/区块跳转/主题操作/空状态/移动端入口） |
-| **合计** | **197** | |
+| **合计** | **202** | |
 
 ## 用例格式
 

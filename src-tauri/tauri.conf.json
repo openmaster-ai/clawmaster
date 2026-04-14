@@ -7,7 +7,7 @@
     "frontendDist": "../packages/web/dist",
     "devUrl": "http://localhost:3000",
     "beforeDevCommand": "npm run dev --workspace=@openclaw-manager/web",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm run prepare:tauri-memory-plugin && npm run build"
   },
   "app": {
     "windows": [
@@ -26,6 +26,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "../.tauri-resources/memory-clawmaster-powermem",
+      "../.tauri-resources/node_modules"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

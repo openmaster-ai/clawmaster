@@ -167,8 +167,8 @@ export interface OpenclawMemoryStatusPayload {
 }
 
 export interface OpenclawMemorySearchCapabilityPayload {
-  mode: 'native' | 'fallback'
-  reason?: 'fts5_unavailable'
+  mode: 'native' | 'fallback' | 'unsupported'
+  reason?: 'fts5_unavailable' | 'command_unavailable'
   detail?: string
 }
 
@@ -191,6 +191,128 @@ export interface OpenclawMemoryFileEntry {
 export interface OpenclawMemoryFilesPayload {
   root: string
   files: OpenclawMemoryFileEntry[]
+}
+
+export interface ManagedMemoryRecord {
+  id: string
+  memoryId: string
+  content: string
+  userId?: string
+  agentId?: string
+  metadata: Record<string, unknown>
+  createdAt?: string
+  updatedAt?: string
+  accessCount?: number
+}
+
+export interface ManagedMemorySearchHit {
+  memoryId: string
+  content: string
+  score?: number
+  userId?: string
+  agentId?: string
+  metadata: Record<string, unknown>
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ManagedMemoryStoreContext {
+  implementation: 'powermem'
+  engine: 'powermem-sqlite' | 'powermem-seekdb'
+  runtimeMode: 'host-managed' | 'wsl-managed'
+  runtimeTarget: 'native' | 'wsl2'
+  hostPlatform: string
+  hostArch: string
+  targetPlatform: string
+  targetArch: string
+  selectedWslDistro: string | null
+  profileKey: string
+  dataRoot: string
+  runtimeRoot: string
+  storagePath: string
+  dbPath?: string
+  legacyDbPath: string
+}
+
+export interface ManagedMemoryBridgeConfig {
+  dataRoot: string
+  engine: ManagedMemoryStoreContext['engine']
+  autoCapture: boolean
+  autoRecall: boolean
+  inferOnAdd: boolean
+  recallLimit: number
+  recallScoreThreshold: number
+  userId?: string
+  agentId?: string
+}
+
+export interface ManagedMemoryBridgeEntry {
+  enabled: boolean
+  config: ManagedMemoryBridgeConfig
+}
+
+export interface ManagedMemoryBridgeStatusPayload {
+  pluginId: 'memory-clawmaster-powermem'
+  slotKey: 'memory'
+  state: 'missing' | 'ready' | 'drifted' | 'unsupported'
+  issues: string[]
+  installed: boolean
+  pluginStatus: string | null
+  installedPluginPath: string | null
+  runtimePluginPath: string | null
+  pluginPath: string
+  pluginPathExists: boolean
+  store: ManagedMemoryStoreContext
+  currentSlotValue: string | null
+  currentEntry: ManagedMemoryBridgeEntry | null
+  desired: {
+    slotValue: 'memory-clawmaster-powermem'
+    entry: ManagedMemoryBridgeEntry | null
+  }
+}
+
+export interface ManagedMemoryStatusPayload extends ManagedMemoryStoreContext {
+  available: true
+  backend: 'service'
+  storageType: string
+  provisioned: boolean
+}
+
+export interface ManagedMemoryStatsPayload extends ManagedMemoryStoreContext {
+  storageType: string
+  totalMemories: number
+  userCount: number
+  oldestMemory: string | null
+  newestMemory: string | null
+}
+
+export interface ManagedMemoryListPayload {
+  memories: ManagedMemoryRecord[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface ManagedMemoryImportRunSummary {
+  scanned: number
+  imported: number
+  updated: number
+  skipped: number
+  duplicate: number
+  failed: number
+  importedMemoryCount: number
+  lastImportedAt: string
+}
+
+export interface ManagedMemoryImportStatusPayload {
+  profileKey: string
+  runtimeRoot: string
+  stateFile: string
+  availableSourceCount: number
+  trackedSources: number
+  importedMemoryCount: number
+  lastImportedAt: string | null
+  lastRun: ManagedMemoryImportRunSummary | null
 }
 
 export interface ChannelInfo {

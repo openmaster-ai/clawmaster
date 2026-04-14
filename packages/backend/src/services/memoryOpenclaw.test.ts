@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  parseOpenclawMemorySearchJson,
   resolveOpenclawMemorySearchCapability,
   resolveOpenclawMemorySearchOutput,
 } from './memoryOpenclaw.js'
@@ -26,4 +27,51 @@ test('resolveOpenclawMemorySearchCapability detects fallback mode when fts5 is u
     reason: 'fts5_unavailable',
     detail: 'Memory search failed: no such module: fts5',
   })
+})
+
+test('resolveOpenclawMemorySearchCapability detects unsupported mode when legacy memory commands are unavailable', () => {
+  const capability = resolveOpenclawMemorySearchCapability({
+    code: 1,
+    stdout: '[plugins] memory-clawmaster-powermem: plugin registered',
+    stderr: "error: unknown command 'memory'",
+  })
+  assert.deepEqual(capability, {
+    mode: 'unsupported',
+    reason: 'command_unavailable',
+    detail: "error: unknown command 'memory'",
+  })
+})
+
+test('resolveOpenclawMemorySearchOutput accepts structured results from stderr when stdout only has plugin logs', () => {
+  const result = resolveOpenclawMemorySearchOutput({
+    code: 0,
+    stdout: '[plugins] memory-clawmaster-powermem: plugin registered',
+    stderr: '[{"id":"managed-1","content":"Remember espresso","score":0.9}]',
+  })
+  assert.deepEqual(result, [
+    {
+      id: 'managed-1',
+      content: 'Remember espresso',
+      score: 0.9,
+      path: undefined,
+      metadata: undefined,
+    },
+  ])
+})
+
+test('parseOpenclawMemorySearchJson extracts array payloads after plugin log preambles', () => {
+  const result = parseOpenclawMemorySearchJson(
+    '[plugins] memory-clawmaster-powermem: plugin registered\n' +
+      '[{"id":"managed-2","content":"Remember pour-over","score":0.8}]',
+  )
+
+  assert.deepEqual(result, [
+    {
+      id: 'managed-2',
+      content: 'Remember pour-over',
+      score: 0.8,
+      path: undefined,
+      metadata: undefined,
+    },
+  ])
 })
