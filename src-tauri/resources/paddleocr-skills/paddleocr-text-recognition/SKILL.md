@@ -1,4 +1,4 @@
-﻿---
+---
 name: paddleocr-text-recognition
 description: Extracts text (with locations) from images and PDF documents using PaddleOCR.
 metadata:
@@ -8,7 +8,8 @@ metadata:
         - PADDLEOCR_OCR_API_URL
         - PADDLEOCR_ACCESS_TOKEN
         - PADDLEOCR_OCR_TIMEOUT
-      bins:\n        - node
+      bins:
+        - node
     primaryEnv: PADDLEOCR_ACCESS_TOKEN
     emoji: "馃敜"
     homepage: https://github.com/PaddlePaddle/PaddleOCR/tree/main/skills/paddleocr-text-recognition
@@ -231,4 +232,3 @@ node scripts/smoke_test.mjs
 ```
 
 This tests configuration and API connectivity.
-

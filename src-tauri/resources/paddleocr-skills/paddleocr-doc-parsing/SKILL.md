@@ -1,4 +1,4 @@
-﻿---
+---
 name: paddleocr-doc-parsing
 description: Complex document parsing with PaddleOCR. Intelligently converts complex PDFs and document images into Markdown and JSON files that preserve the original structure.
 metadata:
@@ -8,7 +8,8 @@ metadata:
         - PADDLEOCR_DOC_PARSING_API_URL
         - PADDLEOCR_ACCESS_TOKEN
         - PADDLEOCR_DOC_PARSING_TIMEOUT
-      bins:\n        - node
+      bins:
+        - node
     primaryEnv: PADDLEOCR_ACCESS_TOKEN
     emoji: "馃搫"
     homepage: https://github.com/PaddlePaddle/PaddleOCR/tree/main/skills/paddleocr-doc-parsing
@@ -304,4 +305,3 @@ node scripts/smoke_test.mjs
 ```
 
 This tests configuration and optionally API connectivity.
-

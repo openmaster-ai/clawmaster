@@ -26,6 +26,7 @@
     "dev": "npm run dev --workspace=@openclaw-manager/web",
     "dev:web": "npm run dev --workspace=@openclaw-manager/backend & npm run dev --workspace=@openclaw-manager/web",
     "dev:backend": "npm run dev --workspace=@openclaw-manager/backend",
+    "dev:windows": "scripts\\openclaw-start.cmd",
     "build": "npm run build --workspace=@openclaw-manager/web",
     "build:backend": "npm run build --workspace=@openclaw-manager/backend",
     "prepare:tauri-memory-plugin": "node scripts/prepare-tauri-memory-plugin.mjs",

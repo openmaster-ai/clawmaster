@@ -107,8 +107,13 @@ Download the latest installer from [GitHub Releases](https://github.com/clawmast
 git clone https://github.com/clawmaster-ai/clawmaster.git
 cd clawmaster
 npm install
-npm run dev:web     # web app + backend
-npm run tauri:dev   # desktop app
+npm run dev:web
+
+# Windows helper
+npm run dev:windows
+
+# Desktop app
+npm run tauri:dev
 ```
 
 Requirements: Node.js 20+. For Tauri desktop builds, also Rust — see [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites/).
