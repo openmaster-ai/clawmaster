@@ -185,4 +185,32 @@ describe('ModelsPage', () => {
     expect(screen.getByText(/Available models:/)).not.toHaveTextContent('DeepSeek V3')
     expect(screen.getByText(/Available models:/)).not.toHaveTextContent('DeepSeek R1')
   })
+
+  it('preserves saved model lists for built-in providers outside the stale ERNIE migration case', async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      agents: {
+        defaults: {
+          model: { primary: 'openai/gpt-4.1-custom' },
+        },
+      },
+      models: {
+        providers: {
+          openai: {
+            apiKey: 'sk-openai',
+            models: [
+              { id: 'gpt-4.1-custom', name: 'GPT-4.1 Custom' },
+              { id: 'o3-enterprise', name: 'o3 Enterprise' },
+            ],
+          },
+        },
+      },
+    })
+
+    render(<ModelsPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+    expect(screen.getByText(/Available models:/)).toHaveTextContent('GPT-4.1 Custom')
+    expect(screen.getByText(/Available models:/)).toHaveTextContent('o3 Enterprise')
+    expect(screen.getByText(/Available models:/)).not.toHaveTextContent('GPT-4.1 Mini')
+  })
 })

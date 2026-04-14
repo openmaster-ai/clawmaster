@@ -30,6 +30,14 @@ function splitProviderIds(providerIds: string[]) {
   }
 }
 
+function shouldUseCanonicalErnieCatalog(providerId: string, models: Array<{ id?: string; name?: string }> | undefined) {
+  if (providerId !== 'baidu-aistudio' || !models?.length) {
+    return false
+  }
+
+  return models.some((model) => model?.id === 'deepseek-v3' || model?.id === 'deepseek-r1')
+}
+
 function ProviderBadge({ providerId }: { providerId: string }) {
   const { t } = useTranslation()
   if (PROVIDER_BADGES[providerId as keyof typeof PROVIDER_BADGES] !== 'golden-sponsor') {
@@ -209,7 +217,9 @@ function ProviderCard({
   const [testResult, setTestResult] = useState<boolean | null>(null)
   const adapter = getSetupAdapter()
   const knownProvider = PROVIDERS[providerId]
-  const displayModels = knownProvider?.models ?? provider.models
+  const displayModels = shouldUseCanonicalErnieCatalog(providerId, provider.models)
+    ? knownProvider?.models
+    : provider.models ?? knownProvider?.models
 
   const handleTest = async () => {
     setTesting(true)
