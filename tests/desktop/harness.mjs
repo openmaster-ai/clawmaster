@@ -17,7 +17,15 @@ const APP_READY_TIMEOUT_MS = 45_000
 const MAC_LAUNCH_SMOKE_MS = 5_000
 const CLEANUP_TIMEOUT_MS = 10_000
 const NAVIGATION_TIMEOUT_MS = 15_000
+const WEBDRIVER_SESSION_RETRY_DELAY_MS = 1_500
+const WEBDRIVER_SESSION_MAX_ATTEMPTS = 3
 const CAPABILITIES_TITLE_PATTERN = /(Capability Center|Assistant Capabilities|能力中心|助手能力|機能センター|アシスタント機能)/
+const RETRYABLE_WEBDRIVER_SESSION_ERROR_PATTERNS = [
+  /\bECONNRESET\b/i,
+  /\bECONNREFUSED\b/i,
+  /socket hang up/i,
+  /Connection refused/i,
+]
 const ARTIFACT_DIR = process.env.CLAWMASTER_DESKTOP_ARTIFACT_DIR
   ? path.resolve(process.env.CLAWMASTER_DESKTOP_ARTIFACT_DIR)
   : path.join(os.tmpdir(), 'clawmaster-desktop-artifacts')
@@ -383,6 +391,61 @@ function waitForPort(port, timeoutMs) {
   })
 }
 
+function sleep(delayMs) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs)
+  })
+}
+
+export function isRetryableWebdriverSessionError(error) {
+  const details = error instanceof Error
+    ? [error.message, error.stack].filter(Boolean).join('\n')
+    : String(error)
+  return RETRYABLE_WEBDRIVER_SESSION_ERROR_PATTERNS.some((pattern) => pattern.test(details))
+}
+
+export async function buildWebdriverSessionWithRetry(options) {
+  const {
+    build,
+    reset,
+    onRetry,
+    maxAttempts = WEBDRIVER_SESSION_MAX_ATTEMPTS,
+    retryDelayMs = WEBDRIVER_SESSION_RETRY_DELAY_MS,
+  } = options
+
+  assert.equal(typeof build, 'function', 'buildWebdriverSessionWithRetry requires a build function')
+
+  let attempt = 0
+  let lastError
+
+  while (attempt < maxAttempts) {
+    attempt += 1
+    try {
+      return await build()
+    } catch (error) {
+      lastError = error
+      if (attempt >= maxAttempts || !isRetryableWebdriverSessionError(error)) {
+        throw error
+      }
+
+      await onRetry?.({
+        attempt,
+        maxAttempts,
+        delayMs: retryDelayMs,
+        error,
+      })
+      await reset?.({
+        attempt,
+        maxAttempts,
+        error,
+      })
+      await sleep(retryDelayMs)
+    }
+  }
+
+  throw lastError
+}
+
 async function ensureDesktopBinary() {
   if (process.env.CLAWMASTER_DESKTOP_SKIP_BUILD === '1' && await pathExists(getDesktopBinaryPath())) {
     return getDesktopBinaryPath()
@@ -543,13 +606,36 @@ async function startTauriDriver() {
 }
 
 async function runWebdriverSmoke(binaryPath) {
-  const tauriDriver = await startTauriDriver()
+  const tauriDriverAttempts = []
+  let tauriDriver = await startTauriDriver()
   let driver
   let currentStep = 'starting webdriver session'
 
   const setStep = (step) => {
     currentStep = step
     console.log(`[desktop-smoke] step=${step}`)
+  }
+
+  const flushTauriDriverLogs = (driverHandle = tauriDriver) => {
+    if (!driverHandle) {
+      return
+    }
+    tauriDriverAttempts.push(driverHandle.getLogs())
+  }
+
+  const getCombinedTauriDriverLogs = (includeCurrent = false) => {
+    const entries = includeCurrent && tauriDriver
+      ? [...tauriDriverAttempts, tauriDriver.getLogs()]
+      : tauriDriverAttempts
+
+    return {
+      stdout: entries
+        .map((entry, index) => `--- tauri-driver attempt ${index + 1} stdout ---\n${entry.stdout ?? ''}`)
+        .join('\n'),
+      stderr: entries
+        .map((entry, index) => `--- tauri-driver attempt ${index + 1} stderr ---\n${entry.stderr ?? ''}`)
+        .join('\n'),
+    }
   }
 
   try {
@@ -559,10 +645,28 @@ async function runWebdriverSmoke(binaryPath) {
     capabilities.set('tauri:options', { application: binaryPath })
 
     setStep('connecting webdriver session')
-    driver = await new Builder()
-      .usingServer(`http://127.0.0.1:${TAURI_DRIVER_PORT}`)
-      .withCapabilities(capabilities)
-      .build()
+    driver = await buildWebdriverSessionWithRetry({
+      async build() {
+        return new Builder()
+          .usingServer(`http://127.0.0.1:${TAURI_DRIVER_PORT}`)
+          .withCapabilities(capabilities)
+          .build()
+      },
+      async reset() {
+        const previousTauriDriver = tauriDriver
+        flushTauriDriverLogs(previousTauriDriver)
+        tauriDriver = null
+        await settleWithin(terminateChild(previousTauriDriver.child), CLEANUP_TIMEOUT_MS)
+        tauriDriver = await startTauriDriver()
+      },
+      async onRetry({ attempt, maxAttempts, delayMs, error }) {
+        const details = error instanceof Error ? error.message : String(error)
+        setStep(`retrying webdriver session ${attempt + 1}/${maxAttempts}`)
+        console.warn(
+          `[desktop-smoke] webdriver session attempt ${attempt}/${maxAttempts} failed with retryable bootstrap error: ${details}. Retrying in ${delayMs}ms.`,
+        )
+      },
+    })
 
     setStep('waiting for initial shell')
     await driver.wait(
@@ -619,7 +723,7 @@ async function runWebdriverSmoke(binaryPath) {
       return {
         mode: 'webdriver',
         details: `validated desktop shell navigation, desktop settings, and danger gating (${titleText})`,
-        logs: tauriDriver.getLogs(),
+        logs: getCombinedTauriDriverLogs(true),
       }
     }
 
@@ -675,7 +779,7 @@ async function runWebdriverSmoke(binaryPath) {
       return {
         mode: 'webdriver',
         details: `continued from setup wizard into desktop shell and validated settings gating (${titleText})`,
-        logs: tauriDriver.getLogs(),
+        logs: getCombinedTauriDriverLogs(true),
       }
     }
 
@@ -693,7 +797,7 @@ async function runWebdriverSmoke(binaryPath) {
     return {
       mode: 'webdriver',
       details: 'reached desktop startup shell on a clean runtime',
-      logs: tauriDriver.getLogs(),
+      logs: getCombinedTauriDriverLogs(true),
     }
   } catch (error) {
     if (driver) {
@@ -707,13 +811,15 @@ async function runWebdriverSmoke(binaryPath) {
         diagnostics,
       })
     }
-    await persistDriverLogs(tauriDriver.getLogs(), 'desktop-smoke-failure')
+    await persistDriverLogs(getCombinedTauriDriverLogs(true), 'desktop-smoke-failure')
     throw error
   } finally {
     if (driver) {
       await settleWithin(driver.quit(), CLEANUP_TIMEOUT_MS)
     }
-    await settleWithin(terminateChild(tauriDriver.child), CLEANUP_TIMEOUT_MS)
+    if (tauriDriver) {
+      await settleWithin(terminateChild(tauriDriver.child), CLEANUP_TIMEOUT_MS)
+    }
   }
 }
 
