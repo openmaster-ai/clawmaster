@@ -152,12 +152,12 @@ clawmaster doctor
 
 | 機能 | ステータス | 内容 |
 |---|---|---|
-| Setup | リリース済み | ウィザード、16 プロバイダー、6 チャンネルタイプ、Profile 管理 |
-| Observe | リリース済み | ClawProbe 統合、コスト / トークン / ヘルスダッシュボード |
-| Save | 開発中 | PowerMem UI、seekdb 統合、トークン削減ワークフロー |
-| Apply | 計画中 | 写真 OCR、請求書処理、フラッシュカードツール |
-| Build | 計画中 | 対話型エージェントビルダー（LangChain DeepAgents） |
-| Guard | 計画中 | キー暗号化、支出制限、RBAC |
+| セットアップ | リリース済み | ウィザード、16 プロバイダー、6 チャンネルタイプ、Profile 管理 |
+| 観測 | リリース済み | ClawProbe 統合、コスト / トークン / ヘルスダッシュボード |
+| 節約 | 開発中 | PowerMem UI、seekdb 統合、トークン削減ワークフロー |
+| 活用 | 計画中 | 写真 OCR、請求書処理、フラッシュカードツール |
+| 構築 | 計画中 | 対話型エージェントビルダー（LangChain DeepAgents） |
+| ガード | 計画中 | キー暗号化、支出制限、RBAC |
 
 [`label:roadmap`](https://github.com/clawmaster-ai/clawmaster/issues?q=label%3Aroadmap) でオープンな issue を確認できます。作業を始める前に issue にコメントを — ロードマップ機能を完成させたコアコントリビューターは OpenClaw チームからモデルクレジットを受け取れます。
 
