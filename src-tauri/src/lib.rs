@@ -5600,6 +5600,83 @@ fn run_system_command(cmd: String, args: Vec<String>) -> Result<String, String> 
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FetchProviderCatalogPayload {
+    url: String,
+    headers: std::collections::HashMap<String, String>,
+}
+
+#[tauri::command]
+fn fetch_provider_catalog(payload: FetchProviderCatalogPayload) -> Result<String, String> {
+    let mut curl_config = String::from("silent\nshow-error\nlocation\nmax-time = 10\n");
+    for (key, value) in payload.headers {
+        curl_config.push_str("header = ");
+        curl_config.push_str(&serde_json::to_string(&format!("{key}: {value}")).map_err(|e| {
+            cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e)
+        })?);
+        curl_config.push('\n');
+    }
+    curl_config.push_str("write-out = \"\\n__CLAWMASTER_STATUS__:%{http_code}\"\n");
+    curl_config.push_str("url = ");
+    curl_config.push_str(
+        &serde_json::to_string(&payload.url)
+            .map_err(|e| cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e))?,
+    );
+    curl_config.push('\n');
+
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let output = run_wsl_shell(&distro, "curl --config -", Some(&curl_config))?;
+        if output.code == 0 {
+            return Ok(output.stdout);
+        }
+        let msg = if !output.stderr.trim().is_empty() {
+            output.stderr
+        } else if !output.stdout.trim().is_empty() {
+            output.stdout
+        } else {
+            format!("exit {}", output.code)
+        };
+        return Err(cmd_err_d("SYSTEM_CMD_FAILED", msg.trim()));
+    }
+
+    let program = resolve_system_command_path("curl");
+    let mut child = Command::new(program)
+        .args(["--config", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| cmd_err_d("SYSTEM_CMD_SPAWN_FAILED", e))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(curl_config.as_bytes())
+            .map_err(|e| cmd_err_d("SYSTEM_CMD_STDIN_WRITE_FAILED", e))?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| cmd_err_d("SYSTEM_CMD_WAIT_FAILED", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        let msg = if !stderr.trim().is_empty() {
+            stderr
+        } else if !stdout.trim().is_empty() {
+            stdout
+        } else {
+            format!("exit {:?}", output.status.code())
+        };
+        Err(cmd_err_d("SYSTEM_CMD_FAILED", msg.trim()))
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -5650,6 +5727,7 @@ pub fn run() {
             install_ollama,
             start_ollama,
             run_system_command,
+            fetch_provider_catalog,
         ])
         .setup(|app| {
             if let Ok(resource_dir) = app.path().resource_dir() {

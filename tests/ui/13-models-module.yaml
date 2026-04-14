@@ -2,7 +2,7 @@ suite: models-module
 name: 模型配置功能
 description: |
   验证模型配置页面的完整功能：
-  提供商列表、赞助商优先级、添加提供商、测试连接、凭证入口、API Key 脱敏、默认模型指示
+  提供商列表、赞助商优先级、添加提供商、ERNIE 文案与赠送额度、测试连接、凭证入口、API Key 脱敏、默认模型指示
 
 preconditions:
   - dev server 已启动（{BASE_URL} 可访问）
@@ -38,7 +38,7 @@ cases:
       - 每个已配置提供商显示为卡片
       - 卡片包含：状态圆点 + 提供商名称
       - 金牌赞助提供商显示"金牌赞助"
-      - 若已配置 Baidu AI Studio，则其卡片优先显示在列表顶部
+      - 若已配置文心大模型，则其卡片优先显示在列表顶部
       - 默认提供商卡片显示蓝色"默认"标签
       - 卡片内显示 API Key（脱敏格式）
       - 卡片内显示"测试连接"按钮
@@ -56,28 +56,30 @@ cases:
     assertions:
       - 展开"添加提供商"面板
       - 面板顶部单独显示"金牌赞助"区块
-      - '“金牌赞助”区块包含 Baidu AI Studio'
+      - '“金牌赞助”区块包含 文心大模型'
       - 赞助商区块与"推荐提供商"区块分开呈现
-      - 默认选中 Baidu AI Studio
+      - 默认选中文心大模型
       - 显示密码类型凭证输入框
       - 显示"验证并添加"按钮
       - 显示"取消"按钮
-      - 显示"获取 Baidu AI Studio 令牌 →"链接
+      - 显示"获取 文心大模型 令牌 →"链接
+      - 显示"注册后可领取 100 万 Tokens，完善用户资料后再领取 100 万 Tokens。"
 
   - id: mod-03
-    name: Baidu 令牌入口与文案
+    name: ERNIE 令牌入口与文案
     steps:
       - action: click
         target: text("添加提供商")
       - action: wait
         duration: 300ms
       - action: screenshot
-        name: models-baidu-token-shortcut
+        name: models-ernie-token-shortcut
     assertions:
-      - 当前 provider 为"Baidu AI Studio"
-      - 显示"获取 Baidu AI Studio 令牌 →"
-      - 凭证输入框 placeholder 显示"输入 Baidu AI Studio 令牌"
-      - 不应显示"输入 Baidu AI Studio API Key"
+      - 当前 provider 为"文心大模型"
+      - 显示"获取 文心大模型 令牌 →"
+      - 凭证输入框 placeholder 显示"输入 文心大模型 令牌"
+      - 不应显示"输入 文心大模型 API Key"
+      - 显示 200 万 Tokens 总赠送说明
 
   - id: mod-04
     name: 测试连接功能
@@ -127,7 +129,7 @@ cases:
       - action: observe
         target: 提供商选择区域
     assertions:
-      - 默认显示主要提供商（Baidu AI Studio、OpenAI、Anthropic、Google 等）
+      - 默认显示主要提供商（文心大模型、OpenAI、Anthropic、Google 等）
       - 显示"更多 (N 个)"链接
       - 点击后展开全部提供商列表
       - 展开后显示 Ollama、DeepSeek、智谱 等全部选项
@@ -167,13 +169,13 @@ cases:
       - action: wait
         duration: 200ms
       - action: click
-        target: text("Baidu AI Studio")
+        target: text("文心大模型")
       - action: wait
         duration: 200ms
     assertions:
       - 切换到 OpenAI 后显示"输入 OpenAI API Key"
-      - 切回 Baidu AI Studio 后恢复"输入 Baidu AI Studio 令牌"
-      - 返回 Baidu 时旧输入值不应残留
+      - 切回文心大模型后恢复"输入 文心大模型 令牌"
+      - 返回文心大模型时旧输入值不应残留
 
   - id: mod-10
     name: 取消后重新打开应回到推荐 provider
@@ -193,5 +195,5 @@ cases:
       - action: screenshot
         name: models-reopen-panel
     assertions:
-      - 重新打开后面板默认仍指向"Baidu AI Studio"
-      - 再次显示"获取 Baidu AI Studio 令牌 →"
+      - 重新打开后面板默认仍指向"文心大模型"
+      - 再次显示"获取 文心大模型 令牌 →"

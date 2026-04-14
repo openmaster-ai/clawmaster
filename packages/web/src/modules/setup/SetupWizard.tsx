@@ -42,6 +42,7 @@ import {
   PRIMARY_PROVIDERS,
   PROVIDER_BADGES,
   getProviderCredentialLabel,
+  getProviderLabel,
   CHANNEL_TYPES,
   DEFAULT_ONBOARDING_STATE,
 } from './types'
@@ -872,7 +873,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           <div className="bg-card border border-border rounded-lg divide-y divide-border text-sm">
             <div className="flex justify-between px-4 py-3">
               <span className="text-muted-foreground">{t('setup.provider')}</span>
-              <span>{PROVIDERS[onboard.provider]?.label ?? onboard.provider}</span>
+              <span>{getProviderLabel(onboard.provider, i18n.language)}</span>
             </div>
             <div className="flex justify-between px-4 py-3">
               <span className="text-muted-foreground">{t('setup.defaultModel')}</span>
@@ -1404,6 +1405,7 @@ function ProviderStep({
   const otherIds = visibleIds.filter((providerId) => !isGoldenSponsor(providerId))
   const providerCfg = PROVIDERS[onboard.provider]
   const credentialLabel = getProviderCredentialLabel(onboard.provider, i18n.language)
+  const providerLabel = getProviderLabel(onboard.provider, i18n.language)
 
   return (
     <div className="fullscreen-step">
@@ -1472,8 +1474,13 @@ function ProviderStep({
               rel="noopener noreferrer"
               className="block mb-3 text-center text-xs text-primary hover:underline"
             >
-              {t('setup.getApiKey', { provider: providerCfg.label, credential: credentialLabel })}
+              {t('setup.getApiKey', { provider: providerLabel, credential: credentialLabel })}
             </a>
+          )}
+          {providerCfg?.noteKey && (
+            <p className="mb-3 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+              {t(providerCfg.noteKey)}
+            </p>
           )}
           {providerCfg?.needsBaseUrl && (
             <input
@@ -1487,7 +1494,7 @@ function ProviderStep({
           <input
             type="password"
             placeholder={t('setup.apiKeyPlaceholder', {
-              provider: providerCfg?.label ?? onboard.provider,
+              provider: providerLabel,
               credential: credentialLabel,
             })}
             value={onboard.apiKey}
@@ -1523,6 +1530,7 @@ function ProviderStepButton({
   selected: boolean
   onSelect: () => void
 }) {
+  const { i18n } = useTranslation()
   return (
     <button
       onClick={onSelect}
@@ -1533,7 +1541,7 @@ function ProviderStepButton({
       }`}
     >
       <span className="inline-flex items-center gap-2">
-        <span>{PROVIDERS[providerId].label}</span>
+        <span>{getProviderLabel(providerId, i18n.language)}</span>
         <ProviderBadge providerId={providerId} />
       </span>
     </button>

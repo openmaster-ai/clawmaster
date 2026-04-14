@@ -3,6 +3,7 @@ import { readConfigJsonOrEmpty, updateConfigJson } from '../configJson.js'
 import { agentsFromConfig, channelsFromConfig, modelsFromConfig } from '../derive.js'
 import { verifyChannelAccount } from '../services/channelVerify.js'
 import { probeOpenclawModelProvider, assertSafeProviderId } from '../services/modelProbe.js'
+import { assertSafeProviderCatalogBaseUrl, listProviderModels } from '../services/providerCatalogService.js'
 import { isRecord } from '../serverUtils.js'
 
 export function registerChannelsRoutes(app: express.Express): void {
@@ -71,6 +72,34 @@ export function registerChannelsRoutes(app: express.Express): void {
     }
     const out = await probeOpenclawModelProvider(raw)
     res.json(out)
+  })
+
+  app.post('/api/models/catalog', async (req, res) => {
+    const body = req.body as { providerId?: unknown; apiKey?: unknown; baseUrl?: unknown }
+    const providerId = typeof body.providerId === 'string' ? body.providerId.trim() : ''
+    const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim() : undefined
+    if (!providerId) {
+      return res.status(400).type('text').send('Missing providerId')
+    }
+    try {
+      assertSafeProviderId(providerId)
+      assertSafeProviderCatalogBaseUrl(providerId, baseUrl)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(400).type('text').send(msg)
+    }
+
+    try {
+      const models = await listProviderModels({
+        providerId,
+        apiKey: typeof body.apiKey === 'string' ? body.apiKey : undefined,
+        baseUrl,
+      })
+      res.json(models)
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(502).type('text').send(msg)
+    }
   })
 
   app.post('/api/models/default', async (req, res) => {

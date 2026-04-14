@@ -119,6 +119,7 @@ export const DEFAULT_ONBOARDING_STATE: OnboardingState = {
 
 export interface ProviderConfig {
   label: string
+  labelByLocale?: Partial<Record<'zh' | 'en' | 'ja', string>>
   models: Array<{ id: string; name: string }>
   defaultModel: string
   baseUrl?: string // 预置 baseUrl（如 DeepSeek、SiliconFlow）
@@ -133,6 +134,8 @@ export interface ProviderConfig {
   credentialLabel?: string
   /** 本地化凭证名称 */
   credentialLabelByLocale?: Partial<Record<'zh' | 'en' | 'ja', string>>
+  /** 提供商说明文案 i18n key */
+  noteKey?: string
 }
 
 export type ProviderBadgeTone = 'golden-sponsor'
@@ -252,7 +255,12 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     defaultModel: 'deepseek-ai/DeepSeek-V3',
   },
   'baidu-aistudio': {
-    label: 'Baidu AI Studio',
+    label: 'ERNIE LLM API',
+    labelByLocale: {
+      zh: '文心大模型',
+      en: 'ERNIE LLM API',
+      ja: 'ERNIE大規模言語モデルAPI',
+    },
     api: 'openai-completions',
     keyUrl: 'https://aistudio.baidu.com/usercenter/token',
     credentialLabel: 'Access Token',
@@ -261,14 +269,38 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
       en: 'Access Token',
       ja: 'アクセストークン',
     },
+    noteKey: 'providers.ernieQuotaNote',
     baseUrl: 'https://aistudio.baidu.com/llm/lmapi/v3',
     models: [
-      { id: 'deepseek-v3', name: 'DeepSeek V3' },
-      { id: 'deepseek-r1', name: 'DeepSeek R1' },
-      { id: 'ernie-4.5-turbo-128k-preview', name: 'ERNIE 4.5 Turbo' },
+      { id: 'ernie-5.0-thinking-preview', name: 'ERNIE 5.0 Thinking Preview' },
+      { id: 'ernie-4.5-turbo-vl', name: 'ERNIE 4.5 Turbo VL' },
+      { id: 'ernie-4.5-vl-28b-a3b-thinking', name: 'ERNIE 4.5 VL 28B A3B Thinking' },
+      { id: 'ernie-4.5-21b-a3b-thinking', name: 'ERNIE 4.5 21B A3B Thinking' },
+      { id: 'ernie-4.5-turbo-vl-preview', name: 'ERNIE 4.5 Turbo VL Preview' },
+      { id: 'ernie-4.5-turbo-vl-32k', name: 'ERNIE 4.5 Turbo VL 32K' },
+      { id: 'ernie-4.5-turbo-128k', name: 'ERNIE 4.5 Turbo 128K' },
+      { id: 'ernie-4.5-turbo-128k-preview', name: 'ERNIE 4.5 Turbo 128K Preview' },
+      { id: 'ernie-4.5-turbo-32k', name: 'ERNIE 4.5 Turbo 32K' },
+      { id: 'ernie-4.5-vl-28b-a3b', name: 'ERNIE 4.5 VL 28B A3B' },
+      { id: 'ernie-4.5-21b-a3b', name: 'ERNIE 4.5 21B A3B' },
+      { id: 'ernie-4.5-0.3b', name: 'ERNIE 4.5 0.3B' },
+      { id: 'ernie-x1.1-preview', name: 'ERNIE X1.1 Preview' },
+      { id: 'ernie-x1-turbo-32k', name: 'ERNIE X1 Turbo 32K' },
+      { id: 'ernie-4.0-turbo-128k', name: 'ERNIE 4.0 Turbo 128K' },
+      { id: 'ernie-4.0-turbo-8k-latest', name: 'ERNIE 4.0 Turbo 8K Latest' },
+      { id: 'ernie-4.0-turbo-8k', name: 'ERNIE 4.0 Turbo 8K' },
+      { id: 'ernie-4.0-8k-latest', name: 'ERNIE 4.0 8K Latest' },
+      { id: 'ernie-4.0-8k', name: 'ERNIE 4.0 8K' },
       { id: 'ernie-3.5-8k', name: 'ERNIE 3.5 8K' },
+      { id: 'ernie-speed-pro-128k', name: 'ERNIE Speed Pro 128K' },
+      { id: 'ernie-lite-pro-128k', name: 'ERNIE Lite Pro 128K' },
+      { id: 'ernie-speed-128k', name: 'ERNIE Speed 128K' },
+      { id: 'ernie-speed-8k', name: 'ERNIE Speed 8K' },
+      { id: 'ernie-lite-8k', name: 'ERNIE Lite 8K' },
+      { id: 'ernie-tiny-8k', name: 'ERNIE Tiny 8K' },
+      { id: 'ernie-char-8k', name: 'ERNIE Character 8K' },
     ],
-    defaultModel: 'deepseek-v3',
+    defaultModel: 'ernie-5.0-thinking-preview',
   },
   // ── 聚合平台 ──
   openrouter: {
@@ -354,11 +386,23 @@ export const PROVIDER_BADGES: Partial<Record<keyof typeof PROVIDERS, ProviderBad
   'baidu-aistudio': 'golden-sponsor',
 }
 
+function normalizeProviderLocale(locale?: string): 'zh' | 'en' | 'ja' | undefined {
+  return locale?.split('-')[0] as 'zh' | 'en' | 'ja' | undefined
+}
+
+export function getProviderLabel(providerId: string, locale?: string): string {
+  const provider = PROVIDERS[providerId]
+  if (!provider) return providerId
+
+  const normalizedLocale = normalizeProviderLocale(locale)
+  return provider.labelByLocale?.[normalizedLocale ?? 'en'] ?? provider.label
+}
+
 export function getProviderCredentialLabel(providerId: string, locale?: string): string {
   const provider = PROVIDERS[providerId]
   if (!provider) return 'API Key'
 
-  const normalizedLocale = locale?.split('-')[0] as 'zh' | 'en' | 'ja' | undefined
+  const normalizedLocale = normalizeProviderLocale(locale)
   return provider.credentialLabelByLocale?.[normalizedLocale ?? 'en'] ?? provider.credentialLabel ?? 'API Key'
 }
 

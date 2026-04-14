@@ -286,3 +286,48 @@ test('createApp rejects unsafe config dot-path writes', async () => {
     })
   })
 })
+
+test('createApp rejects untrusted provider catalog base URLs', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-frontend-catalog-'))
+  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><body>ClawMaster Service</body></html>', 'utf8')
+
+  await withFrontendDist(dir, async () => {
+    const app = createApp()
+    const server = app.listen(0, '127.0.0.1')
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('listening', resolve)
+        server.once('error', reject)
+      })
+
+      const address = server.address()
+      assert.ok(address && typeof address === 'object')
+      const baseUrl = `http://127.0.0.1:${address.port}`
+
+      const response = await fetch(`${baseUrl}/api/models/catalog`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          providerId: 'custom-openai-compatible',
+          apiKey: 'sk-test',
+          baseUrl: 'http://169.254.169.254/latest/meta-data',
+        }),
+      })
+
+      assert.equal(response.status, 400)
+      assert.match(await response.text(), /not available for custom providers in web mode/i)
+    } finally {
+      if (server.listening) {
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error) reject(error)
+            else resolve()
+          })
+        })
+      }
+    }
+  })
+})

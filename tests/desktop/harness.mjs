@@ -20,6 +20,9 @@ const NAVIGATION_TIMEOUT_MS = 15_000
 const WEBDRIVER_SESSION_RETRY_DELAY_MS = 1_500
 const WEBDRIVER_SESSION_MAX_ATTEMPTS = 3
 const CAPABILITIES_TITLE_PATTERN = /(Capability Center|Assistant Capabilities|能力中心|助手能力|機能センター|アシスタント機能)/
+const MODELS_TITLE_PATTERN = /(Model Configuration|模型配置|モデル設定)/
+const ERNIE_PROVIDER_PATTERN = /(ERNIE LLM API|文心大模型|ERNIE大規模言語モデルAPI)/
+const ERNIE_QUOTA_NOTE_PATTERN = /(1,000,000 free tokens|100 万 Tokens|100万トークン)/
 const RETRYABLE_WEBDRIVER_SESSION_ERROR_PATTERNS = [
   /\bECONNRESET\b/i,
   /\bECONNREFUSED\b/i,
@@ -822,6 +825,8 @@ async function runWebdriverSmoke(binaryPath) {
       await verifyDesktopSettingsSurface(driver)
       setStep('verifying danger confirmation dialog')
       await verifyDangerZoneConfirmation(driver)
+      setStep('verifying models provider switch flow')
+      await verifyDesktopModelsProviderSwitch(driver)
       setStep('opening capability runtime from palette')
       await runPaletteNavigation(driver, {
         query: 'verify',
@@ -845,7 +850,7 @@ async function runWebdriverSmoke(binaryPath) {
 
       return {
         mode: 'webdriver',
-        details: `validated desktop shell navigation, desktop settings, and danger gating (${titleText})`,
+        details: `validated desktop shell navigation, desktop settings, models provider switching, and danger gating (${titleText})`,
         logs: getCombinedTauriDriverLogs(true),
       }
     }
@@ -877,6 +882,8 @@ async function runWebdriverSmoke(binaryPath) {
       await verifyDesktopSettingsSurface(driver)
       setStep('verifying danger confirmation dialog after setup continuation')
       await verifyDangerZoneConfirmation(driver)
+      setStep('verifying models provider switch flow after setup continuation')
+      await verifyDesktopModelsProviderSwitch(driver)
       setStep('opening capability runtime from palette after setup continuation')
       await runPaletteNavigation(driver, {
         query: 'verify',
@@ -901,7 +908,7 @@ async function runWebdriverSmoke(binaryPath) {
 
       return {
         mode: 'webdriver',
-        details: `continued from setup wizard into desktop shell and validated settings gating (${titleText})`,
+        details: `continued from setup wizard into desktop shell and validated settings, models provider switching, and danger gating (${titleText})`,
         logs: getCombinedTauriDriverLogs(true),
       }
     }
@@ -1177,6 +1184,78 @@ async function verifyDangerZoneConfirmation(driver) {
   const cancelButton = await dialog.findElement(By.css('.button-secondary'))
   await cancelButton.click()
   await driver.wait(until.stalenessOf(dialog), NAVIGATION_TIMEOUT_MS)
+}
+
+async function verifyDesktopModelsProviderSwitch(driver) {
+  await clickSidebarLink(driver, '/models')
+  await waitForLocation(driver, '/models')
+  await driver.wait(until.elementLocated(By.id('models-providers')), NAVIGATION_TIMEOUT_MS)
+
+  const titleText = await readPageTitle(driver)
+  assert.match(titleText, MODELS_TITLE_PATTERN)
+
+  const addProviderTrigger = await driver.wait(
+    until.elementLocated(By.id('models-add-provider-trigger')),
+    NAVIGATION_TIMEOUT_MS,
+  )
+  await scrollElementIntoView(driver, addProviderTrigger)
+  await addProviderTrigger.click()
+
+  await driver.wait(until.elementLocated(By.id('models-add-provider')), NAVIGATION_TIMEOUT_MS)
+  await driver.wait(async () => {
+    const panel = await driver.findElement(By.id('models-add-provider'))
+    return (await panel.getAttribute('data-provider')) === 'baidu-aistudio'
+  }, NAVIGATION_TIMEOUT_MS)
+
+  let addProviderPanel = await driver.findElement(By.id('models-add-provider'))
+  await scrollElementIntoView(driver, addProviderPanel)
+
+  const panelText = await addProviderPanel.getText()
+  assert.match(panelText, ERNIE_PROVIDER_PATTERN)
+  assert.match(panelText, ERNIE_QUOTA_NOTE_PATTERN)
+
+  const apiKeyInput = await addProviderPanel.findElement(By.id('models-provider-api-key'))
+  const erniePlaceholder = await apiKeyInput.getAttribute('placeholder')
+  assert.match(erniePlaceholder, ERNIE_PROVIDER_PATTERN)
+
+  const providerNote = await addProviderPanel.findElements(By.css('#models-provider-note'))
+  assert.equal(providerNote.length, 1, 'ERNIE provider note should be visible')
+
+  const openAiButton = await addProviderPanel.findElement(By.css('button[data-provider-id="openai"]'))
+  await openAiButton.click()
+
+  await driver.wait(async () => {
+    const panel = await driver.findElement(By.id('models-add-provider'))
+    return (await panel.getAttribute('data-provider')) === 'openai'
+  }, NAVIGATION_TIMEOUT_MS)
+
+  addProviderPanel = await driver.findElement(By.id('models-add-provider'))
+  const openAiInput = await addProviderPanel.findElement(By.id('models-provider-api-key'))
+  const openAiPlaceholder = await openAiInput.getAttribute('placeholder')
+  assert.match(openAiPlaceholder, /OpenAI/)
+  assert.notEqual(openAiPlaceholder, erniePlaceholder)
+
+  const openAiNotes = await addProviderPanel.findElements(By.css('#models-provider-note'))
+  assert.equal(openAiNotes.length, 0, 'OpenAI provider should not show the ERNIE note')
+
+  const ernieButton = await addProviderPanel.findElement(By.css('button[data-provider-id="baidu-aistudio"]'))
+  await ernieButton.click()
+
+  await driver.wait(async () => {
+    const panel = await driver.findElement(By.id('models-add-provider'))
+    return (await panel.getAttribute('data-provider')) === 'baidu-aistudio'
+  }, NAVIGATION_TIMEOUT_MS)
+
+  addProviderPanel = await driver.findElement(By.id('models-add-provider'))
+  const restoredNotes = await addProviderPanel.findElements(By.css('#models-provider-note'))
+  assert.equal(restoredNotes.length, 1, 'ERNIE provider note should return after switching back')
+
+  await captureDriverArtifacts(driver, 'desktop-models-provider-switch', {
+    mode: 'webdriver',
+    page: 'models',
+    placeholderBefore: erniePlaceholder,
+    placeholderAfter: openAiPlaceholder,
+  })
 }
 
 async function captureDriverArtifacts(driver, name, metadata = {}) {

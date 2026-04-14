@@ -11,6 +11,7 @@ When the main app shell is available, the native WebDriver smoke now validates:
 - command palette section jump to `#settings-profile`
 - desktop-only Local Data read-only state in Settings
 - danger-zone confirmation gating in Settings
+- Models page add-provider flow with ERNIE/Wenxin branding, quota note, and provider switching
 - command palette async section jump to `#capability-runtime`
 - sidebar navigation from Capabilities to Gateway
 

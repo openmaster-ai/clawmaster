@@ -17,6 +17,12 @@ import { fail, ok } from '@/shared/adapters/types'
 import { getIsTauri } from '@/shared/adapters/platform'
 import { webFetchJson, webFetchVoid } from '@/shared/adapters/webHttp'
 import { unwrapDoubleNestedModelsInRoot } from '@/shared/unwrapDoubleNestedModels'
+import {
+  assertSafeProviderCatalogBaseUrl,
+  buildProviderCatalogRequest,
+  normalizeProviderCatalogResponse,
+  type ProviderCatalogModel,
+} from '@/shared/providerCatalog'
 import i18n from '@/i18n'
 
 export async function getConfigResult(): Promise<AdapterResult<OpenClawConfig>> {
@@ -129,6 +135,62 @@ export async function getModelsResult(): Promise<AdapterResult<ModelInfo[]>> {
     return ok(modelsFromConfig(c.data))
   }
   return webFetchJson<ModelInfo[]>('/api/models')
+}
+
+function parseCurlStatusOutput(raw: string) {
+  const marker = '\n__CLAWMASTER_STATUS__:'
+  const index = raw.lastIndexOf(marker)
+  if (index === -1) {
+    return { body: raw, status: 0 }
+  }
+
+  const body = raw.slice(0, index)
+  const statusText = raw.slice(index + marker.length).trim()
+  const status = Number.parseInt(statusText, 10)
+  return {
+    body,
+    status: Number.isFinite(status) ? status : 0,
+  }
+}
+
+export async function getProviderModelCatalogResult(input: {
+  providerId: string
+  apiKey?: string
+  baseUrl?: string
+}): Promise<AdapterResult<ProviderCatalogModel[]>> {
+  const providerId = input.providerId.trim()
+  if (!providerId) return fail(i18n.t('adapters.missingProviderId'))
+  if (!/^[a-zA-Z0-9._-]+$/.test(providerId)) return fail(i18n.t('adapters.invalidProviderId'))
+  try {
+    assertSafeProviderCatalogBaseUrl(providerId, input.baseUrl)
+  } catch (error: unknown) {
+    return fail(error instanceof Error ? error.message : String(error))
+  }
+
+  const request = buildProviderCatalogRequest(input)
+  if (!request) return ok([])
+
+  if (getIsTauri()) {
+    return fromPromise(async () => {
+      const raw = await tauriInvoke<string>('fetch_provider_catalog', {
+        url: request.url,
+        headers: request.headers,
+      })
+      const { body, status } = parseCurlStatusOutput(raw)
+      if (status < 200 || status >= 300) {
+        throw new Error(`Provider catalog request failed (${status || 'unknown'})`)
+      }
+
+      const payload = JSON.parse(body) as unknown
+      return normalizeProviderCatalogResponse(providerId, payload)
+    })
+  }
+
+  return webFetchJson<ProviderCatalogModel[]>('/api/models/catalog', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
 }
 
 export async function getAgentsResult(): Promise<AdapterResult<AgentInfo[]>> {

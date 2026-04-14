@@ -8,7 +8,7 @@
 
 import { execCommand } from '@/shared/adapters/platform'
 import { startGatewayResult, getGatewayStatusResult } from '@/shared/adapters/gateway'
-import { setConfigResult } from '@/shared/adapters/openclaw'
+import { getConfigResult, setConfigResult } from '@/shared/adapters/openclaw'
 import { detectSystemResult, probeHttpStatusResult } from '@/shared/adapters/system'
 import {
   CAPABILITIES,
@@ -76,8 +76,31 @@ const realOnboardingAdapter: OnboardingAdapter = {
     }
 
     const endpoint = baseUrl || cfg?.baseUrl || 'https://api.openai.com/v1'
-    const model = cfg?.models?.[0]?.id ?? 'gpt-4o-mini'
-    try {
+    const configResult = await getConfigResult()
+    const configuredProvider = configResult.success ? configResult.data?.models?.providers?.[provider] : undefined
+    const defaultModel = configResult.success ? configResult.data?.agents?.defaults?.model?.primary : undefined
+    const activeModelId = defaultModel?.startsWith(`${provider}/`)
+      ? defaultModel.slice(provider.length + 1)
+      : undefined
+    const configuredModel = configuredProvider?.models?.find((model) => {
+      const id = typeof model === 'string' ? model.trim() : model?.id?.trim()
+      return id && id === activeModelId
+    }) ?? configuredProvider?.models?.[0]
+    const configuredModelId = typeof configuredModel === 'string'
+      ? configuredModel.trim()
+      : configuredModel?.id?.trim()
+    const probeModels = [
+      activeModelId?.trim() || undefined,
+      cfg?.defaultModel,
+      cfg?.models?.[0]?.id,
+      configuredModelId,
+      'gpt-4o-mini',
+    ].filter((model, index, array): model is string => {
+      if (!model) return false
+      return array.indexOf(model) === index
+    })
+
+    const probeModel = async (model: string) => {
       const result = await probeHttpStatusResult({
         url: `${endpoint}/chat/completions`,
         method: 'POST',
@@ -89,6 +112,16 @@ const realOnboardingAdapter: OnboardingAdapter = {
         timeoutMs: 10000,
       })
       return result.success && result.data?.status === 200
+    }
+
+    try {
+      for (const model of probeModels) {
+        if (await probeModel(model)) {
+          return true
+        }
+      }
+
+      return false
     } catch {
       return false
     }
