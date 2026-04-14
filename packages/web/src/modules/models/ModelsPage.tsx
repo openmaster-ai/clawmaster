@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Sparkles } from 'lucide-react'
+import { Check, ChevronsUpDown, Sparkles } from 'lucide-react'
 import { platform } from '@/adapters'
 import { PasswordField } from '@/shared/components/PasswordField'
 import { getSetupAdapter } from '@/modules/setup/adapters'
 import { PROVIDERS, PRIMARY_PROVIDERS, PROVIDER_BADGES, getProviderCredentialLabel, getProviderLabel } from '@/modules/setup/types'
-import type { OpenClawConfig, ModelInfo } from '@/lib/types'
+import type { OpenClawConfig, ModelInfo, OpenClawModelProvider, OpenClawModelRef } from '@/lib/types'
 
 const providerBadgeToneClass = 'border-amber-400/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
 
@@ -30,12 +30,78 @@ function splitProviderIds(providerIds: string[]) {
   }
 }
 
+type ProviderModelOption = {
+  id: string
+  name: string
+}
+
 function shouldUseCanonicalErnieCatalog(providerId: string, models: Array<{ id?: string; name?: string }> | undefined) {
   if (providerId !== 'baidu-aistudio' || !models?.length) {
     return false
   }
 
   return models.some((model) => model?.id === 'deepseek-v3' || model?.id === 'deepseek-r1')
+}
+
+function normalizeModelOption(model: string | OpenClawModelRef | undefined): ProviderModelOption | null {
+  if (!model) return null
+  if (typeof model === 'string') {
+    const id = model.trim()
+    return id ? { id, name: id } : null
+  }
+
+  const id = model.id?.trim() || model.name?.trim()
+  if (!id) return null
+  return {
+    id,
+    name: model.name?.trim() || id,
+  }
+}
+
+function getProviderModelOptions(
+  providerId: string,
+  provider: OpenClawModelProvider,
+  currentModelId: string | null,
+): ProviderModelOption[] {
+  const knownProvider = PROVIDERS[providerId]
+  const sourceModels = shouldUseCanonicalErnieCatalog(providerId, provider.models as Array<{ id?: string; name?: string }> | undefined)
+    ? knownProvider?.models
+    : provider.models ?? knownProvider?.models ?? []
+
+  const options = sourceModels
+    .map((model) => normalizeModelOption(model))
+    .filter((model): model is ProviderModelOption => model !== null)
+
+  if (currentModelId && !options.some((option) => option.id === currentModelId)) {
+    options.unshift({ id: currentModelId, name: currentModelId })
+  }
+
+  return options.filter((option, index, array) => array.findIndex((item) => item.id === option.id) === index)
+}
+
+function getCurrentModelId(defaultModel: string, providerId: string): string | null {
+  const prefix = `${providerId}/`
+  if (!defaultModel.startsWith(prefix)) {
+    return null
+  }
+  return defaultModel.slice(prefix.length)
+}
+
+function getQuickPickModels(models: ProviderModelOption[], currentModelId: string | null) {
+  const quickPicks: ProviderModelOption[] = []
+
+  if (currentModelId) {
+    const current = models.find((model) => model.id === currentModelId)
+    if (current) quickPicks.push(current)
+  }
+
+  for (const model of models) {
+    if (quickPicks.some((item) => item.id === model.id)) continue
+    quickPicks.push(model)
+    if (quickPicks.length === 2) break
+  }
+
+  return quickPicks
 }
 
 function ProviderBadge({ providerId }: { providerId: string }) {
@@ -121,6 +187,7 @@ export default function Models() {
             providerId={providerId}
             provider={provider}
             isDefault={defaultModel.startsWith(providerId + '/')}
+            defaultModel={defaultModel}
             onRefresh={loadData}
           />
         ))}
@@ -206,20 +273,36 @@ function ProviderCard({
   providerId,
   provider,
   isDefault,
+  defaultModel,
+  onRefresh,
 }: {
   providerId: string
-  provider: any
+  provider: OpenClawModelProvider & { apiKey?: string; api_key?: string; api?: string }
   isDefault: boolean
+  defaultModel: string
   onRefresh: () => void
 }) {
   const { t, i18n } = useTranslation()
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<boolean | null>(null)
+  const [showModelPicker, setShowModelPicker] = useState(false)
+  const [selectedModelId, setSelectedModelId] = useState<string>('')
+  const [settingDefault, setSettingDefault] = useState(false)
+  const [setModelError, setSetModelError] = useState<string | null>(null)
   const adapter = getSetupAdapter()
-  const knownProvider = PROVIDERS[providerId]
-  const displayModels = shouldUseCanonicalErnieCatalog(providerId, provider.models)
-    ? knownProvider?.models
-    : provider.models ?? knownProvider?.models
+  const currentModelId = getCurrentModelId(defaultModel, providerId)
+  const displayModels = useMemo(
+    () => getProviderModelOptions(providerId, provider, currentModelId),
+    [providerId, provider, currentModelId],
+  )
+  const quickPicks = useMemo(
+    () => getQuickPickModels(displayModels, currentModelId),
+    [displayModels, currentModelId],
+  )
+
+  useEffect(() => {
+    setSelectedModelId(currentModelId || displayModels[0]?.id || '')
+  }, [currentModelId, displayModels])
 
   const handleTest = async () => {
     setTesting(true)
@@ -231,6 +314,22 @@ function ProviderCard({
     )
     setTestResult(ok)
     setTesting(false)
+  }
+
+  const handleSetDefaultModel = async () => {
+    if (!selectedModelId) return
+
+    try {
+      setSettingDefault(true)
+      setSetModelError(null)
+      await platform.setDefaultModel(`${providerId}/${selectedModelId}`)
+      await onRefresh()
+      setShowModelPicker(false)
+    } catch (error) {
+      setSetModelError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSettingDefault(false)
+    }
   }
 
   return (
@@ -246,6 +345,16 @@ function ProviderCard({
           )}
         </div>
         <div className="flex gap-2">
+          {displayModels.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowModelPicker((value) => !value)}
+              className="button-secondary inline-flex items-center gap-2 px-3 py-1"
+            >
+              <ChevronsUpDown className="h-4 w-4" />
+              {showModelPicker ? t('models.hideModelPicker') : t('models.chooseModel')}
+            </button>
+          )}
           <button
             onClick={handleTest}
             disabled={testing}
@@ -258,16 +367,118 @@ function ProviderCard({
         </div>
       </div>
 
-      {(provider.apiKey || provider.api_key) && (
-        <div className="mb-2 grid gap-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
-          <span className="text-muted-foreground">API Key:</span>
-          <PasswordField value={provider.apiKey || provider.api_key} className="flex-1" />
+      {quickPicks.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-border/70 bg-background/70 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-2">
+              <p className="control-label">{t('models.quickPicks')}</p>
+              <div className="flex flex-wrap gap-2">
+                {quickPicks.map((model) => {
+                  const isCurrent = model.id === currentModelId
+                  return (
+                    <span
+                      key={model.id}
+                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${
+                        isCurrent
+                          ? 'border-primary/30 bg-primary/10 text-primary'
+                          : 'border-border bg-card text-foreground/80'
+                      }`}
+                    >
+                      {isCurrent && <Check className="h-3.5 w-3.5" />}
+                      <span>{model.name}</span>
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+            {currentModelId && (
+              <span className="rounded-full bg-foreground px-2.5 py-1 text-[11px] font-medium text-background">
+                {t('models.current')}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
-      {displayModels?.length > 0 && (
-        <div className="text-sm text-muted-foreground">
-          {t('models.availableModels', { models: displayModels.map((m: any) => m.name || m.id).join(', ') })}
+      {(provider.apiKey || provider.api_key) && (
+        <div className="mb-2 grid gap-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+          <span className="text-muted-foreground">API Key:</span>
+          <PasswordField value={(provider.apiKey || provider.api_key) ?? ''} className="flex-1" />
+        </div>
+      )}
+
+      {showModelPicker && displayModels.length > 0 && (
+        <div
+          id={`models-provider-picker-${providerId}`}
+          className="mt-4 rounded-2xl border border-primary/15 bg-primary/[0.04] p-4"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold">{t('models.pickModel')}</p>
+              <p className="text-xs text-muted-foreground">{t('models.pickModelDesc')}</p>
+            </div>
+            <span className="text-xs font-mono text-muted-foreground">
+              {providerId}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-2">
+            {displayModels.map((model) => {
+              const selected = selectedModelId === model.id
+              const current = currentModelId === model.id
+              return (
+                <button
+                  key={model.id}
+                  type="button"
+                  onClick={() => setSelectedModelId(model.id)}
+                  className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition ${
+                    selected
+                      ? 'border-primary/40 bg-background shadow-sm'
+                      : 'border-border/80 bg-card/60 hover:border-primary/20 hover:bg-background/80'
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">{model.name}</p>
+                    <p className="text-xs font-mono text-muted-foreground">{model.id}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {current && (
+                      <span className="rounded-full border border-primary/25 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
+                        {t('models.current')}
+                      </span>
+                    )}
+                    {selected && (
+                      <span className="rounded-full bg-foreground px-2 py-1 text-[11px] font-medium text-background">
+                        {t('models.selected')}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          {setModelError && (
+            <p className="mt-3 text-xs text-red-500">{setModelError}</p>
+          )}
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowModelPicker(false)}
+              className="button-secondary px-3 py-1"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={handleSetDefaultModel}
+              disabled={!selectedModelId || selectedModelId === currentModelId || settingDefault}
+              className="button-primary px-3 py-1"
+            >
+              {settingDefault ? t('models.settingDefault') : t('models.setAsDefault')}
+            </button>
+          </div>
         </div>
       )}
     </div>

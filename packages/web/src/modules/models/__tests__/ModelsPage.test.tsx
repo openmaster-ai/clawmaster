@@ -5,6 +5,7 @@ import ModelsPage from '../ModelsPage'
 
 const mockGetConfig = vi.fn()
 const mockGetModels = vi.fn()
+const mockSetDefaultModel = vi.fn()
 const mockTestApiKey = vi.fn()
 const mockSetApiKey = vi.fn()
 
@@ -12,6 +13,7 @@ vi.mock('@/adapters', () => ({
   platform: {
     getConfig: (...args: any[]) => mockGetConfig(...args),
     getModels: (...args: any[]) => mockGetModels(...args),
+    setDefaultModel: (...args: any[]) => mockSetDefaultModel(...args),
   },
 }))
 
@@ -29,6 +31,7 @@ describe('ModelsPage', () => {
     vi.clearAllMocks()
     await changeLanguage('en')
     mockGetModels.mockResolvedValue([])
+    mockSetDefaultModel.mockResolvedValue(undefined)
     mockGetConfig.mockResolvedValue({
       agents: {
         defaults: {
@@ -180,10 +183,17 @@ describe('ModelsPage', () => {
     render(<ModelsPage />)
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
-    expect(screen.getByText(/Available models:/)).toHaveTextContent('ERNIE 5.0 Thinking Preview')
-    expect(screen.getByText(/Available models:/)).toHaveTextContent('ERNIE 4.5 Turbo VL')
-    expect(screen.getByText(/Available models:/)).not.toHaveTextContent('DeepSeek V3')
-    expect(screen.getByText(/Available models:/)).not.toHaveTextContent('DeepSeek R1')
+    expect(screen.getByText('ERNIE 5.0 Thinking Preview')).toBeInTheDocument()
+    expect(screen.getByText('deepseek-v3')).toBeInTheDocument()
+    expect(screen.queryByText('ERNIE 4.5 Turbo VL')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
+    const picker = document.getElementById('models-provider-picker-baidu-aistudio')
+    expect(picker).not.toBeNull()
+    expect(within(picker!).getByRole('button', { name: /ERNIE 5.0 Thinking Preview/ })).toBeInTheDocument()
+    expect(within(picker!).getByRole('button', { name: /^ERNIE 4\.5 Turbo VL ernie-4\.5-turbo-vl$/ })).toBeInTheDocument()
+    expect(within(picker!).queryByRole('button', { name: /DeepSeek V3/ })).not.toBeInTheDocument()
+    expect(within(picker!).queryByRole('button', { name: /DeepSeek R1/ })).not.toBeInTheDocument()
   })
 
   it('preserves saved model lists for built-in providers outside the stale ERNIE migration case', async () => {
@@ -209,8 +219,50 @@ describe('ModelsPage', () => {
     render(<ModelsPage />)
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
-    expect(screen.getByText(/Available models:/)).toHaveTextContent('GPT-4.1 Custom')
-    expect(screen.getByText(/Available models:/)).toHaveTextContent('o3 Enterprise')
-    expect(screen.getByText(/Available models:/)).not.toHaveTextContent('GPT-4.1 Mini')
+    expect(screen.getByText('GPT-4.1 Custom')).toBeInTheDocument()
+    expect(screen.getByText('o3 Enterprise')).toBeInTheDocument()
+    expect(screen.queryByText('GPT-4.1 Mini')).not.toBeInTheDocument()
+  })
+
+  it('lets users pick and set a model from the configured provider card', async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      agents: {
+        defaults: {
+          model: { primary: 'baidu-aistudio/ernie-5.0-thinking-preview' },
+        },
+      },
+      models: {
+        providers: {
+          'baidu-aistudio': {
+            apiKey: 'sk-baidu',
+            baseUrl: 'https://aistudio.baidu.com/llm/lmapi/v3',
+            models: [
+              { id: 'ernie-5.0-thinking-preview', name: 'ERNIE 5.0 Thinking Preview' },
+              { id: 'ernie-4.5-turbo-vl', name: 'ERNIE 4.5 Turbo VL' },
+              { id: 'ernie-4.5-21b-a3b-thinking', name: 'ERNIE 4.5 21B A3B Thinking' },
+            ],
+          },
+        },
+      },
+    })
+
+    render(<ModelsPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
+
+    const picker = document.getElementById('models-provider-picker-baidu-aistudio')
+    expect(picker).not.toBeNull()
+
+    fireEvent.click(within(picker!).getByRole('button', { name: /ERNIE 4.5 Turbo VL/ }))
+    await waitFor(() => {
+      expect(within(picker!).getByRole('button', { name: 'Set as Default' })).toBeEnabled()
+    })
+    fireEvent.click(within(picker!).getByRole('button', { name: 'Set as Default' }))
+
+    await waitFor(() => {
+      expect(mockSetDefaultModel).toHaveBeenCalledWith('baidu-aistudio/ernie-4.5-turbo-vl')
+    })
   })
 })
