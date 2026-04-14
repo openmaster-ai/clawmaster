@@ -1,146 +1,261 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+Entry point for AI coding agents working in this repository.
+Read this file before any other. Full contributor guide: [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## Project Overview
+---
 
-ClawMaster (龙虾管理大师) is a desktop/web management platform for the OpenClaw ecosystem. It wraps the OpenClaw CLI in a GUI using Tauri 2 (desktop) or Express (web), with a React frontend. All data is config-driven from `~/.openclaw/openclaw.json` -- no database.
+## Before writing any code
 
-## Common Commands
+> [!IMPORTANT]
+> Complete these steps before touching the codebase. They prevent duplicate work
+> and give the PR a clear issue to close.
 
+**1. Search existing issues and PRs**
+→ https://github.com/clawmaster-ai/clawmaster/issues
+
+**2. If no issue exists, create one using the right template:**
+
+| Situation | Template link |
+|---|---|
+| Something is broken | [Bug Report](https://github.com/clawmaster-ai/clawmaster/issues/new?template=bug_report.yml) |
+| New capability or improvement | [Feature Request](https://github.com/clawmaster-ai/clawmaster/issues/new?template=feature_request.yml) |
+| Picking up a roadmap item | [Contributor Sign-Up](https://github.com/clawmaster-ai/clawmaster/issues/new?template=contributor-signup.yml) |
+| Question about the codebase | [Discussions](https://github.com/clawmaster-ai/clawmaster/discussions) (not an issue) |
+
+**3. Comment on the issue** — state what you plan to do and how.
+
+**4. Create a branch:**
 ```bash
-# Install dependencies
-npm install
-
-# Development
-npm run dev           # Web frontend only (port 3000)
-npm run dev:web       # Backend (port 3001) + frontend together
-npm run dev:backend   # Express backend only
-npm run tauri:dev     # Desktop app (Tauri)
-
-# Build
-npm run build         # Web production build
-npm run tauri:build   # Desktop production build (platform-specific)
-
-# Test
-npm test              # Run all Vitest tests (once)
-npm run test:watch --workspace=@openclaw-manager/web  # Watch mode
-
-# Tauri build on Linux requires PKG_CONFIG_PATH
-export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
-export PKG_CONFIG_PATH_x86_64_unknown_linux_gnu=$PKG_CONFIG_PATH
+git checkout -b feat/short-description main   # or fix/, docs/, test/, chore/
 ```
 
-## Architecture
+---
 
-### Monorepo Structure
+## Adding a feature
 
-- **`packages/web/`** -- React 18 frontend (Vite, TypeScript, Tailwind CSS, React Router 7)
-- **`packages/backend/`** -- Express API server (port 3001) with WebSocket for log streaming; uses `execFile` (not shell) to prevent injection
-- **`src-tauri/`** -- Tauri 2 desktop backend (Rust), 9 commands that shell out to OpenClaw CLI
-- **`bin/clawmaster.mjs`** -- CLI entry point
-- **`tests/ui/`** -- YAML-based UI test plans (manual, not automated)
+New features are **capability modules** in `packages/web/src/modules/<name>/`.
+The module system auto-discovers anything placed there — no registration step.
 
-### Two-Mode Runtime
+### Minimal structure
 
-The app runs in two modes detected by `shared/adapters/platform.ts`:
-- **Desktop (Tauri)**: Frontend calls Rust commands via `@tauri-apps/api` -> `invoke()`
-- **Web (Express)**: Frontend proxies `/api` to Express backend (Vite dev proxy on port 3000 -> 3001)
+```
+modules/my-feature/
+├── index.ts              ← exports ClawModule (required)
+├── MyFeaturePage.tsx     ← main page component
+└── __tests__/
+    └── myFeature.test.ts ← required
+```
 
-### Module System
-
-New features are built as **capability modules** in `packages/web/src/modules/`. Each module exports a `ClawModule` interface from its `index.ts`:
+### `index.ts` shape
 
 ```typescript
-// modules/observe/index.ts
+import { lazy } from 'react'
+import type { ClawModule } from '@/app/modules/types'
+
 export default {
-  id: 'observe',
-  name: '可观测',
-  icon: 'bar-chart',
-  route: { path: '/observe', component: lazy(() => import('./ObservePage')) },
-  navOrder: 20,
+  id: 'my-feature',
+  name: 'myFeature.title',    // i18n key — never a raw string
+  icon: 'lucide-icon-name',
+  route: { path: '/my-feature', component: lazy(() => import('./MyFeaturePage')) },
+  navOrder: 50,
 } satisfies ClawModule
 ```
 
-Modules are auto-discovered via `import.meta.glob` in `modules/registry.ts` and registered in `App.tsx` for routing and sidebar navigation. To add a new module: create `modules/<name>/index.ts` exporting a `ClawModule` -- it will appear automatically.
+### Data fetching
 
-Current modules:
-- `dashboard` -- system overview + task-driven entry cards / checklist drawer
-- `docs` -- local-first documentation hub with CLI fallback
-- `gateway` -- runtime status and gateway config
-- `channels` -- channel setup and account management
-- `models` -- provider and default model management
-- `skills` -- ClawHub / skill install and scan flows
-- `plugins` -- plugin inventory and enable/disable flows
-- `mcp` -- MCP install/import/manual config
-- `sessions` -- runtime sessions
-- `observe` -- cost/token monitoring with Recharts
-- `memory` -- native OpenClaw memory status, search, and file management
-- `settings` -- profile, diagnostics, updates, danger zone
-- `config` -- raw `openclaw.json` editor
-- `agents` -- agent inventory
-- `setup` -- installation wizard + onboarding
+Use `useAdapterCall` — not raw `useState`/`useEffect`:
 
-The **setup module** is special: it exports `SetupWizard`, `getSetupAdapter` (with `demoSetupAdapter` and `realSetupAdapter` variants), and types. The onboarding flow covers API key entry, model selection, gateway config, and channel setup for all 16 supported providers and 6 channel types.
+```typescript
+import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
+const { data, loading, error } = useAdapterCall(myAdapter.getSomething, { pollMs: 5000 })
+```
 
-### Shared Layer
+Add the adapter in `shared/adapters/my-feature.ts` returning `AdapterResult<T>`:
 
-- **`shared/adapters/`** -- Split per-tool adapters (clawhub, clawprobe, clawprobe-demo, powermem, mirror), each returning `AdapterResult<T>` from `shared/adapters/types.ts`. Use `ok()`, `fail()`, and `wrapAsync()` helpers.
-- **`shared/adapters/platform.ts`** -- Single source for `isTauri()` detection, `execCommand()`, and `execCommandJson<T>()`. All CLI calls go through here.
-- **`shared/hooks/useAdapterCall.ts`** -- Generic data-fetching hook replacing copy-paste `useState`/`useEffect` patterns. Supports polling and auto-fetch.
-- **`shared/components/`** -- `ErrorBoundary`, `LoadingState`, `CapabilityGuard`, `PasswordField`
+```typescript
+import { ok, fail, wrapAsync } from '@/shared/adapters/types'
+export const myAdapter = {
+  getSomething: () => wrapAsync(async () => {
+    const raw = await execCommandJson<MyType>('openclaw', ['my-feature', '--json'])
+    return ok(raw)
+  }),
+}
+```
+
+### i18n — required for every visible string
+
+```typescript
+const { t } = useTranslation()
+// ✓ correct
+<h2>{t('myFeature.title')}</h2>
+// ✗ never — hardcoded strings are rejected in review
+<h2>My Feature</h2>
+```
+
+Add the key to **all three** files before opening a PR:
+- `packages/web/src/i18n/zh.json` (Chinese — primary)
+- `packages/web/src/i18n/en.json`
+- `packages/web/src/i18n/ja.json`
+
+---
+
+## Fixing a bug
+
+1. **Write a failing test first** that reproduces the bug.
+2. Fix the code until the test passes.
+3. Run `npm test` — all tests must be green.
+
+```bash
+npm test                         # full suite
+npx vitest run src/path/to/test  # single file, from packages/web/
+```
+
+---
+
+## Submitting a PR
+
+```bash
+git push -u origin feat/my-feature
+gh pr create --fill   # opens the PR template
+```
+
+Fill in **## What**, **## Why**, and **## How** — the `pr-description-check` CI job
+rejects PRs with an empty `## What` section.
+
+**Checklist before marking ready for review:**
+
+- [ ] `npm test` passes locally
+- [ ] `npm run build` passes (catches TypeScript errors)
+- [ ] New behavior has unit tests (happy path + at least one error path)
+- [ ] All i18n keys added to `zh.json`, `en.json`, `ja.json`
+- [ ] No `console.log` left in production paths
+- [ ] No screenshots, test logs, or generated files committed (`dist/`, `coverage/`)
+- [ ] PR is a **draft** if not yet ready for review
+
+> [!NOTE]
+> First-time contributors: a maintainer will add `/ok-to-test` after reviewing
+> your diff before the full multi-platform Tauri build runs.
+
+---
+
+## Architecture rules
+
+Enforced by `packages/web/src/shared/__tests__/architecture.boundary.test.ts`.
+Violations cause CI to fail.
+
+| Rule | What breaks it |
+|---|---|
+| `shared/` must not import from `modules/` or `pages/` | Adding `import ... from '@/modules/...'` in any shared file |
+| `modules/` must not import `@tauri-apps/api` directly | Use `tauriInvoke` from `shared/adapters/invoke.ts` instead |
+| `pages/` must not import `@tauri-apps/api` directly | Same — route through the shared adapter |
+
+---
+
+## Hard rules
+
+Violating any of these will cause a PR to be rejected without review:
+
+- **No new npm packages** without an open issue and maintainer sign-off.
+- **No new Rust crates** without a maintainer with desktop experience signing off.
+- **No Python, shell scripts, or non-Node.js runtimes** as required dependencies.
+- **No hardcoded display strings** — every UI string goes through `t()`.
+- **No `console.log`** in production code paths.
+- **No generated files** in commits: `dist/`, `coverage/`, `src-tauri/target/`, `*.tsbuildinfo`.
+- **Branch prefix required**: `feat/`, `fix/`, `refactor/`, `docs/`, `test/`, `ci/`, `chore/`.
+
+---
+
+## Technical reference
+
+### Common commands
+
+```bash
+npm install                  # install dependencies
+
+npm run dev                  # web frontend only (port 3000)
+npm run dev:web              # backend (port 3001) + frontend
+npm run dev:backend          # Express backend only
+npm run tauri:dev            # desktop app (Tauri)
+
+npm run build                # production build + TypeScript check
+npm run tauri:build          # desktop build (platform-specific)
+
+npm test                     # run all Vitest tests
+```
+
+### Two-mode runtime
+
+The app detects its runtime in `shared/adapters/platform.ts`:
+
+```
+Desktop (Tauri)                     Web (Express)
+──────────────────────────          ──────────────────────────
+React → invoke() → Rust cmd         React → fetch('/api') → Express
+        ↓                                   ↓
+  src-tauri/lib.rs                  packages/backend/
+```
+
+All CLI calls go through `execCommand()` / `execCommandJson<T>()` in `platform.ts`.
+Never call `invoke()` or `fetch('/api/exec')` directly from a module or page.
+
+### Repo map
+
+```
+packages/web/src/
+├── modules/            feature modules (new features go here)
+│   ├── setup/          installation wizard + onboarding (special — see below)
+│   ├── observe/        cost/token monitoring
+│   ├── memory/         PowerMem management
+│   └── ...             (dashboard, gateway, channels, models, skills, ...)
+├── shared/
+│   ├── adapters/       per-tool adapters returning AdapterResult<T>
+│   │   ├── platform.ts runtime detection + execCommand (single entry point)
+│   │   ├── invoke.ts   tauriInvoke helper (only legitimate @tauri-apps/api import)
+│   │   └── *.ts        one file per OpenClaw tool
+│   ├── hooks/          useAdapterCall, useInstallTask
+│   └── components/     ErrorBoundary, LoadingState, CapabilityGuard, PasswordField
+├── app/                routing, sidebar, startup, command registry
+├── pages/              legacy pages (do not add new code here)
+└── i18n/               zh.json · en.json · ja.json
+```
+
+### setup module
+
+`modules/setup/` is special — it exports:
+- `SetupWizard` component
+- `getSetupAdapter()` returning `demoSetupAdapter` | `realSetupAdapter`
+- Types used by `CapabilityGuard` in `shared/components/`
+
+It covers 16 LLM providers and 6 channel types.
 
 ### i18n
 
-Uses **react-i18next** with locale sources in `packages/web/src/locales/main/`:
-- `zh.ts` (Chinese, fallback), `en.ts` (English), `ja.ts` (Japanese)
-- `packages/web/src/i18n/*.json` still exists, but treat the `locales/main/*.ts` files as the authoritative runtime source when updating copy
-- Language preference stored in `localStorage` key `clawmaster-language`
-- `changeLanguage()` exported from `src/i18n/index.ts`
-- Language switcher appears in the header and in the setup wizard
+```
+packages/web/src/i18n/
+├── zh.json   Chinese (primary / fallback)
+├── en.json   English
+└── ja.json   Japanese
+```
 
-All UI text must go through `t()` from `useTranslation()`. Do not hardcode Chinese strings in components.
-
-### Legacy Pages
-
-Most actively maintained user-facing screens now live in `packages/web/src/modules/`. If you touch any older code under `packages/web/src/pages/`, confirm it is still wired into the app before investing in refactors there.
+Language preference stored in `localStorage` key `clawmaster-language`.
+`changeLanguage()` exported from `src/i18n/index.ts`.
 
 ### Testing
 
-- **Framework**: Vitest + jsdom + @testing-library/react
-- **Config**: `packages/web/vitest.config.ts`
-- **Tests location**: Co-located `__tests__/` directories (e.g., `shared/adapters/__tests__/`, `modules/setup/__tests__/`)
-- **Run single test**: `npx vitest run src/shared/adapters/__tests__/platform.test.ts --workspace=@openclaw-manager/web`
-- **Current baseline**: automated web/backend tests plus 19 YAML-based descriptive UI specs under `tests/ui/`
+- Framework: Vitest + jsdom + @testing-library/react
+- Config: `packages/web/vitest.config.ts`
+- Location: co-located `__tests__/` directories
+- Run single file: `npx vitest run src/path/to/test.ts` (from `packages/web/`)
 
-### Descriptive UI Flows
-
-- `tests/ui/*.yaml` are the source of truth for manual UI walkthroughs. Treat them as descriptive flows, not executable browser scripts.
-- When verifying UI behavior manually, use `dev-browser` to walk through the YAML steps page by page and capture screenshots as evidence.
-- Start with `tests/ui/19-cross-module-workflows.yaml` for high-value release regression, then drill into module-specific YAML files as needed.
-- Use `tests/ui/README.md` for the current suite index, checklist, and `dev-browser` verification guidance.
-- Use `tests/ui/EVIDENCE_TEMPLATE.md` to record release-day screenshots and behavior proof.
-- Do not add hardcoded `dev-browser` scripts for specific flows unless the user explicitly asks for executable browser automation; prefer updating the YAML specs instead.
-
-### UI
-
-- Styling: Tailwind CSS with Lucide React icons (no emoji in UI)
-- Dark mode toggle (independent from color theme)
-- Color themes: Lobster Orange, Ocean Blue
-- Responsive: mobile hamburger menu
-- All text goes through i18n -- see the i18n section above
-
-## Rust / Tauri Notes
+### Rust / Tauri
 
 - Minimum Rust version: 1.77.2
-- Tauri commands are registered in `lib.rs` via `tauri::generate_handler![]`
-- Config file path resolution uses the `dirs` crate (`dirs::home_dir()` / `dirs::config_dir()`)
-- Desktop builds target: Linux (deb, rpm, AppImage), macOS (dmg, x86_64 + aarch64), Windows (msi + portable)
-- Linux system deps: `libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev patchelf`
+- Commands registered in `src-tauri/src/lib.rs` via `tauri::generate_handler![]`
+- Config path resolution uses `dirs` crate (`dirs::home_dir()`)
+- Linux build deps: `libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev patchelf`
 
-## CI/CD
+### CI
 
-GitHub Actions workflow (`.github/workflows/build.yml`):
-1. **Test job** (every push/PR): `npm ci` -> TypeScript check -> `npm test` -> `npm run build`
-2. **Build job** (tags, main, manual): multi-platform Tauri build (Linux x64, macOS x64/ARM64, Windows x64)
-3. Tag pushes create draft GitHub releases with platform installers; non-tag builds upload artifacts with 7-day retention
+Every push/PR runs: `npm ci` → TypeScript check → `npm test` → `npm run build`.
+Tag pushes additionally trigger multi-platform Tauri builds (Linux x64, macOS x64/ARM64, Windows x64).

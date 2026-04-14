@@ -224,6 +224,8 @@ Runtime model: Desktop — React calls Tauri commands via `invoke()`; Web — Re
 
 ## Contributing
 
+**Using an AI coding agent?** Point it at [AGENTS.md](./AGENTS.md) first — it covers the full contribution workflow, module patterns, and hard rules in agent-readable form.
+
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, testing requirements, dependency policy, commit convention, and PR checklist.
 
 > [!IMPORTANT]
