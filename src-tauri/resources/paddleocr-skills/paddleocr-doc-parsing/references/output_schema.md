@@ -1,12 +1,12 @@
-# PaddleOCR Document Parsing Output Schema
+﻿# PaddleOCR Document Parsing Output Schema
 
-This document defines the output envelope returned by `vl_caller.py`.
+This document defines the output envelope returned by `vl_caller.mjs`.
 
-By default, `vl_caller.py` saves the JSON envelope to a unique file under the system temp directory and prints the absolute saved path to `stderr`. Use `--output` when you need a custom destination, or `--stdout` when you want to skip file saving and print JSON directly.
+By default, `vl_caller.mjs` saves the JSON envelope to a unique file under the system temp directory and prints the absolute saved path to `stderr`. Use `--output` when you need a custom destination, or `--stdout` when you want to skip file saving and print JSON directly.
 
 ## Output Envelope
 
-`vl_caller.py` wraps provider response in a stable structure:
+`vl_caller.mjs` wraps provider response in a stable structure:
 
 ```json
 {
@@ -81,20 +81,22 @@ Raw fields may vary by model version and endpoint.
 
 ## Text Extraction
 
-`vl_caller.py` extracts top-level `text` from `result.layoutParsingResults[n].markdown.text` and joins pages with `\n\n`.
+`vl_caller.mjs` extracts top-level `text` from `result.layoutParsingResults[n].markdown.text` and joins pages with `\n\n`.
 
 ## Command Examples
 
 ```bash
 # Parse document from URL (result auto-saves to the system temp directory)
-python scripts/paddleocr-doc-parsing/vl_caller.py --file-url "URL" --pretty
+node scripts/vl_caller.mjs --file-url "URL" --pretty
 
 # Parse local file (result auto-saves to the system temp directory)
-python scripts/paddleocr-doc-parsing/vl_caller.py --file-path "doc.pdf" --pretty
+node scripts/vl_caller.mjs --file-path "doc.pdf" --pretty
 
 # Save result to a custom file path
-python scripts/paddleocr-doc-parsing/vl_caller.py --file-url "URL" --output "./result.json" --pretty
+node scripts/vl_caller.mjs --file-url "URL" --output "./result.json" --pretty
 
 # Print JSON to stdout without saving a file
-python scripts/paddleocr-doc-parsing/vl_caller.py --file-url "URL" --stdout --pretty
+node scripts/vl_caller.mjs --file-url "URL" --stdout --pretty
 ```
+
+

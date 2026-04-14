@@ -1,4 +1,4 @@
----
+﻿---
 name: paddleocr-doc-parsing
 description: Complex document parsing with PaddleOCR. Intelligently converts complex PDFs and document images into Markdown and JSON files that preserve the original structure.
 metadata:
@@ -8,10 +8,9 @@ metadata:
         - PADDLEOCR_DOC_PARSING_API_URL
         - PADDLEOCR_ACCESS_TOKEN
         - PADDLEOCR_DOC_PARSING_TIMEOUT
-      bins:
-        - python
+      bins:\n        - node
     primaryEnv: PADDLEOCR_ACCESS_TOKEN
-    emoji: "📄"
+    emoji: "馃搫"
     homepage: https://github.com/PaddlePaddle/PaddleOCR/tree/main/skills/paddleocr-doc-parsing
 ---
 
@@ -34,9 +33,9 @@ metadata:
 
 ## How to Use This Skill
 
-**⛔ MANDATORY RESTRICTIONS - DO NOT VIOLATE ⛔**
+**鉀?MANDATORY RESTRICTIONS - DO NOT VIOLATE 鉀?*
 
-1. **ONLY use PaddleOCR Document Parsing API** - Execute the script `python scripts/vl_caller.py`
+1. **ONLY use PaddleOCR Document Parsing API** - Execute the script `node scripts/vl_caller.mjs`
 2. **NEVER parse documents directly** - Do NOT parse documents yourself
 3. **NEVER offer alternatives** - Do NOT suggest "I can try to analyze it" or similar
 4. **IF API fails** - Display the error message and STOP immediately
@@ -52,16 +51,16 @@ If the script execution fails (API not configured, network error, etc.):
 
 1. **Execute document parsing**:
    ```bash
-   python scripts/vl_caller.py --file-url "URL provided by user" --pretty
+   node scripts/vl_caller.mjs --file-url "URL provided by user" --pretty
    ```
    Or for local files:
    ```bash
-   python scripts/vl_caller.py --file-path "file path" --pretty
+   node scripts/vl_caller.mjs --file-path "file path" --pretty
    ```
 
    **Optional: explicitly set file type**:
    ```bash
-   python scripts/vl_caller.py --file-url "URL provided by user" --file-type 0 --pretty
+   node scripts/vl_caller.mjs --file-url "URL provided by user" --file-type 0 --pretty
    ```
    - `--file-type 0`: PDF
    - `--file-type 1`: image
@@ -150,10 +149,10 @@ The output JSON uses an envelope wrapping the raw API result:
 ```
 
 **Key fields**:
-- `text` — extracted markdown text from all pages (use this for quick text display)
+- `text` 鈥?extracted markdown text from all pages (use this for quick text display)
 - `result` - raw provider response object
 - `result[n].prunedResult` - structured parsing output for each page (layout/content/confidence and related metadata)
-- `result[n].markdown` — full rendered page output in markdown/HTML
+- `result[n].markdown` 鈥?full rendered page output in markdown/HTML
 
 > Raw result location (default): the temp-file path printed by the script on stderr
 
@@ -161,7 +160,7 @@ The output JSON uses an envelope wrapping the raw API result:
 
 **Example 1: Extract Full Document Text**
 ```bash
-python scripts/vl_caller.py \
+node scripts/vl_caller.mjs \
   --file-url "https://example.com/paper.pdf" \
   --pretty
 ```
@@ -172,7 +171,7 @@ Then use:
 
 **Example 2: Extract Structured Page Data**
 ```bash
-python scripts/vl_caller.py \
+node scripts/vl_caller.mjs \
   --file-path "./financial_report.pdf" \
   --pretty
 ```
@@ -183,7 +182,7 @@ Then use:
 
 **Example 3: Print JSON Without Saving**
 ```bash
-python scripts/vl_caller.py \
+node scripts/vl_caller.mjs \
   --file-url "URL" \
   --stdout \
   --pretty
@@ -243,20 +242,20 @@ There is no file size limit for the API. For PDFs, the maximum is 100 pages per 
 #### Use URL for Large Local Files (Recommended)
 For very large local files, prefer `--file-url` over `--file-path` to avoid base64 encoding overhead:
 ```bash
-python scripts/vl_caller.py --file-url "https://your-server.com/large_file.pdf"
+node scripts/vl_caller.mjs --file-url "https://your-server.com/large_file.pdf"
 ```
 
 #### Process Specific Pages (PDF Only)
 If you only need certain pages from a large PDF, extract them first:
 ```bash
-# Extract pages 1-5
-python scripts/split_pdf.py large.pdf pages_1_5.pdf --pages "1-5"
+# Extract pages 1-5 using your preferred PDF tool
+# Output: pages_1_5.pdf
 
-# Mixed ranges are supported
-python scripts/split_pdf.py large.pdf selected_pages.pdf --pages "1-5,8,10-12"
+# Extract mixed ranges using your preferred PDF tool
+# Output: selected_pages.pdf
 
 # Then process the smaller file
-python scripts/vl_caller.py --file-path "pages_1_5.pdf"
+node scripts/vl_caller.mjs --file-path "pages_1_5.pdf"
 ```
 
 ### Error Handling
@@ -265,19 +264,19 @@ python scripts/vl_caller.py --file-path "pages_1_5.pdf"
 ```
 error: Authentication failed
 ```
-→ Token is invalid, reconfigure with correct credentials
+鈫?Token is invalid, reconfigure with correct credentials
 
 **API quota exceeded (429)**:
 ```
 error: API quota exceeded
 ```
-→ Daily API quota exhausted, inform user to wait or upgrade
+鈫?Daily API quota exhausted, inform user to wait or upgrade
 
 **Unsupported format**:
 ```
 error: Unsupported file format
 ```
-→ File format not supported, convert to PDF/PNG/JPG
+鈫?File format not supported, convert to PDF/PNG/JPG
 
 ## Important Notes
 
@@ -301,7 +300,8 @@ Load these reference documents into context when:
 
 To verify the skill is working properly:
 ```bash
-python scripts/smoke_test.py
+node scripts/smoke_test.mjs
 ```
 
 This tests configuration and optionally API connectivity.
+

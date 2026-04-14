@@ -38,7 +38,7 @@ function writeSkillAsset(root: string, id: string): void {
   const skillRoot = path.join(root, id)
   fs.mkdirSync(path.join(skillRoot, 'scripts'), { recursive: true })
   fs.writeFileSync(path.join(skillRoot, 'SKILL.md'), `# ${id}\n`, 'utf8')
-  fs.writeFileSync(path.join(skillRoot, 'scripts', 'lib.py'), 'print("ok")\n', 'utf8')
+  fs.writeFileSync(path.join(skillRoot, 'scripts', 'lib.mjs'), 'export {}\n', 'utf8')
 }
 
 test.afterEach(() => {

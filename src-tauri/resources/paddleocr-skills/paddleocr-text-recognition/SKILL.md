@@ -1,4 +1,4 @@
----
+﻿---
 name: paddleocr-text-recognition
 description: Extracts text (with locations) from images and PDF documents using PaddleOCR.
 metadata:
@@ -8,10 +8,9 @@ metadata:
         - PADDLEOCR_OCR_API_URL
         - PADDLEOCR_ACCESS_TOKEN
         - PADDLEOCR_OCR_TIMEOUT
-      bins:
-        - python
+      bins:\n        - node
     primaryEnv: PADDLEOCR_ACCESS_TOKEN
-    emoji: "🔤"
+    emoji: "馃敜"
     homepage: https://github.com/PaddlePaddle/PaddleOCR/tree/main/skills/paddleocr-text-recognition
 ---
 
@@ -32,9 +31,9 @@ Do not use this skill in the following situations:
 
 ## How to Use This Skill
 
-**⛔ MANDATORY RESTRICTIONS - DO NOT VIOLATE ⛔**
+**鉀?MANDATORY RESTRICTIONS - DO NOT VIOLATE 鉀?*
 
-1. **ONLY use PaddleOCR Text Recognition API** - Execute the script `python scripts/ocr_caller.py`
+1. **ONLY use PaddleOCR Text Recognition API** - Execute the script `node scripts/ocr_caller.mjs`
 2. **NEVER read images directly** - Do NOT read images yourself
 3. **NEVER offer alternatives** - Do NOT suggest "I can try to read it" or similar
 4. **IF API fails** - Display the error message and STOP immediately
@@ -59,11 +58,11 @@ If the script execution fails (API not configured, network error, etc.):
 
 2. **Execute OCR**:
    ```bash
-   python scripts/ocr_caller.py --file-url "URL provided by user" --pretty
+   node scripts/ocr_caller.mjs --file-url "URL provided by user" --pretty
    ```
    Or for local files:
    ```bash
-   python scripts/ocr_caller.py --file-path "file path" --pretty
+   node scripts/ocr_caller.mjs --file-path "file path" --pretty
    ```
 
    **Default behavior: save raw JSON to a temp file**:
@@ -114,22 +113,22 @@ I found some text in the image. Here's a preview:
 
 **Example 1: URL OCR**:
 ```bash
-python scripts/ocr_caller.py --file-url "https://example.com/invoice.jpg" --pretty
+node scripts/ocr_caller.mjs --file-url "https://example.com/invoice.jpg" --pretty
 ```
 
 **Example 2: Local File OCR**:
 ```bash
-python scripts/ocr_caller.py --file-path "./document.pdf" --pretty
+node scripts/ocr_caller.mjs --file-path "./document.pdf" --pretty
 ```
 
 **Example 3: OCR With Explicit File Type**:
 ```bash
-python scripts/ocr_caller.py --file-url "https://example.com/input" --file-type 1 --pretty
+node scripts/ocr_caller.mjs --file-url "https://example.com/input" --file-type 1 --pretty
 ```
 
 **Example 4: Print JSON Without Saving**:
 ```bash
-python scripts/ocr_caller.py --file-url "https://example.com/input" --stdout --pretty
+node scripts/ocr_caller.mjs --file-url "https://example.com/input" --stdout --pretty
 ```
 
 ### Understanding the Output
@@ -228,7 +227,8 @@ For in-depth understanding of the OCR system, refer to:
 
 To verify the skill is working properly:
 ```bash
-python scripts/smoke_test.py
+node scripts/smoke_test.mjs
 ```
 
 This tests configuration and API connectivity.
+

@@ -428,7 +428,7 @@ describe('SetupWizard', () => {
   it('opens the shared PaddleOCR setup dialog and keeps submit disabled until the endpoint and token state are valid', async () => {
     render(<SetupWizard onComplete={() => {}} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Configure High-Accuracy OCR/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Configure PP-OCRv5/ }))
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
     const submitButton = screen.getByRole('button', { name: 'Save & verify' })
@@ -448,7 +448,7 @@ describe('SetupWizard', () => {
   it('keeps PaddleOCR modules separate and shows a sample preview after saving one module', async () => {
     const { unmount } = render(<SetupWizard onComplete={() => {}} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Configure High-Accuracy OCR/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Configure PP-OCRv5/ }))
     fireEvent.change(screen.getByLabelText('API endpoint'), {
       target: { value: 'https://demo.paddleocr.com/ocr' },
     })
@@ -472,21 +472,21 @@ describe('SetupWizard', () => {
       accessToken: 'tok_test_1234567890',
     })
     expect(await screen.findByRole('button', { name: 'Update setup' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Configure High-Accuracy Document Parsing/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Configure PP-StructureV3/ })).toBeInTheDocument()
 
     unmount()
     render(<SetupWizard onComplete={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Update setup' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Configure High-Accuracy Document Parsing/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Configure PP-StructureV3/ })).toBeInTheDocument()
     })
   })
 
   it('can clear the saved PaddleOCR module configuration from the dialog', async () => {
     render(<SetupWizard onComplete={() => {}} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Configure High-Accuracy OCR/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Configure PP-OCRv5/ }))
     fireEvent.change(screen.getByLabelText('API endpoint'), {
       target: { value: 'https://demo.paddleocr.com/ocr' },
     })
@@ -504,6 +504,6 @@ describe('SetupWizard', () => {
         moduleId: PADDLEOCR_TEXT_SKILL_ID,
       })
     })
-    expect(await screen.findByRole('button', { name: /Configure High-Accuracy OCR/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Configure PP-OCRv5/ })).toBeInTheDocument()
   })
 })

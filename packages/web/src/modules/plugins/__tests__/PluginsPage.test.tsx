@@ -74,7 +74,7 @@ describe('PluginsPage', () => {
     renderPlugins()
 
     expect(await screen.findByText('插件管理')).toBeInTheDocument()
-    expect(screen.getByText('当前运行中的插件')).toBeInTheDocument()
+    expect(screen.getByText('运行中')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'DeepSeek Provider' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Browser Tool' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Discord Relay' })).not.toBeInTheDocument()

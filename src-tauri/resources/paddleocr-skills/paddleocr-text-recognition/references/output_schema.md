@@ -1,12 +1,12 @@
-# PaddleOCR Text Recognition Output Schema
+﻿# PaddleOCR Text Recognition Output Schema
 
-This document defines the output envelope returned by `ocr_caller.py`.
+This document defines the output envelope returned by `ocr_caller.mjs`.
 
-By default, `ocr_caller.py` saves the JSON envelope to a unique file under the system temp directory and prints the absolute saved path to `stderr`. Use `--output` when you need a custom destination, or `--stdout` when you want to skip file saving and print JSON directly.
+By default, `ocr_caller.mjs` saves the JSON envelope to a unique file under the system temp directory and prints the absolute saved path to `stderr`. Use `--output` when you need a custom destination, or `--stdout` when you want to skip file saving and print JSON directly.
 
 ## Output Envelope
 
-`ocr_caller.py` wraps provider response in a stable structure:
+`ocr_caller.mjs` wraps provider response in a stable structure:
 
 ```json
 {
@@ -87,23 +87,25 @@ Raw fields may vary by model version and endpoint.
 
 ## Text Extraction
 
-`ocr_caller.py` extracts top-level `text` from `result.ocrResults[n].prunedResult.rec_texts`, joins lines with `\n`, and joins pages with `\n\n`.
+`ocr_caller.mjs` extracts top-level `text` from `result.ocrResults[n].prunedResult.rec_texts`, joins lines with `\n`, and joins pages with `\n\n`.
 
 ## Command Examples
 
 ```bash
 # OCR from URL (result auto-saves to the system temp directory)
-python scripts/paddleocr-text-recognition/ocr_caller.py --file-url "URL" --pretty
+node scripts/ocr_caller.mjs --file-url "URL" --pretty
 
 # OCR local file (result auto-saves to the system temp directory)
-python scripts/paddleocr-text-recognition/ocr_caller.py --file-path "doc.pdf" --pretty
+node scripts/ocr_caller.mjs --file-path "doc.pdf" --pretty
 
 # OCR with explicit file type
-python scripts/paddleocr-text-recognition/ocr_caller.py --file-url "URL" --file-type 1 --pretty
+node scripts/ocr_caller.mjs --file-url "URL" --file-type 1 --pretty
 
 # Save result to a custom file path
-python scripts/paddleocr-text-recognition/ocr_caller.py --file-url "URL" --output "./result.json" --pretty
+node scripts/ocr_caller.mjs --file-url "URL" --output "./result.json" --pretty
 
 # Print JSON to stdout without saving a file
-python scripts/paddleocr-text-recognition/ocr_caller.py --file-url "URL" --stdout --pretty
+node scripts/ocr_caller.mjs --file-url "URL" --stdout --pretty
 ```
+
+

@@ -15,40 +15,42 @@ import {
 type PaddleOcrSetupDialogProps = {
   open: boolean
   busy: boolean
-  submitBusy: boolean
-  previewBusy: boolean
-  clearBusy: boolean
+  submitBusy?: boolean
+  previewBusy?: boolean
+  clearBusy?: boolean
   error: string | null
   moduleId: PaddleOcrModuleId | null
-  moduleStatus: PaddleOcrModuleStatus | null
+  moduleStatus?: PaddleOcrModuleStatus | null
   apiUrl: string
   accessToken: string
-  preview: PaddleOcrPreviewPayload | null
+  preview?: PaddleOcrPreviewPayload | null
+  submitLabel?: string
   onClose: () => void
   onApiUrlChange: (value: string) => void
   onAccessTokenChange: (value: string) => void
-  onPreview: () => void
-  onRequestClear: () => void
+  onPreview?: () => void
+  onRequestClear?: () => void
   onSubmit: () => void
 }
 
 export default function PaddleOcrSetupDialog({
   open,
   busy,
-  submitBusy,
-  previewBusy,
-  clearBusy,
+  submitBusy = false,
+  previewBusy = false,
+  clearBusy = false,
   error,
   moduleId,
-  moduleStatus,
+  moduleStatus = null,
   apiUrl,
   accessToken,
-  preview,
+  preview = null,
+  submitLabel,
   onClose,
   onApiUrlChange,
   onAccessTokenChange,
-  onPreview,
-  onRequestClear,
+  onPreview = () => {},
+  onRequestClear = () => {},
   onSubmit,
 }: PaddleOcrSetupDialogProps) {
   const { t } = useTranslation()
@@ -292,7 +294,7 @@ export default function PaddleOcrSetupDialog({
                   {t('setup.verifying')}
                 </>
               ) : (
-                t('setup.paddleocr.submit')
+                submitLabel ?? t('setup.paddleocr.submit')
               )}
             </button>
           </div>

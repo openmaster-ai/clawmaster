@@ -171,8 +171,8 @@ describe('SkillsPage', () => {
     render(<SkillsPage />)
 
     expect(await screen.findByText('Built-in PaddleOCR')).toBeInTheDocument()
-    expect(screen.getByText('High-Accuracy OCR')).toBeInTheDocument()
-    expect(screen.getByText('High-Accuracy Document Parsing')).toBeInTheDocument()
+    expect(screen.getByText('PP-OCRv5')).toBeInTheDocument()
+    expect(screen.getByText('PP-StructureV3')).toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Configure now' })[0]!)
 
@@ -183,7 +183,7 @@ describe('SkillsPage', () => {
     fireEvent.change(screen.getByLabelText('API Key / Access Token'), {
       target: { value: 'tok_text_123' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save & verify' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify & Enable' }))
 
     expect(mockSetupPaddleOcrResult).toHaveBeenCalledWith({
       moduleId: PADDLEOCR_TEXT_SKILL_ID,
