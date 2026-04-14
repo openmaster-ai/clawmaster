@@ -5,7 +5,7 @@
 -->
 
 <h1 align="center">
-  <code>clawmaster</code> · OpenClaw 控制台
+  <code>clawmaster</code> · 龙虾管理大师
 </h1>
 
 <p align="center">
@@ -152,12 +152,12 @@ clawmaster doctor
 
 | 能力 | 状态 | 覆盖范围 |
 |---|---|---|
-| 接管 | 已发布 | 向导、16 个供应商、6 种频道类型、Profile 管理 |
-| 可观测 | 已发布 | ClawProbe 集成、费用 / Token / 健康度面板 |
-| 省钱 | 进行中 | PowerMem UI、seekdb 集成、降 Token 工作流 |
-| 应用 | 规划中 | 拍照答题、发票整理、错题本工具 |
-| 构建 | 规划中 | 对话式智能体构建器（LangChain DeepAgents） |
-| 守护 | 规划中 | 密钥加密、花费熔断、权限管控（RBAC） |
+| 能接管 | 已发布 | 向导、16 个供应商、6 种频道类型、Profile 管理 |
+| 能观测 | 已发布 | ClawProbe 集成、费用 / Token / 健康度面板 |
+| 能省钱 | 进行中 | PowerMem UI、seekdb 集成、降 Token 工作流 |
+| 能应用 | 规划中 | 拍照答题、发票整理、错题本工具 |
+| 能构建 | 规划中 | 对话式智能体构建器（LangChain DeepAgents） |
+| 能守护 | 规划中 | 密钥加密、花费熔断、权限管控（RBAC） |
 
 浏览 [`label:roadmap`](https://github.com/clawmaster-ai/clawmaster/issues?q=label%3Aroadmap) 领取任务。开始前请先在对应 issue 留言 — 完成路线图功能的核心贡献者可向 OpenClaw 团队申领模型额度。
 
