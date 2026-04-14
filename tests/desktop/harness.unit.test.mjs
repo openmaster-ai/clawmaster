@@ -2,8 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   buildWebdriverSessionWithRetry,
+  collectNewProcessIds,
   isRetryableWebdriverSessionError,
 } from './harness.mjs'
+
+test('collectNewProcessIds returns only processes launched after the baseline snapshot', () => {
+  assert.deepEqual(collectNewProcessIds([], []), [])
+  assert.deepEqual(collectNewProcessIds([101, 202], [101, 202, 303, 404]), [303, 404])
+  assert.deepEqual(collectNewProcessIds([101, 202], [202, 101]), [])
+})
 
 test('isRetryableWebdriverSessionError matches transient driver transport failures', () => {
   assert.equal(
@@ -44,6 +51,31 @@ test('buildWebdriverSessionWithRetry retries transient webdriver bootstrap error
   assert.deepEqual(session, { id: 'session-ok' })
   assert.equal(attempts, 3)
   assert.deepEqual(events, ['retry-1', 'reset-1', 'retry-2', 'reset-2'])
+})
+
+test('buildWebdriverSessionWithRetry waits for reset before retrying the next attempt', async () => {
+  const events = []
+  let attempts = 0
+
+  const session = await buildWebdriverSessionWithRetry({
+    retryDelayMs: 0,
+    async build() {
+      attempts += 1
+      events.push(`build-${attempts}`)
+      if (attempts === 1) {
+        throw new Error('ECONNRESET socket hang up')
+      }
+      return { id: 'session-after-reset' }
+    },
+    async reset() {
+      events.push('reset-start')
+      await Promise.resolve()
+      events.push('reset-end')
+    },
+  })
+
+  assert.deepEqual(session, { id: 'session-after-reset' })
+  assert.deepEqual(events, ['build-1', 'reset-start', 'reset-end', 'build-2'])
 })
 
 test('buildWebdriverSessionWithRetry does not retry non-retryable errors', async () => {

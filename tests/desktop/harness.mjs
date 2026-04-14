@@ -397,6 +397,21 @@ function sleep(delayMs) {
   })
 }
 
+function normalizeProcessMatchPath(targetPath) {
+  return process.platform === 'win32'
+    ? path.normalize(targetPath).toLowerCase()
+    : targetPath
+}
+
+function quotePowerShellLiteral(value) {
+  return `'${String(value).replaceAll("'", "''")}'`
+}
+
+export function collectNewProcessIds(previousPids, currentPids) {
+  const knownPids = new Set(previousPids)
+  return currentPids.filter((pid) => !knownPids.has(pid))
+}
+
 export function isRetryableWebdriverSessionError(error) {
   const details = error instanceof Error
     ? [error.message, error.stack].filter(Boolean).join('\n')
@@ -444,6 +459,103 @@ export async function buildWebdriverSessionWithRetry(options) {
   }
 
   throw lastError
+}
+
+async function listDesktopAppProcessIds(binaryPath) {
+  const normalizedBinaryPath = normalizeProcessMatchPath(binaryPath)
+
+  if (process.platform === 'win32') {
+    const output = await readCommandOutput('pwsh', [
+      '-NoLogo',
+      '-NoProfile',
+      '-Command',
+      [
+        `$target = ${quotePowerShellLiteral(normalizedBinaryPath)}`,
+        'Get-CimInstance Win32_Process |',
+        'Where-Object { $_.ExecutablePath -and $_.ExecutablePath.ToLowerInvariant() -eq $target } |',
+        'ForEach-Object { $_.ProcessId }',
+      ].join(' '),
+    ]).catch(() => '')
+
+    return output
+      .split(/\r?\n/)
+      .map((line) => Number.parseInt(line.trim(), 10))
+      .filter((pid) => Number.isInteger(pid) && pid > 0)
+      .sort((left, right) => left - right)
+  }
+
+  const output = await readCommandOutput('ps', ['-ax', '-o', 'pid=', '-o', 'command=']).catch(() => '')
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\s*(\d+)\s+(.*)$/))
+    .filter(Boolean)
+    .filter((match) => {
+      const command = match[2].trim()
+      return command === binaryPath || command.startsWith(`${binaryPath} `)
+    })
+    .map((match) => Number.parseInt(match[1], 10))
+    .filter((pid) => Number.isInteger(pid) && pid > 0)
+    .sort((left, right) => left - right)
+}
+
+async function terminateProcessId(pid, options = {}) {
+  const { force = false } = options
+
+  if (process.platform === 'win32') {
+    const args = ['/PID', String(pid), '/T']
+    if (force) {
+      args.push('/F')
+    }
+    await readCommandOutput('taskkill', args).catch((error) => {
+      const details = error instanceof Error ? error.message : String(error)
+      if (!/not found|no running instance|cannot find/i.test(details)) {
+        throw error
+      }
+    })
+    return
+  }
+
+  try {
+    process.kill(pid, force ? 'SIGKILL' : 'SIGTERM')
+  } catch (error) {
+    if (error?.code !== 'ESRCH') {
+      throw error
+    }
+  }
+}
+
+async function cleanupRetriedDesktopAppProcesses(binaryPath, previousPids) {
+  const currentPids = await listDesktopAppProcessIds(binaryPath)
+  const launchedPids = collectNewProcessIds(previousPids, currentPids)
+
+  if (launchedPids.length === 0) {
+    return { terminatedPids: [], survivingPids: [] }
+  }
+
+  for (const pid of launchedPids) {
+    await terminateProcessId(pid)
+  }
+
+  await sleep(500)
+
+  let survivingPids = collectNewProcessIds(previousPids, await listDesktopAppProcessIds(binaryPath))
+  for (const pid of survivingPids) {
+    await terminateProcessId(pid, { force: true })
+  }
+
+  await sleep(500)
+  survivingPids = collectNewProcessIds(previousPids, await listDesktopAppProcessIds(binaryPath))
+
+  if (survivingPids.length > 0) {
+    throw new Error(
+      `Failed to terminate retried desktop app process(es): ${survivingPids.join(', ')}`,
+    )
+  }
+
+  return {
+    terminatedPids: launchedPids,
+    survivingPids,
+  }
 }
 
 async function ensureDesktopBinary() {
@@ -610,6 +722,7 @@ async function runWebdriverSmoke(binaryPath) {
   let tauriDriver = await startTauriDriver()
   let driver
   let currentStep = 'starting webdriver session'
+  let desktopAppPidsBeforeAttempt = []
 
   const setStep = (step) => {
     currentStep = step
@@ -647,12 +760,22 @@ async function runWebdriverSmoke(binaryPath) {
     setStep('connecting webdriver session')
     driver = await buildWebdriverSessionWithRetry({
       async build() {
+        desktopAppPidsBeforeAttempt = await listDesktopAppProcessIds(binaryPath)
         return new Builder()
           .usingServer(`http://127.0.0.1:${TAURI_DRIVER_PORT}`)
           .withCapabilities(capabilities)
           .build()
       },
       async reset() {
+        const appCleanup = await cleanupRetriedDesktopAppProcesses(
+          binaryPath,
+          desktopAppPidsBeforeAttempt,
+        )
+        if (appCleanup.terminatedPids.length > 0) {
+          console.warn(
+            `[desktop-smoke] terminated retried desktop app process(es): ${appCleanup.terminatedPids.join(', ')}`,
+          )
+        }
         const previousTauriDriver = tauriDriver
         flushTauriDriverLogs(previousTauriDriver)
         tauriDriver = null
