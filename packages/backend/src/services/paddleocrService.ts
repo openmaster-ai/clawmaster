@@ -82,8 +82,8 @@ const PADDLEOCR_SAMPLE_IMAGE_RELATIVE = path.join(
   'paddleocr-preview',
   'sample_image.base64',
 )
-let cachedResourceDir: string | null | undefined
-let cachedSampleImageBase64: string | null | undefined
+let cachedResourceDir: string | undefined
+let cachedSampleImageBase64: string | undefined
 
 const MODULE_ENDPOINT_SUFFIX: Record<PaddleOcrModuleId, string> = {
   [PADDLEOCR_TEXT_SKILL_ID]: '/ocr',
@@ -147,9 +147,6 @@ function resolveBundledResourceDir(explicitResourceDir?: string): string {
   }
 
   if (cachedResourceDir !== undefined) {
-    if (!cachedResourceDir) {
-      throw new Error('Bundled PaddleOCR resources are missing from this build.')
-    }
     return cachedResourceDir
   }
 
@@ -173,7 +170,6 @@ function resolveBundledResourceDir(explicitResourceDir?: string): string {
     }
   }
 
-  cachedResourceDir = null
   throw new Error(
     `Bundled PaddleOCR resources are missing from this build. Checked: ${candidates.join(', ')}`,
   )
@@ -204,9 +200,6 @@ function getSampleImageBase64(
   }
 
   if (!deps.sampleImagePath && !deps.resourceDir && cachedSampleImageBase64 !== undefined) {
-    if (cachedSampleImageBase64 === null) {
-      throw new Error('Bundled PaddleOCR preview image is missing from this build.')
-    }
     return cachedSampleImageBase64
   }
 
@@ -218,9 +211,6 @@ function getSampleImageBase64(
     }
     return encoded
   } catch (error) {
-    if (!deps.sampleImagePath && !deps.resourceDir) {
-      cachedSampleImageBase64 = null
-    }
     const detail = error instanceof Error ? error.message : String(error)
     throw new Error(`Bundled PaddleOCR preview image is missing: ${sampleImagePath} (${detail})`)
   }
