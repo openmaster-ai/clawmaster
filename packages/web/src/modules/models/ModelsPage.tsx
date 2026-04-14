@@ -35,12 +35,26 @@ type ProviderModelOption = {
   name: string
 }
 
-function shouldUseCanonicalErnieCatalog(providerId: string, models: Array<{ id?: string; name?: string }> | undefined) {
+function getModelSourceId(model: string | OpenClawModelRef | undefined): string | null {
+  if (!model) return null
+  if (typeof model === 'string') {
+    const id = model.trim()
+    return id || null
+  }
+
+  const id = model.id?.trim() || model.name?.trim()
+  return id || null
+}
+
+function shouldUseCanonicalErnieCatalog(providerId: string, models: Array<string | OpenClawModelRef> | undefined) {
   if (providerId !== 'baidu-aistudio' || !models?.length) {
     return false
   }
 
-  return models.some((model) => model?.id === 'deepseek-v3' || model?.id === 'deepseek-r1')
+  return models.some((model) => {
+    const id = getModelSourceId(model)
+    return id === 'deepseek-v3' || id === 'deepseek-r1'
+  })
 }
 
 function normalizeModelOption(model: string | OpenClawModelRef | undefined): ProviderModelOption | null {
@@ -64,9 +78,10 @@ function getProviderModelOptions(
   currentModelId: string | null,
 ): ProviderModelOption[] {
   const knownProvider = PROVIDERS[providerId]
-  const sourceModels = shouldUseCanonicalErnieCatalog(providerId, provider.models as Array<{ id?: string; name?: string }> | undefined)
+  const savedModels = provider.models?.length ? provider.models : undefined
+  const sourceModels = shouldUseCanonicalErnieCatalog(providerId, savedModels)
     ? knownProvider?.models
-    : provider.models ?? knownProvider?.models ?? []
+    : savedModels ?? knownProvider?.models ?? []
 
   const options = sourceModels
     .map((model) => normalizeModelOption(model))

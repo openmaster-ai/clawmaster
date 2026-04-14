@@ -196,6 +196,37 @@ describe('ModelsPage', () => {
     expect(within(picker!).queryByRole('button', { name: /DeepSeek R1/ })).not.toBeInTheDocument()
   })
 
+  it('shows the canonical ERNIE catalog when the saved legacy model list uses string entries', async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      agents: {
+        defaults: {
+          model: { primary: 'baidu-aistudio/deepseek-v3' },
+        },
+      },
+      models: {
+        providers: {
+          'baidu-aistudio': {
+            apiKey: 'sk-baidu',
+            baseUrl: 'https://aistudio.baidu.com/llm/lmapi/v3',
+            models: ['deepseek-v3', 'deepseek-r1'],
+          },
+        },
+      },
+    })
+
+    render(<ModelsPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
+
+    const picker = document.getElementById('models-provider-picker-baidu-aistudio')
+    expect(picker).not.toBeNull()
+    expect(within(picker!).getByRole('button', { name: /ERNIE 5.0 Thinking Preview/ })).toBeInTheDocument()
+    expect(within(picker!).getByRole('button', { name: /^ERNIE 4\.5 Turbo VL ernie-4\.5-turbo-vl$/ })).toBeInTheDocument()
+    expect(within(picker!).getByRole('button', { name: /deepseek-v3 deepseek-v3/i })).toBeInTheDocument()
+    expect(within(picker!).queryByRole('button', { name: /deepseek-r1 deepseek-r1/i })).not.toBeInTheDocument()
+  })
+
   it('preserves saved model lists for built-in providers outside the stale ERNIE migration case', async () => {
     mockGetConfig.mockResolvedValueOnce({
       agents: {
@@ -222,6 +253,36 @@ describe('ModelsPage', () => {
     expect(screen.getByText('GPT-4.1 Custom')).toBeInTheDocument()
     expect(screen.getByText('o3 Enterprise')).toBeInTheDocument()
     expect(screen.queryByText('GPT-4.1 Mini')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the built-in catalog when a configured provider saves an empty model list', async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      agents: {
+        defaults: {
+          model: { primary: 'openai/gpt-4.1-mini' },
+        },
+      },
+      models: {
+        providers: {
+          openai: {
+            apiKey: 'sk-openai',
+            models: [],
+          },
+        },
+      },
+    })
+
+    render(<ModelsPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+    expect(screen.getByText('GPT-4.1 Mini')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Choose Model' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
+    const picker = document.getElementById('models-provider-picker-openai')
+    expect(picker).not.toBeNull()
+    expect(within(picker!).getByRole('button', { name: /GPT-4.1 gpt-4.1/ })).toBeInTheDocument()
+    expect(within(picker!).getByRole('button', { name: /GPT-4.1 Mini gpt-4.1-mini/ })).toBeInTheDocument()
   })
 
   it('lets users pick and set a model from the configured provider card', async () => {
