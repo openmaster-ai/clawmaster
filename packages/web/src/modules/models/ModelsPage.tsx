@@ -491,14 +491,6 @@ function ProviderCard({
                   </div>
                 )}
               </div>
-
-              {selectedModelId !== currentModelId && selectedModel?.id && (
-                <div className="rounded-xl border border-primary/20 bg-primary/[0.06] px-3 py-2 text-right">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-muted-foreground">{t('models.selected')}</p>
-                  <p className="mt-1 text-sm font-medium">{selectedModel.name}</p>
-                  <p className="mt-1 text-xs font-mono text-muted-foreground">{selectedModel.id}</p>
-                </div>
-              )}
             </div>
           </div>
 
