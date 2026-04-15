@@ -3415,9 +3415,11 @@ fn reindex_openclaw_memory() -> Result<OpenclawMemoryReindexPayload, String> {
 mod tests {
     use super::{
         get_config_path_candidates_for, get_openclaw_profile_args, get_openclaw_profile_data_dir,
+        install_bundled_skill,
         local_data_profile_key, managed_memory_windows_wsl_data_root,
         normalize_clawmaster_runtime_selection, normalize_local_data_target_platform,
         parse_json_lenient, parse_node_major, parse_wsl_list_verbose,
+        repo_bundled_skill_root, repo_plugin_root, resolve_plugin_root,
         resolve_config_path_from_candidates, resolve_local_data_status,
         resolve_selected_wsl_distro_from_list, supports_seekdb_embedded,
         OpenclawProfileSelection,
@@ -3831,6 +3833,93 @@ mod tests {
 
         assert_eq!(root, "/mnt/c/Users/alice/.clawmaster/data/named/team-a");
     }
+
+    #[test]
+    fn resolve_plugin_root_falls_back_to_repo_plugin_in_unbundled_dev_runs() {
+        std::env::remove_var("CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT");
+
+        let resolved = resolve_plugin_root("openclaw-ernie-image".to_string(), vec![])
+            .expect("resolve_plugin_root should succeed");
+
+        let expected = repo_plugin_root("openclaw-ernie-image")
+            .expect("repo plugin root should resolve");
+        assert_eq!(resolved, Some(expected.to_string_lossy().to_string()));
+        assert!(expected.join("openclaw.plugin.json").exists());
+    }
+
+    #[test]
+    fn resolve_plugin_root_ignores_candidates_with_the_wrong_manifest_id() {
+        let temp_root = unique_test_dir("ernie-plugin-root");
+        fs::create_dir_all(&temp_root).expect("should create temp root");
+        let stale_candidate = temp_root.join("wrong-plugin");
+        fs::create_dir_all(&stale_candidate).expect("should create stale candidate");
+        fs::write(
+            stale_candidate.join("openclaw.plugin.json"),
+            r#"{"id":"some-other-plugin"}"#,
+        )
+        .expect("should write manifest");
+
+        std::env::remove_var("CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT");
+
+        let resolved = resolve_plugin_root(
+            "openclaw-ernie-image".to_string(),
+            vec![stale_candidate.to_string_lossy().to_string()],
+        )
+        .expect("resolve_plugin_root should succeed");
+
+        let expected = repo_plugin_root("openclaw-ernie-image")
+            .expect("repo plugin root should resolve");
+        assert_eq!(resolved, Some(expected.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn install_bundled_skill_falls_back_to_repo_skill_in_unbundled_dev_runs() {
+        let previous_skill_root = std::env::var_os("CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT");
+        let previous_xdg_config_home = std::env::var_os("XDG_CONFIG_HOME");
+        let previous_home = std::env::var_os("HOME");
+        let temp_root = unique_test_dir("ernie-skill-install");
+        fs::create_dir_all(&temp_root).expect("should create temp root");
+
+        std::env::remove_var("CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT");
+        std::env::set_var("XDG_CONFIG_HOME", &temp_root);
+        std::env::set_var("HOME", &temp_root);
+
+        let install_result = install_bundled_skill("ernie-image".to_string());
+
+        if let Some(value) = previous_skill_root {
+            std::env::set_var("CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT", value);
+        } else {
+            std::env::remove_var("CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT");
+        }
+        if let Some(value) = previous_xdg_config_home {
+            std::env::set_var("XDG_CONFIG_HOME", value);
+        } else {
+            std::env::remove_var("XDG_CONFIG_HOME");
+        }
+        if let Some(value) = previous_home {
+            std::env::set_var("HOME", value);
+        } else {
+            std::env::remove_var("HOME");
+        }
+
+        install_result.expect("repo bundled skill fallback should install successfully");
+
+        let installed_skill = temp_root
+            .join(".openclaw")
+            .join("workspace")
+            .join("skills")
+            .join("ernie-image")
+            .join("SKILL.md");
+        assert!(installed_skill.exists());
+        assert!(
+            repo_bundled_skill_root("ernie-image")
+                .expect("repo bundled skill root should resolve")
+                .join("SKILL.md")
+                .exists()
+        );
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
 }
 
 // Run command with --version-style arg; return stdout if success
@@ -4209,6 +4298,129 @@ fn get_config() -> Result<OpenClawConfig, String> {
         serde_json::from_str(&content).map_err(|e| cmd_err_d("CONFIG_PARSE_FAILED", e))?;
 
     Ok(OpenClawConfig { data })
+}
+
+fn repo_root_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
+}
+
+fn repo_plugin_root(plugin_id: &str) -> Option<PathBuf> {
+    let dir_name = match plugin_id.trim() {
+        "memory-clawmaster-powermem" => "memory-clawmaster-powermem",
+        "openclaw-ernie-image" => "openclaw-ernie-image",
+        _ => return None,
+    };
+
+    Some(repo_root_path().join("plugins").join(dir_name))
+}
+
+fn plugin_manifest_matches_id(plugin_root: &Path, plugin_id: &str) -> bool {
+    let manifest_path = plugin_root.join("openclaw.plugin.json");
+    let Ok(raw) = fs::read_to_string(manifest_path) else {
+        return false;
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return false;
+    };
+    parsed
+        .get("id")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim() == plugin_id)
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+fn resolve_plugin_root(plugin_id: String, candidates: Vec<String>) -> Result<Option<String>, String> {
+    let trimmed_plugin_id = plugin_id.trim();
+    let env_key = match trimmed_plugin_id {
+        "memory-clawmaster-powermem" => "CLAWMASTER_PACKAGED_MEMORY_PLUGIN_ROOT",
+        "openclaw-ernie-image" => "CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT",
+        other => {
+            return Err(cmd_err_p(
+                "PLUGIN_ID_UNSUPPORTED",
+                serde_json::json!({ "pluginId": other }),
+            ))
+        }
+    };
+
+    let mut search_roots = candidates
+        .into_iter()
+        .map(|candidate| candidate.trim().to_string())
+        .filter(|candidate| !candidate.is_empty())
+        .collect::<Vec<_>>();
+    if let Ok(env_root) = std::env::var(env_key) {
+        let trimmed = env_root.trim();
+        if !trimmed.is_empty() {
+            search_roots.push(trimmed.to_string());
+        }
+    }
+    if let Some(repo_root) = repo_plugin_root(trimmed_plugin_id) {
+        search_roots.push(repo_root.to_string_lossy().to_string());
+    }
+
+    for candidate in search_roots {
+        if plugin_manifest_matches_id(Path::new(&candidate), trimmed_plugin_id) {
+            return Ok(Some(candidate));
+        }
+    }
+
+    Ok(None)
+}
+
+fn bundled_skill_dir_name(skill_id: &str) -> Option<&'static str> {
+    match skill_id.trim().to_ascii_lowercase().as_str() {
+        "ernie-image" => Some("ernie-image"),
+        _ => None,
+    }
+}
+
+fn bundled_skill_env_key(skill_id: &str) -> Option<&'static str> {
+    match skill_id.trim().to_ascii_lowercase().as_str() {
+        "ernie-image" => Some("CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT"),
+        _ => None,
+    }
+}
+
+fn repo_bundled_skill_root(skill_id: &str) -> Option<PathBuf> {
+    let dir_name = bundled_skill_dir_name(skill_id)?;
+    Some(repo_root_path().join("bundled-skills").join(dir_name))
+}
+
+#[tauri::command]
+fn install_bundled_skill(skill_id: String) -> Result<(), String> {
+    let normalized = skill_id.trim().to_ascii_lowercase();
+    let Some(dir_name) = bundled_skill_dir_name(&normalized) else {
+        return Err(cmd_err_p(
+            "SKILL_ID_UNSUPPORTED",
+            serde_json::json!({ "skillId": skill_id.trim() }),
+        ));
+    };
+    let Some(env_key) = bundled_skill_env_key(&normalized) else {
+        return Err(cmd_err_p(
+            "SKILL_ID_UNSUPPORTED",
+            serde_json::json!({ "skillId": skill_id.trim() }),
+        ));
+    };
+
+    let source_path = match std::env::var(env_key) {
+        Ok(source_root) => PathBuf::from(source_root.trim()),
+        Err(_) => repo_bundled_skill_root(&normalized)
+            .ok_or_else(|| cmd_err_d("SKILL_SOURCE_MISSING", format!("Missing env {}", env_key)))?,
+    };
+    if !source_path.join("SKILL.md").exists() {
+        return Err(cmd_err_d(
+            "SKILL_SOURCE_INVALID",
+            format!("Bundled skill source missing SKILL.md: {}", source_path.display()),
+        ));
+    }
+
+    let target_dir = get_config_resolution()
+        .data_dir
+        .join("workspace")
+        .join("skills")
+        .join(dir_name);
+    copy_dir_all(&source_path, &target_dir)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -5688,9 +5900,11 @@ pub fn run() {
             stop_gateway,
             restart_gateway,
             get_config,
+            resolve_plugin_root,
             desktop_smoke_diagnostics,
             save_config,
             reset_openclaw_config,
+            install_bundled_skill,
             save_openclaw_profile,
             clear_openclaw_profile,
             save_clawmaster_runtime,
@@ -5736,6 +5950,20 @@ pub fn run() {
                     std::env::set_var(
                         "CLAWMASTER_PACKAGED_MEMORY_PLUGIN_ROOT",
                         plugin_root.to_string_lossy().to_string(),
+                    );
+                }
+                let ernie_image_plugin_root = resource_dir.join("openclaw-ernie-image");
+                if ernie_image_plugin_root.join("openclaw.plugin.json").exists() {
+                    std::env::set_var(
+                        "CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT",
+                        ernie_image_plugin_root.to_string_lossy().to_string(),
+                    );
+                }
+                let ernie_image_skill_root = resource_dir.join("bundled-skills").join("ernie-image");
+                if ernie_image_skill_root.join("SKILL.md").exists() {
+                    std::env::set_var(
+                        "CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT",
+                        ernie_image_skill_root.to_string_lossy().to_string(),
                     );
                 }
             }

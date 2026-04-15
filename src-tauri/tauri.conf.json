@@ -27,7 +27,9 @@
     "active": true,
     "targets": "all",
     "resources": [
+      "../.tauri-resources/bundled-skills",
       "../.tauri-resources/memory-clawmaster-powermem",
+      "../.tauri-resources/openclaw-ernie-image",
       "../.tauri-resources/node_modules"
     ],
     "icon": [

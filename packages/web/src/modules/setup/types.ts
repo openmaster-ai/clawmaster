@@ -122,6 +122,9 @@ export interface ProviderConfig {
   labelByLocale?: Partial<Record<'zh' | 'en' | 'ja', string>>
   models: Array<{ id: string; name: string }>
   defaultModel: string
+  kind?: 'text' | 'text-to-image'
+  /** Runtime provider id used in model refs and existing OpenClaw config */
+  runtimeProviderId?: string
   baseUrl?: string // 预置 baseUrl（如 DeepSeek、SiliconFlow）
   needsBaseUrl?: boolean // 需要用户手动输入 baseUrl（如自定义兼容端点）
   /** 自定义 provider 的 API 类型（如 OpenAI-compatible 端点） */
@@ -136,6 +139,18 @@ export interface ProviderConfig {
   credentialLabelByLocale?: Partial<Record<'zh' | 'en' | 'ja', string>>
   /** 提供商说明文案 i18n key */
   noteKey?: string
+  /** 更详细的能力说明文案 i18n key */
+  guideKey?: string
+  /** 是否出现在安装向导内 */
+  setupEnabled?: boolean
+  /** 是否支持实时模型目录 */
+  supportsCatalog?: boolean
+  /** 推荐的技能 */
+  recommendedSkill?: {
+    slug: string
+    name: string
+    descriptionKey: string
+  }
 }
 
 export type ProviderBadgeTone = 'golden-sponsor'
@@ -302,6 +317,84 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     ],
     defaultModel: 'ernie-5.0-thinking-preview',
   },
+  'baidu-aistudio-image': {
+    label: 'ERNIE-Image',
+    labelByLocale: {
+      zh: '文心绘图',
+      en: 'ERNIE-Image',
+      ja: 'ERNIE-Image',
+    },
+    kind: 'text-to-image',
+    api: 'openai-completions',
+    keyUrl: 'https://aistudio.baidu.com/usercenter/token',
+    credentialLabel: 'Access Token',
+    credentialLabelByLocale: {
+      zh: '令牌',
+      en: 'Access Token',
+      ja: 'アクセストークン',
+    },
+    noteKey: 'providers.ernieImageNote',
+    guideKey: 'providers.ernieImageGuide',
+    setupEnabled: false,
+    supportsCatalog: false,
+    recommendedSkill: {
+      slug: 'ernie-image',
+      name: 'ERNIE-Image Guide',
+      descriptionKey: 'providers.ernieImageSkillDesc',
+    },
+    baseUrl: 'https://aistudio.baidu.com/llm/lmapi/v3',
+    models: [
+      { id: 'ernie-image-turbo', name: 'ERNIE-Image Turbo' },
+    ],
+    defaultModel: 'ernie-image-turbo',
+  },
+  'google-image': {
+    label: 'Gemini Image',
+    labelByLocale: {
+      zh: 'Gemini 绘图',
+      en: 'Gemini Image',
+      ja: 'Gemini Image',
+    },
+    kind: 'text-to-image',
+    runtimeProviderId: 'google',
+    keyUrl: 'https://aistudio.google.com/apikey',
+    guideKey: 'providers.googleImageGuide',
+    setupEnabled: false,
+    supportsCatalog: false,
+    recommendedSkill: {
+      slug: 'image-generate',
+      name: 'Image Generate',
+      descriptionKey: 'providers.imageGenerateSkillDesc',
+    },
+    models: [
+      { id: 'gemini-3.1-flash-image-preview', name: 'Gemini 3.1 Flash Image Preview' },
+      { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image Preview' },
+    ],
+    defaultModel: 'gemini-3.1-flash-image-preview',
+  },
+  'openai-image': {
+    label: 'GPT Image',
+    labelByLocale: {
+      zh: 'GPT 绘图',
+      en: 'GPT Image',
+      ja: 'GPT Image',
+    },
+    kind: 'text-to-image',
+    runtimeProviderId: 'openai',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    guideKey: 'providers.gptImageGuide',
+    setupEnabled: false,
+    supportsCatalog: false,
+    recommendedSkill: {
+      slug: 'image-generate',
+      name: 'Image Generate',
+      descriptionKey: 'providers.imageGenerateSkillDesc',
+    },
+    models: [
+      { id: 'gpt-image-1', name: 'GPT Image 1' },
+    ],
+    defaultModel: 'gpt-image-1',
+  },
   // ── 聚合平台 ──
   openrouter: {
     label: 'OpenRouter',
@@ -381,9 +474,11 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
 
 /** 首屏展示的提供商（按钮行），其余折叠在"更多"中 */
 export const PRIMARY_PROVIDERS = ['baidu-aistudio', 'openai', 'anthropic', 'deepseek', 'google', 'ollama', 'openrouter'] as const
+export const PRIMARY_IMAGE_PROVIDERS = ['baidu-aistudio-image', 'google-image', 'openai-image'] as const
 
 export const PROVIDER_BADGES: Partial<Record<keyof typeof PROVIDERS, ProviderBadgeTone>> = {
   'baidu-aistudio': 'golden-sponsor',
+  'baidu-aistudio-image': 'golden-sponsor',
 }
 
 function normalizeProviderLocale(locale?: string): 'zh' | 'en' | 'ja' | undefined {
@@ -404,6 +499,22 @@ export function getProviderCredentialLabel(providerId: string, locale?: string):
 
   const normalizedLocale = normalizeProviderLocale(locale)
   return provider.credentialLabelByLocale?.[normalizedLocale ?? 'en'] ?? provider.credentialLabel ?? 'API Key'
+}
+
+export function getProviderKind(providerId: string): 'text' | 'text-to-image' {
+  return PROVIDERS[providerId]?.kind ?? 'text'
+}
+
+export function getProviderRuntimeId(providerId: string): string {
+  return PROVIDERS[providerId]?.runtimeProviderId ?? PROVIDERS[providerId]?.configKeyOverride ?? providerId
+}
+
+export function getProviderDefaultTarget(providerId: string): 'primary' | 'imageGeneration' {
+  return getProviderKind(providerId) === 'text-to-image' ? 'imageGeneration' : 'primary'
+}
+
+export function providerSupportsSetup(providerId: string): boolean {
+  return PROVIDERS[providerId]?.setupEnabled !== false
 }
 
 export interface ChannelTokenField {

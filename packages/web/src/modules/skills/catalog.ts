@@ -10,6 +10,7 @@ export interface CatalogSkill {
   category: SkillCategory
   /** Local OpenClaw `skills.entries.<skillKey>` id when it differs from the install slug. */
   skillKey?: string
+  installSource?: 'registry' | 'bundled'
   featured?: boolean
   /** GitHub repo URL for docs/source link */
   sourceUrl?: string
@@ -101,6 +102,24 @@ export const SKILL_CATALOG: CatalogSkill[] = [
     category: 'productivity',
     skillKey: 'skillnote',
     sourceUrl: 'https://github.com/luna-prompts/skillnote',
+  },
+  {
+    slug: 'ernie-image',
+    name: 'ERNIE-Image Guide',
+    descriptionKey: 'skills.catalog.ernieImage.desc',
+    category: 'productivity',
+    skillKey: 'ernie-image',
+    installSource: 'bundled',
+    featured: true,
+    sourceUrl: 'https://github.com/clawmaster-ai/clawmaster',
+  },
+  {
+    slug: 'image-generate',
+    name: 'Image Generate',
+    descriptionKey: 'skills.catalog.imageGenerate.desc',
+    category: 'productivity',
+    skillKey: 'image-generate',
+    sourceUrl: 'https://clawhub.ai/image-generate',
   },
 
   // Agent & Meta

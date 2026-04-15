@@ -1,0 +1,28 @@
+{
+  "name": "openclaw-ernie-image",
+  "version": "0.1.0",
+  "description": "OpenClaw ERNIE-Image provider plugin managed by ClawMaster.",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "files": [
+    "index.ts",
+    "openclaw.plugin.json"
+  ],
+  "peerDependencies": {
+    "openclaw": ">=2026.1.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "license": "MIT"
+}

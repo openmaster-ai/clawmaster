@@ -5,6 +5,7 @@ import {
   setOpenclawPluginEnabled,
   uninstallOpenclawPlugin,
 } from '../services/openclawPlugins.js'
+import { installBundledSkill, isBundledSkillSlug } from '../services/bundledSkills.js'
 import { installSkillWithClawhub, searchClawhubSkills } from '../clawhubRegistry.js'
 import { scanInstalledSkill } from '../services/skillGuardService.js'
 import { runOpenclawSkillsChecked, runOpenclawSkillsUninstall } from '../skillsCli.js'
@@ -100,6 +101,10 @@ export function registerPluginsRoutes(app: express.Express): void {
       return res.status(400).type('text').send('Missing slug')
     }
     try {
+      if (isBundledSkillSlug(slug)) {
+        installBundledSkill(slug)
+        return res.status(204).end()
+      }
       try {
         await installSkillWithClawhub(slug)
       } catch {

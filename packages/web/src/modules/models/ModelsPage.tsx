@@ -1,12 +1,23 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, ChevronsUpDown, Search, Sparkles } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { platform } from '@/adapters'
 import { PasswordField } from '@/shared/components/PasswordField'
-import { getProviderModelCatalogResult } from '@/shared/adapters/openclaw'
+import { getProviderModelCatalogResult, setConfigResult } from '@/shared/adapters/openclaw'
 import { supportsProviderCatalog, type ProviderCatalogModel } from '@/shared/providerCatalog'
 import { getSetupAdapter } from '@/modules/setup/adapters'
-import { PROVIDERS, PRIMARY_PROVIDERS, PROVIDER_BADGES, getProviderCredentialLabel, getProviderLabel } from '@/modules/setup/types'
+import {
+  PROVIDERS,
+  PRIMARY_PROVIDERS,
+  PRIMARY_IMAGE_PROVIDERS,
+  PROVIDER_BADGES,
+  getProviderCredentialLabel,
+  getProviderDefaultTarget,
+  getProviderKind,
+  getProviderLabel,
+  getProviderRuntimeId,
+} from '@/modules/setup/types'
 import type { OpenClawConfig, ModelInfo, OpenClawModelProvider, OpenClawModelRef } from '@/lib/types'
 
 const providerBadgeToneClass = 'border-amber-400/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
@@ -24,17 +35,33 @@ function sortProviderIds(providerIds: string[]) {
   })
 }
 
-function splitProviderIds(providerIds: string[]) {
-  const ordered = sortProviderIds(providerIds)
+function getConfiguredDisplayProviderIds(providers: Record<string, OpenClawModelProvider>) {
+  const definedIds = Object.keys(PROVIDERS).filter((providerId) => Boolean(providers[getProviderRuntimeId(providerId)]))
+  const coveredRuntimeIds = new Set(definedIds.map((providerId) => getProviderRuntimeId(providerId)))
+  const fallbackIds = Object.keys(providers).filter((providerId) => !coveredRuntimeIds.has(providerId))
+
   return {
-    sponsorIds: ordered.filter((providerId) => isGoldenSponsor(providerId)),
-    otherIds: ordered.filter((providerId) => !isGoldenSponsor(providerId)),
+    textIds: sortProviderIds([
+      ...definedIds.filter((providerId) => getProviderKind(providerId) !== 'text-to-image'),
+      ...fallbackIds,
+    ]),
+    imageIds: sortProviderIds(
+      definedIds.filter((providerId) => getProviderKind(providerId) === 'text-to-image'),
+    ),
   }
 }
 
 type ProviderModelOption = {
   id: string
   name: string
+}
+
+type ConfiguredProvider = OpenClawModelProvider & {
+  apiKey?: string
+  api_key?: string
+  api?: string
+  imageApiKey?: string
+  imageBaseUrl?: string
 }
 
 type ProviderCatalogStatus = 'idle' | 'loading' | 'live' | 'fallback' | 'error'
@@ -107,14 +134,21 @@ function getProviderModelOptions(
   remoteModels: ProviderModelOption[] | null,
 ): ProviderModelOption[] {
   const knownProvider = PROVIDERS[providerId]
+  const providerKind = getProviderKind(providerId)
   const legacyModels = provider.models?.length ? provider.models : undefined
-  const savedModels = hasSelectableProviderModels(legacyModels) ? legacyModels : undefined
+  const savedModels = providerKind === 'text-to-image'
+    ? undefined
+    : hasSelectableProviderModels(legacyModels)
+      ? legacyModels
+      : undefined
   const shouldUseCanonicalFallback = shouldUseCanonicalErnieCatalog(providerId, legacyModels)
   const options = remoteModels?.length
     ? mergeProviderModelOptions(remoteModels)
     : shouldUseCanonicalFallback
       ? mergeProviderModelOptions(knownProvider?.models)
-      : mergeProviderModelOptions(savedModels, knownProvider?.models)
+      : providerKind === 'text-to-image'
+        ? mergeProviderModelOptions(knownProvider?.models)
+        : mergeProviderModelOptions(savedModels, knownProvider?.models)
 
   if (currentModelId && !options.some((option) => option.id === currentModelId)) {
     options.unshift({ id: currentModelId, name: currentModelId })
@@ -129,6 +163,26 @@ function getCurrentModelId(defaultModel: string, providerId: string): string | n
     return null
   }
   return defaultModel.slice(prefix.length)
+}
+
+function getProviderApiKey(providerId: string, provider: ConfiguredProvider): string | undefined {
+  if (getProviderKind(providerId) === 'text-to-image') {
+    return provider.imageApiKey || provider.apiKey || provider.api_key || undefined
+  }
+
+  return provider.apiKey || provider.api_key || undefined
+}
+
+function getProviderBaseUrl(providerId: string, provider: ConfiguredProvider): string | undefined {
+  if (providerId === 'openai-image' || providerId === 'google-image') {
+    return provider.imageBaseUrl
+  }
+
+  if (getProviderKind(providerId) === 'text-to-image') {
+    return provider.baseUrl
+  }
+
+  return provider.baseUrl
 }
 
 function getQuickPickModels(models: ProviderModelOption[], currentModelId: string | null) {
@@ -159,6 +213,34 @@ function ProviderBadge({ providerId }: { providerId: string }) {
       <Sparkles className="h-3.5 w-3.5" />
       {t('providers.badgeGoldenSponsor')}
     </span>
+  )
+}
+
+function ProviderGuidancePanel({ providerId }: { providerId: string }) {
+  const { t } = useTranslation()
+  const provider = PROVIDERS[providerId]
+  if (!provider?.guideKey && !provider?.recommendedSkill) {
+    return null
+  }
+
+  return (
+    <div className="mb-4 rounded-2xl border border-sky-400/20 bg-sky-500/[0.06] p-4">
+      {provider.guideKey && (
+        <p className="text-sm text-foreground/90">{t(provider.guideKey)}</p>
+      )}
+      {provider.recommendedSkill && (
+        <div className="mt-4 flex flex-col gap-3 rounded-xl border border-border/70 bg-background/80 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <p className="control-label">{t('models.recommendedSkill')}</p>
+            <p className="text-sm font-medium">{provider.recommendedSkill.name}</p>
+            <p className="text-xs text-muted-foreground">{t(provider.recommendedSkill.descriptionKey)}</p>
+          </div>
+          <Link to="/skills" className="button-secondary text-center">
+            {t('models.openSkills')}
+          </Link>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -193,14 +275,10 @@ export default function Models() {
   }
 
   const defaultModel = config?.agents?.defaults?.model?.primary || '-'
+  const defaultImageModel = config?.agents?.defaults?.imageGenerationModel?.primary || ''
   const providers = config?.models?.providers || {}
-  const hasProviders = Object.keys(providers).length > 0
-  const orderedProviderEntries = Object.entries(providers).sort(([leftId], [rightId]) => {
-    const leftScore = isGoldenSponsor(leftId) ? 0 : 1
-    const rightScore = isGoldenSponsor(rightId) ? 0 : 1
-    if (leftScore !== rightScore) return leftScore - rightScore
-    return leftId.localeCompare(rightId)
-  })
+  const { textIds: configuredTextProviderIds, imageIds: configuredImageProviderIds } = getConfiguredDisplayProviderIds(providers)
+  const hasProviders = configuredTextProviderIds.length > 0 || configuredImageProviderIds.length > 0
 
   return (
     <div className="page-shell page-shell-medium">
@@ -210,6 +288,16 @@ export default function Models() {
           <p className="page-subtitle">
             {t('models.defaultModel', { model: defaultModel })}
           </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-border/70 bg-card/80 px-4 py-3">
+              <p className="control-label">{t('models.textDefault')}</p>
+              <p className="mt-1 truncate text-sm font-medium">{defaultModel}</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-card/80 px-4 py-3">
+              <p className="control-label">{t('models.imageGenerationDefault')}</p>
+              <p className="mt-1 truncate text-sm font-medium">{defaultImageModel || t('common.notSet')}</p>
+            </div>
+          </div>
         </div>
         <button
           id="models-add-provider-trigger"
@@ -225,16 +313,57 @@ export default function Models() {
 
       {/* 已配置的提供商 */}
       <div id="models-providers" className="space-y-3">
-        {orderedProviderEntries.map(([providerId, provider]: [string, any]) => (
-          <ProviderCard
-            key={providerId}
-            providerId={providerId}
-            provider={provider}
-            isDefault={defaultModel.startsWith(providerId + '/')}
-            defaultModel={defaultModel}
-            onRefresh={loadData}
-          />
-        ))}
+        {configuredTextProviderIds.length > 0 && (
+          <section id="models-text-providers" className="space-y-3">
+            <div className="section-heading">
+              <div>
+                <h2 className="section-title">{t('models.textProviders')}</h2>
+                <p className="section-subtitle">{t('models.textProvidersDesc')}</p>
+              </div>
+            </div>
+            {configuredTextProviderIds.map((providerId) => {
+              const runtimeProviderId = getProviderRuntimeId(providerId)
+              const provider = providers[runtimeProviderId] as ConfiguredProvider
+              return (
+                <ProviderCard
+                  key={providerId}
+                  providerId={providerId}
+                  runtimeProviderId={runtimeProviderId}
+                  provider={provider}
+                  isDefault={defaultModel.startsWith(runtimeProviderId + '/')}
+                  defaultModel={defaultModel}
+                  onRefresh={loadData}
+                />
+              )
+            })}
+          </section>
+        )}
+
+        {configuredImageProviderIds.length > 0 && (
+          <section id="models-image-providers" className="space-y-3">
+            <div className="section-heading">
+              <div>
+                <h2 className="section-title">{t('models.imageProviders')}</h2>
+                <p className="section-subtitle">{t('models.imageProvidersDesc')}</p>
+              </div>
+            </div>
+            {configuredImageProviderIds.map((providerId) => {
+              const runtimeProviderId = getProviderRuntimeId(providerId)
+              const provider = providers[runtimeProviderId] as ConfiguredProvider
+              return (
+                <ProviderCard
+                  key={providerId}
+                  providerId={providerId}
+                  runtimeProviderId={runtimeProviderId}
+                  provider={provider}
+                  isDefault={defaultImageModel.startsWith(runtimeProviderId + '/')}
+                  defaultModel={defaultImageModel}
+                  onRefresh={loadData}
+                />
+              )
+            })}
+          </section>
+        )}
 
         {!hasProviders && (
           <div id="models-first-run" className="surface-card">
@@ -264,32 +393,63 @@ export default function Models() {
               </div>
 
               <div className="space-y-3">
-                <p className="control-label">{t('models.recommendedProviders')}</p>
-                {([...PRIMARY_PROVIDERS] as string[]).slice(0, 4).map((providerId) => (
-                  <button
-                    key={providerId}
-                    type="button"
-                    onClick={() => {
-                      setPreferredProvider(providerId)
-                      setShowAdd(true)
-                    }}
-                    className="flex w-full items-center justify-between rounded-2xl border border-border/80 bg-card/80 px-4 py-3 text-left transition hover:border-primary/30 hover:bg-background/80"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">{getProviderLabel(providerId, i18n.language)}</p>
-                        <ProviderBadge providerId={providerId} />
+                <div className="space-y-2">
+                  <p className="control-label">{t('models.textProviders')}</p>
+                  {([...PRIMARY_PROVIDERS] as string[]).slice(0, 4).map((providerId) => (
+                    <button
+                      key={providerId}
+                      type="button"
+                      onClick={() => {
+                        setPreferredProvider(providerId)
+                        setShowAdd(true)
+                      }}
+                      className="flex w-full items-center justify-between rounded-2xl border border-border/80 bg-card/80 px-4 py-3 text-left transition hover:border-primary/30 hover:bg-background/80"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">{getProviderLabel(providerId, i18n.language)}</p>
+                          <ProviderBadge providerId={providerId} />
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {(PROVIDERS[providerId]?.models ?? [])
+                            .slice(0, 2)
+                            .map((item) => item.name)
+                            .join(' / ') || t('models.addProviderTitle')}
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {(PROVIDERS[providerId]?.models ?? [])
-                          .slice(0, 2)
-                          .map((item) => item.name)
-                          .join(' / ') || t('models.addProviderTitle')}
-                      </p>
-                    </div>
-                    <span className="text-sm font-medium text-primary">{t('models.recommendedProviderCta')}</span>
-                  </button>
-                ))}
+                      <span className="text-sm font-medium text-primary">{t('models.recommendedProviderCta')}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="control-label">{t('models.imageProviders')}</p>
+                  {(PRIMARY_IMAGE_PROVIDERS as readonly string[]).map((providerId) => (
+                    <button
+                      key={providerId}
+                      type="button"
+                      onClick={() => {
+                        setPreferredProvider(providerId)
+                        setShowAdd(true)
+                      }}
+                      className="flex w-full items-center justify-between rounded-2xl border border-border/80 bg-card/80 px-4 py-3 text-left transition hover:border-primary/30 hover:bg-background/80"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">{getProviderLabel(providerId, i18n.language)}</p>
+                          <ProviderBadge providerId={providerId} />
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {(PROVIDERS[providerId]?.models ?? [])
+                            .slice(0, 2)
+                            .map((item) => item.name)
+                            .join(' / ') || t('models.addProviderTitle')}
+                        </p>
+                      </div>
+                      <span className="text-sm font-medium text-primary">{t('models.recommendedProviderCta')}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -315,13 +475,15 @@ export default function Models() {
 
 function ProviderCard({
   providerId,
+  runtimeProviderId,
   provider,
   isDefault,
   defaultModel,
   onRefresh,
 }: {
   providerId: string
-  provider: OpenClawModelProvider & { apiKey?: string; api_key?: string; api?: string }
+  runtimeProviderId: string
+  provider: ConfiguredProvider
   isDefault: boolean
   defaultModel: string
   onRefresh: () => void
@@ -338,8 +500,12 @@ function ProviderCard({
   const [catalogStatus, setCatalogStatus] = useState<ProviderCatalogStatus>('idle')
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const adapter = getSetupAdapter()
-  const currentModelId = getCurrentModelId(defaultModel, providerId)
-  const canLoadProviderCatalog = supportsProviderCatalog(providerId, provider)
+  const providerConfig = PROVIDERS[providerId]
+  const defaultTarget = getProviderDefaultTarget(providerId)
+  const currentModelId = getCurrentModelId(defaultModel, runtimeProviderId)
+  const providerApiKey = getProviderApiKey(providerId, provider)
+  const providerBaseUrl = getProviderBaseUrl(providerId, provider)
+  const canLoadProviderCatalog = providerConfig?.supportsCatalog !== false && supportsProviderCatalog(runtimeProviderId, provider)
   const displayModels = useMemo(
     () => getProviderModelOptions(providerId, provider, currentModelId, remoteModels),
     [providerId, provider, currentModelId, remoteModels],
@@ -374,10 +540,10 @@ function ProviderCard({
 
     setCatalogStatus('loading')
     setCatalogError(null)
-    const result = await getProviderModelCatalogResult({
-      providerId,
-      apiKey: provider.apiKey || provider.api_key || undefined,
-      baseUrl: provider.baseUrl,
+        const result = await getProviderModelCatalogResult({
+      providerId: runtimeProviderId,
+      apiKey: providerApiKey,
+      baseUrl: providerBaseUrl,
     })
 
     if (result.success && result.data?.length) {
@@ -393,7 +559,7 @@ function ProviderCard({
     setRemoteModels(null)
     setCatalogStatus(result.success ? 'fallback' : 'error')
     setCatalogError(result.success ? null : (result.error ?? t('common.requestFailed')))
-  }, [canLoadProviderCatalog, providerId, provider.apiKey, provider.api_key, provider.baseUrl, t])
+  }, [canLoadProviderCatalog, runtimeProviderId, providerApiKey, providerBaseUrl, t])
 
   useEffect(() => {
     let active = true
@@ -436,8 +602,8 @@ function ProviderCard({
     setTestResult(null)
     const ok = await adapter.onboarding.testApiKey(
       providerId,
-      provider.apiKey || provider.api_key || '',
-      provider.baseUrl,
+      providerApiKey || '',
+      providerBaseUrl,
     )
     setTestResult(ok)
     setTesting(false)
@@ -449,7 +615,15 @@ function ProviderCard({
     try {
       setSettingDefault(true)
       setSetModelError(null)
-      await platform.setDefaultModel(`${providerId}/${selectedModelId}`)
+      const runtimeModelRef = `${runtimeProviderId}/${selectedModelId}`
+      if (defaultTarget === 'imageGeneration') {
+        const result = await setConfigResult('agents.defaults.imageGenerationModel.primary', runtimeModelRef)
+        if (!result.success) {
+          throw new Error(result.error ?? t('common.requestFailed'))
+        }
+      } else {
+        await platform.setDefaultModel(runtimeModelRef)
+      }
       await onRefresh()
       setShowModelPicker(false)
     } catch (error) {
@@ -466,9 +640,13 @@ function ProviderCard({
           <span className={`w-3 h-3 rounded-full ${isDefault ? 'bg-primary' : 'bg-green-500'}`} />
           <span className="font-medium">{getProviderLabel(providerId, i18n.language)}</span>
           <ProviderBadge providerId={providerId} />
-          {isDefault && <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">{t('models.default')}</span>}
-          {provider.baseUrl && (
-            <span className="text-xs text-muted-foreground font-mono">({provider.baseUrl})</span>
+          {isDefault && (
+            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+              {defaultTarget === 'imageGeneration' ? t('models.imageDefaultShort') : t('models.default')}
+            </span>
+          )}
+          {providerBaseUrl && (
+            <span className="text-xs text-muted-foreground font-mono">({providerBaseUrl})</span>
           )}
         </div>
         <div className="flex gap-2">
@@ -503,6 +681,8 @@ function ProviderCard({
           {testResult === false && <span className="text-red-500 text-sm self-center">{t('models.connectionFailed')}</span>}
         </div>
       </div>
+
+      <ProviderGuidancePanel providerId={providerId} />
 
       {canLoadProviderCatalog && (
         <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
@@ -562,10 +742,10 @@ function ProviderCard({
         </div>
       )}
 
-      {(provider.apiKey || provider.api_key) && (
+      {providerApiKey && (
         <div className="mb-2 grid gap-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
           <span className="text-muted-foreground">API Key:</span>
-          <PasswordField value={(provider.apiKey || provider.api_key) ?? ''} className="flex-1" />
+          <PasswordField value={providerApiKey} className="flex-1" />
         </div>
       )}
 
@@ -580,7 +760,7 @@ function ProviderCard({
               <p className="text-xs text-muted-foreground">{t('models.pickModelDesc')}</p>
             </div>
             <span className="text-xs font-mono text-muted-foreground">
-              {providerId}
+              {runtimeProviderId}
             </span>
           </div>
 
@@ -742,7 +922,11 @@ function ProviderCard({
               disabled={!selectedModelId || !selectedModelExists || selectedModelId === currentModelId || settingDefault}
               className="button-primary px-3 py-1"
             >
-              {settingDefault ? t('models.settingDefault') : t('models.setAsDefault')}
+              {settingDefault
+                ? t('models.settingDefault')
+                : defaultTarget === 'imageGeneration'
+                  ? t('models.setAsImageDefault')
+                  : t('models.setAsDefault')}
             </button>
             </div>
           </div>
@@ -800,12 +984,16 @@ function AddProviderPanel({
   const adapter = getSetupAdapter()
 
   const allIds = Object.keys(PROVIDERS)
-  const primaryIds = PRIMARY_PROVIDERS as readonly string[]
-  const visibleIds = showMore ? allIds : [...primaryIds]
-  const { sponsorIds, otherIds } = splitProviderIds(visibleIds)
+  const primaryTextIds = PRIMARY_PROVIDERS as readonly string[]
+  const primaryImageIds = PRIMARY_IMAGE_PROVIDERS as readonly string[]
+  const initialVisibleIds = [...new Set([...primaryTextIds, ...primaryImageIds])]
+  const visibleIds = showMore ? allIds : initialVisibleIds
+  const textIds = sortProviderIds(visibleIds.filter((providerId) => getProviderKind(providerId) !== 'text-to-image'))
+  const imageIds = sortProviderIds(visibleIds.filter((providerId) => getProviderKind(providerId) === 'text-to-image'))
   const cfg = PROVIDERS[provider]
   const credentialLabel = getProviderCredentialLabel(provider, i18n.language)
   const providerLabel = getProviderLabel(provider, i18n.language)
+  const willInstallBundledSkill = provider === 'baidu-aistudio-image'
 
   useEffect(() => {
     setProvider(initialProvider)
@@ -848,11 +1036,11 @@ function AddProviderPanel({
         <h3 className="section-title text-lg">{t('models.addProviderTitle')}</h3>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm">{t('common.cancel')}</button>
       </div>
-      {sponsorIds.length > 0 && (
+      {textIds.length > 0 && (
         <div className="space-y-2">
-          <p className="control-label">{t('providers.badgeGoldenSponsor')}</p>
+          <p className="control-label">{t('models.textProviders')}</p>
           <div className="flex gap-2 flex-wrap">
-            {sponsorIds.map((p) => (
+            {textIds.map((p) => (
               <ProviderSelectButton
                 key={p}
                 providerId={p}
@@ -863,11 +1051,11 @@ function AddProviderPanel({
           </div>
         </div>
       )}
-      {otherIds.length > 0 && (
+      {imageIds.length > 0 && (
         <div className="space-y-2">
-          <p className="control-label">{t('models.recommendedProviders')}</p>
+          <p className="control-label">{t('models.imageProviders')}</p>
           <div className="flex gap-2 flex-wrap">
-            {otherIds.map((p) => (
+            {imageIds.map((p) => (
               <ProviderSelectButton
                 key={p}
                 providerId={p}
@@ -878,9 +1066,9 @@ function AddProviderPanel({
           </div>
         </div>
       )}
-      {allIds.length > primaryIds.length && (
+      {allIds.length > initialVisibleIds.length && (
         <button onClick={() => setShowMore(!showMore)} className="text-xs text-muted-foreground hover:text-foreground">
-          {showMore ? t('setup.collapse') : t('models.showMore', { count: allIds.length - primaryIds.length })}
+          {showMore ? t('setup.collapse') : t('models.showMore', { count: allIds.length - initialVisibleIds.length })}
         </button>
       )}
       {cfg?.keyUrl && (
@@ -896,6 +1084,18 @@ function AddProviderPanel({
           {t(cfg.noteKey)}
         </p>
       )}
+      {willInstallBundledSkill && (
+        <div
+          id="models-provider-skill-install-note"
+          className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-950 dark:text-emerald-100"
+        >
+          <p className="font-medium">{t('models.skillInstallNoticeTitle')}</p>
+          <p className="mt-1 text-xs text-emerald-900/90 dark:text-emerald-100/90">
+            {t('models.ernieImageSkillInstallNotice')}
+          </p>
+        </div>
+      )}
+      <ProviderGuidancePanel providerId={provider} />
       {cfg?.needsBaseUrl && (
         <input
           id="models-provider-base-url"

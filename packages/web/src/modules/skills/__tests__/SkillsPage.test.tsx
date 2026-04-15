@@ -64,7 +64,7 @@ describe('SkillsPage', () => {
     render(<SkillsPage />)
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Skill Market' })).toBeInTheDocument()
-    expect(screen.getByText('Start with four high-value skills')).toBeInTheDocument()
+    expect(screen.getByText('Start with high-value skills')).toBeInTheDocument()
     expect(screen.queryByText('Curated Catalog')).not.toBeInTheDocument()
     expect(screen.queryByText('OpenClaw runtime status')).not.toBeInTheDocument()
     expect(screen.getAllByText('Loading...').length).toBeGreaterThan(0)
@@ -75,15 +75,16 @@ describe('SkillsPage', () => {
 
     render(<SkillsPage />)
 
-    await screen.findByRole('heading', { level: 2, name: 'Start with four high-value skills' })
+    await screen.findByRole('heading', { level: 2, name: 'Start with high-value skills' })
 
     const headings = screen
       .getAllByRole('heading', { level: 3 })
-      .slice(0, 4)
+      .slice(0, 5)
       .map((node) => node.textContent)
 
     expect(headings).toEqual([
       'clawvet',
+      'ernie-image',
       'find-skills',
       'openclaw-memory-pro-system',
       'self-improving-agent',
@@ -154,7 +155,10 @@ describe('SkillsPage', () => {
 
     render(<SkillsPage />)
 
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Install' }))[0])
+    const clawvetHeading = await screen.findByRole('heading', { level: 3, name: 'clawvet' })
+    const clawvetCard = clawvetHeading.closest('div.rounded-\\[28px\\].border.p-5')
+    expect(clawvetCard).not.toBeNull()
+    fireEvent.click(within(clawvetCard as HTMLElement).getByRole('button', { name: 'Install' }))
 
     expect(mockInstallSkillResult).toHaveBeenCalledWith('clawvet')
     expect(await screen.findByText('HTTP 500: bad install')).toBeInTheDocument()
@@ -172,5 +176,6 @@ describe('SkillsPage', () => {
     expect(await screen.findByText('Install ClawHub CLI first')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Install ClawHub CLI' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Install ClawHub First' }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Install' })).toBeInTheDocument()
   })
 })

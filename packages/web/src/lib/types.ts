@@ -139,6 +139,7 @@ export interface OpenClawConfig {
   agents?: {
     defaults?: {
       model?: { primary?: string }
+      imageGenerationModel?: { primary?: string }
       workspace?: string
       maxConcurrent?: number
     }
@@ -149,11 +150,24 @@ export interface OpenClawConfig {
   bindings?: OpenClawBinding[]
   /** OpenClaw plugins.entries + metadata (from openclaw.json) */
   plugins?: {
+    load?: {
+      paths?: string[]
+    }
     entries?: Record<
       string,
       {
         enabled?: boolean
         config?: Record<string, unknown>
+      }
+    >
+    installs?: Record<
+      string,
+      {
+        source?: string
+        sourcePath?: string
+        installPath?: string
+        version?: string
+        installedAt?: string
       }
     >
   }

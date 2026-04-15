@@ -12,6 +12,11 @@ vi.mock('@/shared/adapters/gateway', () => ({
 vi.mock('@/shared/adapters/openclaw', () => ({
   getConfigResult: vi.fn(),
   setConfigResult: vi.fn(),
+  resolvePluginRootResult: vi.fn(),
+}))
+
+vi.mock('@/shared/adapters/clawhub', () => ({
+  installSkillResult: vi.fn(),
 }))
 
 vi.mock('@/shared/adapters/system', () => ({
@@ -20,7 +25,8 @@ vi.mock('@/shared/adapters/system', () => ({
 }))
 
 import { execCommand } from '@/shared/adapters/platform'
-import { getConfigResult, setConfigResult } from '@/shared/adapters/openclaw'
+import { getConfigResult, resolvePluginRootResult, setConfigResult } from '@/shared/adapters/openclaw'
+import { installSkillResult } from '@/shared/adapters/clawhub'
 import { detectSystemResult, probeHttpStatusResult } from '@/shared/adapters/system'
 import { realSetupAdapter } from '../adapters'
 import type { InstallProgress } from '../types'
@@ -30,8 +36,11 @@ describe('realSetupAdapter', () => {
     vi.mocked(execCommand).mockReset()
     vi.mocked(getConfigResult).mockReset()
     vi.mocked(setConfigResult).mockReset()
+    vi.mocked(resolvePluginRootResult).mockReset()
+    vi.mocked(installSkillResult).mockReset()
     vi.mocked(detectSystemResult).mockReset()
     vi.mocked(probeHttpStatusResult).mockReset()
+    vi.mocked(execCommand).mockResolvedValue('')
     vi.mocked(getConfigResult).mockResolvedValue({
       success: true,
       data: {
@@ -45,6 +54,16 @@ describe('realSetupAdapter', () => {
       success: false,
       data: null,
       error: 'unavailable',
+    })
+    vi.mocked(resolvePluginRootResult).mockResolvedValue({
+      success: true,
+      data: null,
+      error: null,
+    } as any)
+    vi.mocked(installSkillResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
     })
   })
 
@@ -183,6 +202,397 @@ describe('realSetupAdapter', () => {
     )
   })
 
+  it('throws when the ERNIE-Image runtime plugin root cannot be resolved', async () => {
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('baidu-aistudio-image', 'bce-image-token'),
+    ).rejects.toThrow('Failed to resolve ERNIE-Image runtime plugin root')
+
+    expect(setConfigResult).not.toHaveBeenCalledWith(
+      'models.providers.baidu-aistudio-image',
+      expect.anything(),
+    )
+    expect(installSkillResult).not.toHaveBeenCalled()
+  })
+
+  it('preserves the shared OpenAI chat key when GPT Image uses a different credential', async () => {
+    vi.mocked(getConfigResult).mockResolvedValue({
+      success: true,
+      data: {
+        models: {
+          providers: {
+            openai: {
+              apiKey: 'sk-existing-openai',
+              models: [{ id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' }],
+            },
+          },
+        },
+      },
+      error: null,
+    } as any)
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('openai-image', 'sk-image-openai'),
+    ).resolves.toBeUndefined()
+
+    expect(setConfigResult).toHaveBeenCalledWith('models.providers.openai', {
+      apiKey: 'sk-existing-openai',
+      imageApiKey: 'sk-image-openai',
+      models: [{ id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' }],
+    })
+  })
+
+  it('preserves the shared Google chat key when Gemini Image uses a different credential', async () => {
+    vi.mocked(getConfigResult).mockResolvedValue({
+      success: true,
+      data: {
+        models: {
+          providers: {
+            google: {
+              apiKey: 'google-existing-key',
+              models: [{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' }],
+            },
+          },
+        },
+      },
+      error: null,
+    } as any)
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('google-image', 'google-image-key'),
+    ).resolves.toBeUndefined()
+
+    expect(setConfigResult).toHaveBeenCalledWith('models.providers.google', {
+      apiKey: 'google-existing-key',
+      imageApiKey: 'google-image-key',
+      models: [{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' }],
+    })
+  })
+
+  it('seeds the shared runtime key when an aliased image provider is the first credential configured', async () => {
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('openai-image', 'sk-image-openai'),
+    ).resolves.toBeUndefined()
+
+    expect(setConfigResult).toHaveBeenCalledWith('models.providers.openai', {
+      apiKey: 'sk-image-openai',
+      imageApiKey: 'sk-image-openai',
+    })
+  })
+
+  it('registers the ERNIE-Image runtime plugin when a managed plugin root can be inferred', async () => {
+    vi.mocked(getConfigResult).mockResolvedValue({
+      success: true,
+      data: {
+        models: {
+          providers: {},
+        },
+        plugins: {
+          load: {
+            paths: [
+              '/Users/haili/workspaces/clawmaster/plugins/memory-clawmaster-powermem',
+            ],
+          },
+          entries: {},
+          installs: {
+            'memory-clawmaster-powermem': {
+              sourcePath: '/Users/haili/workspaces/clawmaster/plugins/memory-clawmaster-powermem',
+              installPath: '/Users/haili/workspaces/clawmaster/plugins/memory-clawmaster-powermem',
+            },
+          },
+        },
+      },
+      error: null,
+    } as any)
+    vi.mocked(resolvePluginRootResult).mockResolvedValue({
+      success: true,
+      data: '/Users/haili/workspaces/clawmaster/plugins/openclaw-ernie-image',
+      error: null,
+    } as any)
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('baidu-aistudio-image', 'bce-image-token'),
+    ).resolves.toBeUndefined()
+
+    expect(setConfigResult).toHaveBeenNthCalledWith(1, 'plugins.load.paths', [
+      '/Users/haili/workspaces/clawmaster/plugins/memory-clawmaster-powermem',
+      '/Users/haili/workspaces/clawmaster/plugins/openclaw-ernie-image',
+    ])
+    expect(setConfigResult).toHaveBeenNthCalledWith(
+      2,
+      'plugins.entries.openclaw-ernie-image',
+      { enabled: true },
+    )
+    expect(setConfigResult).toHaveBeenNthCalledWith(
+      3,
+      'plugins.installs.openclaw-ernie-image',
+      expect.objectContaining({
+        source: 'path',
+        sourcePath: '/Users/haili/workspaces/clawmaster/plugins/openclaw-ernie-image',
+        installPath: '/Users/haili/workspaces/clawmaster/plugins/openclaw-ernie-image',
+        version: '0.1.0',
+      }),
+    )
+    expect(setConfigResult).toHaveBeenNthCalledWith(4, 'skills.entries.ernie-image.enabled', true)
+    expect(setConfigResult).toHaveBeenNthCalledWith(5, 'models.providers.baidu-aistudio-image', {
+      apiKey: 'bce-image-token',
+      api: 'openai-completions',
+      baseUrl: 'https://aistudio.baidu.com/llm/lmapi/v3',
+      models: [
+        { id: 'ernie-image-turbo', name: 'ERNIE-Image Turbo' },
+      ],
+    })
+    expect(resolvePluginRootResult).toHaveBeenCalledWith({
+      pluginId: 'openclaw-ernie-image',
+      candidates: [
+        '/Users/haili/workspaces/clawmaster/plugins/openclaw-ernie-image',
+      ],
+    })
+    expect(installSkillResult).toHaveBeenCalledWith('ernie-image')
+  })
+
+  it('registers the ERNIE-Image runtime plugin from the repo fallback on a fresh profile', async () => {
+    vi.mocked(getConfigResult).mockResolvedValue({
+      success: true,
+      data: {
+        models: {
+          providers: {},
+        },
+        plugins: {
+          load: {
+            paths: [],
+          },
+          entries: {},
+          installs: {},
+        },
+      },
+      error: null,
+    } as any)
+    vi.mocked(resolvePluginRootResult).mockResolvedValue({
+      success: true,
+      data: '/Users/haili/workspaces/clawmaster/plugins/openclaw-ernie-image',
+      error: null,
+    } as any)
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('baidu-aistudio-image', 'bce-image-token'),
+    ).resolves.toBeUndefined()
+
+    expect(resolvePluginRootResult).toHaveBeenCalledWith({
+      pluginId: 'openclaw-ernie-image',
+      candidates: [],
+    })
+    expect(setConfigResult).toHaveBeenNthCalledWith(1, 'plugins.load.paths', [
+      '/Users/haili/workspaces/clawmaster/plugins/openclaw-ernie-image',
+    ])
+  })
+
+  it('reuses an existing custom ERNIE-Image install record when resolving the runtime plugin root', async () => {
+    vi.mocked(getConfigResult).mockResolvedValue({
+      success: true,
+      data: {
+        models: {
+          providers: {},
+        },
+        plugins: {
+          load: {
+            paths: [],
+          },
+          entries: {},
+          installs: {
+            'openclaw-ernie-image': {
+              sourcePath: '/opt/openclaw/plugins/ernie-image-custom',
+              installPath: '/opt/openclaw/plugins/ernie-image-custom',
+            },
+          },
+        },
+      },
+      error: null,
+    } as any)
+    vi.mocked(resolvePluginRootResult).mockResolvedValue({
+      success: true,
+      data: '/opt/openclaw/plugins/ernie-image-custom',
+      error: null,
+    } as any)
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('baidu-aistudio-image', 'bce-image-token'),
+    ).resolves.toBeUndefined()
+
+    expect(resolvePluginRootResult).toHaveBeenCalledWith({
+      pluginId: 'openclaw-ernie-image',
+      candidates: [
+        '/opt/openclaw/plugins/ernie-image-custom',
+      ],
+    })
+    expect(setConfigResult).toHaveBeenNthCalledWith(1, 'plugins.load.paths', [
+      '/opt/openclaw/plugins/ernie-image-custom',
+    ])
+  })
+
+  it('infers the ERNIE-Image plugin path from Windows-style managed plugin roots', async () => {
+    vi.mocked(getConfigResult).mockResolvedValue({
+      success: true,
+      data: {
+        models: {
+          providers: {},
+        },
+        plugins: {
+          load: {
+            paths: [
+              'C:\\Users\\haili\\workspaces\\clawmaster\\plugins\\memory-clawmaster-powermem',
+            ],
+          },
+          entries: {},
+          installs: {
+            'memory-clawmaster-powermem': {
+              sourcePath: 'C:\\Users\\haili\\workspaces\\clawmaster\\plugins\\memory-clawmaster-powermem',
+              installPath: 'C:\\Users\\haili\\workspaces\\clawmaster\\plugins\\memory-clawmaster-powermem',
+            },
+          },
+        },
+      },
+      error: null,
+    } as any)
+    vi.mocked(resolvePluginRootResult).mockResolvedValue({
+      success: true,
+      data: 'C:\\Users\\haili\\workspaces\\clawmaster\\plugins\\openclaw-ernie-image',
+      error: null,
+    } as any)
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('baidu-aistudio-image', 'bce-image-token'),
+    ).resolves.toBeUndefined()
+
+    expect(resolvePluginRootResult).toHaveBeenCalledWith({
+      pluginId: 'openclaw-ernie-image',
+      candidates: [
+        'C:\\Users\\haili\\workspaces\\clawmaster\\plugins\\openclaw-ernie-image',
+      ],
+    })
+    expect(setConfigResult).toHaveBeenNthCalledWith(1, 'plugins.load.paths', [
+      'C:\\Users\\haili\\workspaces\\clawmaster\\plugins\\memory-clawmaster-powermem',
+      'C:\\Users\\haili\\workspaces\\clawmaster\\plugins\\openclaw-ernie-image',
+    ])
+  })
+
+  it('fails ERNIE-Image onboarding instead of saving a broken provider when no plugin root can be resolved', async () => {
+    vi.mocked(getConfigResult).mockResolvedValue({
+      success: true,
+      data: {
+        models: {
+          providers: {},
+        },
+        plugins: {
+          load: {
+            paths: [
+              '/Users/haili/workspaces/clawmaster/plugins/some-other-plugin',
+            ],
+          },
+          entries: {},
+          installs: {},
+        },
+      },
+      error: null,
+    } as any)
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('baidu-aistudio-image', 'bce-image-token'),
+    ).rejects.toThrow('Failed to resolve ERNIE-Image runtime plugin root')
+
+    expect(setConfigResult).not.toHaveBeenCalled()
+    expect(installSkillResult).not.toHaveBeenCalled()
+  })
+
+  it('does not persist the ERNIE-Image provider when bundled skill installation fails', async () => {
+    vi.mocked(getConfigResult).mockResolvedValue({
+      success: true,
+      data: {
+        models: {
+          providers: {},
+        },
+        plugins: {
+          load: {
+            paths: [],
+          },
+          entries: {},
+          installs: {},
+        },
+      },
+      error: null,
+    } as any)
+    vi.mocked(resolvePluginRootResult).mockResolvedValue({
+      success: true,
+      data: '/Users/haili/workspaces/clawmaster/plugins/openclaw-ernie-image',
+      error: null,
+    } as any)
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+    vi.mocked(installSkillResult).mockResolvedValue({
+      success: false,
+      data: undefined,
+      error: 'bundled skill missing',
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('baidu-aistudio-image', 'bce-image-token'),
+    ).rejects.toThrow('bundled skill missing')
+
+    expect(setConfigResult).not.toHaveBeenCalledWith(
+      'models.providers.baidu-aistudio-image',
+      expect.anything(),
+    )
+  })
+
   it('probes Ollama via the dedicated HTTP probe adapter', async () => {
     vi.mocked(probeHttpStatusResult).mockResolvedValue({
       success: true,
@@ -251,6 +661,53 @@ describe('realSetupAdapter', () => {
         messages: [{ role: 'user', content: 'hi' }],
         max_tokens: 1,
       }),
+      timeoutMs: 10000,
+    })
+  })
+
+  it('probes the ERNIE-Image provider through the images generations endpoint', async () => {
+    vi.mocked(probeHttpStatusResult).mockResolvedValue({
+      success: true,
+      data: { ok: true, status: 200 },
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.testApiKey('baidu-aistudio-image', 'bce-image-token'),
+    ).resolves.toBe(true)
+
+    expect(probeHttpStatusResult).toHaveBeenCalledWith({
+      url: 'https://aistudio.baidu.com/llm/lmapi/v3/images/generations',
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer bce-image-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'ernie-image-turbo',
+        prompt: 'A small paper lantern on a wooden table',
+        n: 1,
+        response_format: 'url',
+        size: '1024x1024',
+      }),
+      timeoutMs: 20000,
+    })
+  })
+
+  it('probes Gemini Image against the Google Generative Language API instead of the OpenAI endpoint', async () => {
+    vi.mocked(probeHttpStatusResult).mockResolvedValue({
+      success: true,
+      data: { ok: true, status: 200 },
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.testApiKey('google-image', 'google-image-key'),
+    ).resolves.toBe(true)
+
+    expect(probeHttpStatusResult).toHaveBeenCalledWith({
+      url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview?key=google-image-key',
+      method: 'GET',
       timeoutMs: 10000,
     })
   })

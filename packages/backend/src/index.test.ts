@@ -331,3 +331,117 @@ test('createApp rejects untrusted provider catalog base URLs', async () => {
     }
   })
 })
+
+test('createApp resolves plugin roots without going through the exec allowlist', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-frontend-plugin-root-'))
+  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><body>ClawMaster Service</body></html>', 'utf8')
+  const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-ernie-plugin-'))
+  fs.writeFileSync(path.join(pluginRoot, 'openclaw.plugin.json'), '{"id":"openclaw-ernie-image"}', 'utf8')
+  const previousRoot = process.env['CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT']
+  process.env['CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT'] = pluginRoot
+
+  try {
+    await withFrontendDist(dir, async () => {
+      const app = createApp()
+      const server = app.listen(0, '127.0.0.1')
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once('listening', resolve)
+          server.once('error', reject)
+        })
+
+        const address = server.address()
+        assert.ok(address && typeof address === 'object')
+        const baseUrl = `http://127.0.0.1:${address.port}`
+
+        const response = await fetch(`${baseUrl}/api/config/resolve-plugin-root`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            pluginId: 'openclaw-ernie-image',
+            candidates: ['/tmp/does-not-exist'],
+          }),
+        })
+
+        assert.equal(response.status, 200)
+        assert.deepEqual(await response.json(), { path: pluginRoot })
+      } finally {
+        if (server.listening) {
+          await new Promise<void>((resolve, reject) => {
+            server.close((error) => {
+              if (error) reject(error)
+              else resolve()
+            })
+          })
+        }
+      }
+    })
+  } finally {
+    if (previousRoot === undefined) {
+      delete process.env['CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT']
+    } else {
+      process.env['CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT'] = previousRoot
+    }
+  }
+})
+
+test('createApp ignores stale plugin roots whose manifest id does not match the requested plugin', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-frontend-plugin-root-'))
+  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><body>ClawMaster Service</body></html>', 'utf8')
+  const stalePluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-wrong-plugin-'))
+  fs.writeFileSync(path.join(stalePluginRoot, 'openclaw.plugin.json'), '{"id":"some-other-plugin"}', 'utf8')
+  const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-ernie-plugin-'))
+  fs.writeFileSync(path.join(pluginRoot, 'openclaw.plugin.json'), '{"id":"openclaw-ernie-image"}', 'utf8')
+  const previousRoot = process.env['CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT']
+  process.env['CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT'] = pluginRoot
+
+  try {
+    await withFrontendDist(dir, async () => {
+      const app = createApp()
+      const server = app.listen(0, '127.0.0.1')
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once('listening', resolve)
+          server.once('error', reject)
+        })
+
+        const address = server.address()
+        assert.ok(address && typeof address === 'object')
+        const baseUrl = `http://127.0.0.1:${address.port}`
+
+        const response = await fetch(`${baseUrl}/api/config/resolve-plugin-root`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            pluginId: 'openclaw-ernie-image',
+            candidates: [stalePluginRoot],
+          }),
+        })
+
+        assert.equal(response.status, 200)
+        assert.deepEqual(await response.json(), { path: pluginRoot })
+      } finally {
+        if (server.listening) {
+          await new Promise<void>((resolve, reject) => {
+            server.close((error) => {
+              if (error) reject(error)
+              else resolve()
+            })
+          })
+        }
+      }
+    })
+  } finally {
+    if (previousRoot === undefined) {
+      delete process.env['CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT']
+    } else {
+      process.env['CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT'] = previousRoot
+    }
+  }
+})

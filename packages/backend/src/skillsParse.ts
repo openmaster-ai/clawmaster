@@ -43,8 +43,11 @@ type WorkspaceSkillMeta = {
   dirName: string
   registrySlug?: string
   version?: string
+  bundled?: boolean
   aliases: Set<string>
 }
+
+const BUNDLED_SKILL_SLUGS = new Set(['ernie-image'])
 
 function normalizeSkillToken(value: string | undefined): string {
   return (value ?? '').trim().toLowerCase()
@@ -80,6 +83,7 @@ function readWorkspaceSkillMetas(): WorkspaceSkillMeta[] {
 
         let registrySlug: string | undefined
         let version: string | undefined
+        let bundled = false
 
         try {
           const meta = JSON.parse(fs.readFileSync(path.join(skillDir, '_meta.json'), 'utf8')) as Record<string, unknown>
@@ -89,6 +93,9 @@ function readWorkspaceSkillMetas(): WorkspaceSkillMeta[] {
           }
           if (typeof meta.version === 'string' && meta.version.trim()) {
             version = meta.version.trim()
+          }
+          if (meta.bundled === true) {
+            bundled = true
           }
         } catch {
           // ignore malformed _meta.json
@@ -111,6 +118,7 @@ function readWorkspaceSkillMetas(): WorkspaceSkillMeta[] {
           dirName: entry.name,
           registrySlug,
           version,
+          bundled,
           aliases,
         }
       })
@@ -138,6 +146,7 @@ function enrichInstalledRows(rows: SkillRow[]): SkillRow[] {
       ...row,
       slug: match.registrySlug ?? match.dirName ?? row.slug,
       version: row.version !== 'unknown' ? row.version : match.version ?? row.version,
+      bundled: row.bundled ?? match.bundled ?? BUNDLED_SKILL_SLUGS.has(normalizeSkillToken(match.registrySlug ?? match.dirName)),
     }
   })
 }
@@ -161,6 +170,7 @@ export function mapSkillJson(raw: string, installed: boolean) {
             ? s.slug
             : 'unknown'
     const slug = (typeof s.slug === 'string' ? s.slug : skillKey) || 'unknown'
+    const normalizedSlug = normalizeSkillToken(slug)
     return {
       slug,
       name: (typeof s.name === 'string' ? s.name : skillKey) || skillKey,
@@ -171,7 +181,7 @@ export function mapSkillJson(raw: string, installed: boolean) {
       source: typeof s.source === 'string' ? s.source : undefined,
       disabled: typeof s.disabled === 'boolean' ? s.disabled : undefined,
       eligible: typeof s.eligible === 'boolean' ? s.eligible : undefined,
-      bundled: typeof s.bundled === 'boolean' ? s.bundled : undefined,
+      bundled: typeof s.bundled === 'boolean' ? s.bundled : BUNDLED_SKILL_SLUGS.has(normalizedSlug),
     }
   })
 

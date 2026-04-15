@@ -33,14 +33,28 @@ describe('Skills catalog', () => {
     }
   })
 
-  it('keeps four featured ClawHub skills for the landing shelf', () => {
-    expect(FEATURED_SKILLS).toHaveLength(4)
+  it('keeps five featured skills for the landing shelf', () => {
+    expect(FEATURED_SKILLS).toHaveLength(5)
     expect(FEATURED_SKILLS.every((skill) => skill.skillKey)).toBe(true)
   })
 
   it('uses installable registry slugs for featured skills', () => {
     expect(FEATURED_SKILLS.every((skill) => skill.slug)).toBe(true)
     expect(FEATURED_SKILLS.find((skill) => skill.skillKey === 'find-skills')?.slug).toBe('find-skills-skill')
+  })
+
+  it('includes both the generic image workflow and the ERNIE-specific bundled guide', () => {
+    expect(SKILL_CATALOG.find((skill) => skill.slug === 'ernie-image')).toMatchObject({
+      slug: 'ernie-image',
+      name: 'ERNIE-Image Guide',
+      category: 'productivity',
+      installSource: 'bundled',
+    })
+    expect(SKILL_CATALOG.find((skill) => skill.slug === 'image-generate')).toMatchObject({
+      slug: 'image-generate',
+      name: 'Image Generate',
+      category: 'productivity',
+    })
   })
 
   it('CATEGORY_ORDER covers all used categories', () => {

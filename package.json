@@ -7,7 +7,9 @@
   },
   "files": [
     "bin/clawmaster.mjs",
+    "bundled-skills/ernie-image/",
     "plugins/memory-clawmaster-powermem/",
+    "plugins/openclaw-ernie-image/",
     "packages/backend/dist/",
     "packages/backend/package.json",
     "packages/web/dist/",

@@ -41,6 +41,7 @@ import {
   PROVIDERS,
   PRIMARY_PROVIDERS,
   PROVIDER_BADGES,
+  providerSupportsSetup,
   getProviderCredentialLabel,
   getProviderLabel,
   CHANNEL_TYPES,
@@ -1383,7 +1384,7 @@ function CapabilityDeck({
 
 // ─── 提供商选择步骤 ───
 
-const allProviderIds = Object.keys(PROVIDERS)
+const allProviderIds = Object.keys(PROVIDERS).filter(providerSupportsSetup)
 const primaryIds = PRIMARY_PROVIDERS as readonly string[]
 const secondaryIds = allProviderIds.filter((id) => !primaryIds.includes(id))
 

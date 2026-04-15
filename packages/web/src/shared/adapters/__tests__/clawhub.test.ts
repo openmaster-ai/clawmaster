@@ -20,9 +20,11 @@ vi.mock('../invoke', () => ({
 }))
 
 describe('clawhub adapter (web mode)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     globalThis.fetch = vi.fn()
+    const { getIsTauri } = await import('../platform')
+    vi.mocked(getIsTauri).mockReturnValue(false)
   })
 
   it('getSkillsResult returns skills via web fetch', async () => {
@@ -51,6 +53,19 @@ describe('clawhub adapter (web mode)', () => {
     const { installSkillResult } = await import('../clawhub')
     const result = await installSkillResult('test-skill')
     expect(result.success).toBe(true)
+  })
+
+  it('installSkillResult routes bundled skills through the dedicated desktop command', async () => {
+    const { getIsTauri } = await import('../platform')
+    const { tauriInvoke } = await import('../invoke')
+    vi.mocked(getIsTauri).mockReturnValue(true)
+    vi.mocked(tauriInvoke).mockResolvedValue(undefined)
+
+    const { installSkillResult } = await import('../clawhub')
+    const result = await installSkillResult('ernie-image')
+
+    expect(result.success).toBe(true)
+    expect(tauriInvoke).toHaveBeenCalledWith('install_bundled_skill', { skillId: 'ernie-image' })
   })
 
   it('installSkillResult fails on HTTP 404', async () => {

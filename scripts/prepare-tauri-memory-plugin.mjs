@@ -6,10 +6,27 @@ import { fileURLToPath } from 'node:url'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..')
-const pluginSourceRoot = path.join(repoRoot, 'plugins', 'memory-clawmaster-powermem')
 const resourcesRoot = path.join(repoRoot, '.tauri-resources')
-const bundledPluginRoot = path.join(resourcesRoot, 'memory-clawmaster-powermem')
 const bundledNodeModulesRoot = path.join(resourcesRoot, 'node_modules')
+const bundledPlugins = [
+  {
+    id: 'memory-clawmaster-powermem',
+    sourceRoot: path.join(repoRoot, 'plugins', 'memory-clawmaster-powermem'),
+    bundledRoot: path.join(resourcesRoot, 'memory-clawmaster-powermem'),
+  },
+  {
+    id: 'openclaw-ernie-image',
+    sourceRoot: path.join(repoRoot, 'plugins', 'openclaw-ernie-image'),
+    bundledRoot: path.join(resourcesRoot, 'openclaw-ernie-image'),
+  },
+]
+const bundledSkills = [
+  {
+    id: 'ernie-image',
+    sourceRoot: path.join(repoRoot, 'bundled-skills', 'ernie-image'),
+    bundledRoot: path.join(resourcesRoot, 'bundled-skills', 'ernie-image'),
+  },
+]
 const builtinModuleNames = new Set([
   ...builtinModules,
   ...builtinModules.map((name) => `node:${name}`),
@@ -76,29 +93,38 @@ async function copyPackageTree(packageName, requesterPath, copied) {
 }
 
 async function main() {
-  const pluginManifest = readJson(path.join(pluginSourceRoot, 'package.json'))
   const copied = new Set()
 
   await fsp.rm(resourcesRoot, { recursive: true, force: true })
   await fsp.mkdir(bundledNodeModulesRoot, { recursive: true })
-  await fsp.cp(pluginSourceRoot, bundledPluginRoot, {
-    recursive: true,
-    filter(source) {
-      return !source.endsWith('.test.ts')
-    },
-  })
+  for (const plugin of bundledPlugins) {
+    const pluginManifest = readJson(path.join(plugin.sourceRoot, 'package.json'))
+    await fsp.cp(plugin.sourceRoot, plugin.bundledRoot, {
+      recursive: true,
+      filter(source) {
+        return !source.endsWith('.test.ts')
+      },
+    })
 
-  const dependencies = {
-    ...(pluginManifest.dependencies ?? {}),
-    ...(pluginManifest.optionalDependencies ?? {}),
+    const dependencies = {
+      ...(pluginManifest.dependencies ?? {}),
+      ...(pluginManifest.optionalDependencies ?? {}),
+    }
+
+    for (const packageName of Object.keys(dependencies)) {
+      await copyPackageTree(packageName, path.join(repoRoot, 'package.json'), copied)
+    }
   }
 
-  for (const packageName of Object.keys(dependencies)) {
-    await copyPackageTree(packageName, path.join(repoRoot, 'package.json'), copied)
+  for (const skill of bundledSkills) {
+    await fsp.mkdir(path.dirname(skill.bundledRoot), { recursive: true })
+    await fsp.cp(skill.sourceRoot, skill.bundledRoot, {
+      recursive: true,
+    })
   }
 
   console.log(
-    `Prepared packaged memory plugin resources at ${resourcesRoot} with ${copied.size} runtime package(s).`,
+    `Prepared packaged resources at ${resourcesRoot} for ${bundledPlugins.length} plugin(s), ${bundledSkills.length} bundled skill(s), and ${copied.size} runtime package(s).`,
   )
 }
 

@@ -71,4 +71,29 @@ describe('openclaw adapter provider catalog', () => {
     expect(result.error).toMatch(/host is not allowed/i)
     expect(tauriInvoke).not.toHaveBeenCalled()
   })
+
+  it('uses a dedicated desktop command to resolve plugin roots without shelling out', async () => {
+    const { getIsTauri } = await import('../platform')
+    const { tauriInvoke } = await import('../invoke')
+    const { resolvePluginRootResult } = await import('../openclaw')
+
+    vi.mocked(getIsTauri).mockReturnValue(true)
+    vi.mocked(tauriInvoke).mockResolvedValue('/tmp/plugins/openclaw-ernie-image')
+
+    const result = await resolvePluginRootResult({
+      pluginId: 'openclaw-ernie-image',
+      candidates: ['/tmp/plugins/openclaw-ernie-image'],
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.data).toBe('/tmp/plugins/openclaw-ernie-image')
+    expect(tauriInvoke).toHaveBeenCalledWith('resolve_plugin_root', {
+      pluginId: 'openclaw-ernie-image',
+      candidates: ['/tmp/plugins/openclaw-ernie-image'],
+    })
+    expect(vi.mocked(tauriInvoke).mock.calls).not.toContainEqual([
+      'run_system_command',
+      expect.anything(),
+    ])
+  })
 })

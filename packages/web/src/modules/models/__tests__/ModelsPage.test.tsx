@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { changeLanguage } from '@/i18n'
 import ModelsPage from '../ModelsPage'
 
@@ -9,6 +10,7 @@ const mockSetDefaultModel = vi.fn()
 const mockTestApiKey = vi.fn()
 const mockSetApiKey = vi.fn()
 const mockGetProviderModelCatalog = vi.fn()
+const mockSetConfigResult = vi.fn()
 
 vi.mock('@/adapters', () => ({
   platform: {
@@ -29,7 +31,40 @@ vi.mock('@/modules/setup/adapters', () => ({
 
 vi.mock('@/shared/adapters/openclaw', () => ({
   getProviderModelCatalogResult: (...args: any[]) => mockGetProviderModelCatalog(...args),
+  setConfigResult: (...args: any[]) => mockSetConfigResult(...args),
 }))
+
+function getElementById(id: string) {
+  const element = document.getElementById(id)
+  expect(element).not.toBeNull()
+  return element as HTMLElement
+}
+
+function getProviderCardByLabel(label: string) {
+  const card = screen
+    .getAllByText(label)
+    .map((element) => element.closest('.surface-card'))
+    .find((element): element is HTMLElement => Boolean(element))
+  expect(card).not.toBeNull()
+  return card as HTMLElement
+}
+
+function getProviderButtonByLabel(label: string) {
+  const button = screen
+    .getAllByText(label)
+    .map((element) => element.closest('button'))
+    .find((element): element is HTMLButtonElement => Boolean(element))
+  expect(button).not.toBeNull()
+  return button as HTMLButtonElement
+}
+
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <ModelsPage />
+    </MemoryRouter>,
+  )
+}
 
 describe('ModelsPage', () => {
   beforeEach(async () => {
@@ -42,10 +77,16 @@ describe('ModelsPage', () => {
       data: [],
       error: null,
     })
+    mockSetConfigResult.mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
     mockGetConfig.mockResolvedValue({
       agents: {
         defaults: {
           model: { primary: '' },
+          imageGenerationModel: { primary: '' },
         },
       },
       models: {
@@ -57,18 +98,22 @@ describe('ModelsPage', () => {
   })
 
   it('renders the first-run provider recommendations and opens the add panel from a recommended provider', async () => {
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
-    expect(screen.getByText('Connect your first provider')).toBeInTheDocument()
-    expect(screen.getByText('Recommended providers')).toBeInTheDocument()
-    expect(screen.getByText('OpenAI')).toBeInTheDocument()
-    expect(screen.getByText('Anthropic')).toBeInTheDocument()
-    expect(screen.getByText('ERNIE LLM API')).toBeInTheDocument()
-    expect(screen.getByText('Golden Sponsor')).toBeInTheDocument()
+    const firstRun = getElementById('models-first-run')
+    expect(within(firstRun).getByText('Connect your first provider')).toBeInTheDocument()
+    expect(within(firstRun).getByText('Text providers')).toBeInTheDocument()
+    expect(within(firstRun).getByText('Image providers')).toBeInTheDocument()
+    expect(within(firstRun).getByText('OpenAI')).toBeInTheDocument()
+    expect(within(firstRun).getByText('Anthropic')).toBeInTheDocument()
+    expect(within(firstRun).getByText('ERNIE LLM API')).toBeInTheDocument()
+    expect(within(firstRun).getByText('ERNIE-Image')).toBeInTheDocument()
+    expect(within(firstRun).getByText('Gemini Image')).toBeInTheDocument()
+    expect(within(firstRun).getByText('GPT Image')).toBeInTheDocument()
+    expect(within(firstRun).getAllByText('Golden Sponsor').length).toBeGreaterThan(0)
 
-    const cta = screen.getAllByText('Use this provider')[0]
-    fireEvent.click(cta.closest('button')!)
+    fireEvent.click(getProviderButtonByLabel('ERNIE LLM API'))
 
     expect(await screen.findByRole('heading', { name: 'Add Provider' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Get ERNIE LLM API Access Token →' })).toHaveAttribute(
@@ -80,7 +125,7 @@ describe('ModelsPage', () => {
   })
 
   it('requires a base URL for providers that need a custom endpoint before verifying', async () => {
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
 
@@ -101,16 +146,14 @@ describe('ModelsPage', () => {
   })
 
   it('lists ERNIE LLM API in the expanded provider catalog and can submit it', async () => {
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '+ Add Provider' }))
     expect(await screen.findByRole('heading', { name: 'Add Provider' })).toBeInTheDocument()
 
-    const addPanel = document.getElementById('models-add-provider')
-    expect(addPanel).not.toBeNull()
-    const panel = within(addPanel!)
+    const panel = within(getElementById('models-add-provider'))
 
     fireEvent.click(panel.getByRole('button', { name: /More/ }))
     fireEvent.click(panel.getByRole('button', { name: /ERNIE LLM API/ }))
@@ -124,6 +167,92 @@ describe('ModelsPage', () => {
     })
     await waitFor(() => {
       expect(mockSetApiKey).toHaveBeenCalledWith('baidu-aistudio', 'bce-test-token', undefined)
+    })
+  })
+
+  it('lists ERNIE-Image in the expanded provider catalog and surfaces text-to-image guidance', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add Provider' }))
+    expect(await screen.findByRole('heading', { name: 'Add Provider' })).toBeInTheDocument()
+
+    const panel = within(getElementById('models-add-provider'))
+
+    fireEvent.click(panel.getByRole('button', { name: /More/ }))
+    fireEvent.click(panel.getByRole('button', { name: /ERNIE-Image/ }))
+
+    expect(screen.getByText('Use this provider for image generation, not as the primary agent chat model.')).toBeInTheDocument()
+    expect(screen.getByText('Automatic skill setup')).toBeInTheDocument()
+    expect(screen.getByText('ClawMaster will install and enable the bundled ERNIE-Image Guide skill when you add this provider, so users get ERNIE-specific prompt and parameter guidance automatically.')).toBeInTheDocument()
+    expect(screen.getByText('Recommended skill')).toBeInTheDocument()
+    expect(screen.getByText('ERNIE-Image Guide')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open Skills' })).toHaveAttribute('href', '/skills')
+
+    fireEvent.change(screen.getByPlaceholderText('Enter ERNIE-Image Access Token'), {
+      target: { value: 'bce-image-token' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Verify & Add' }))
+
+    await waitFor(() => {
+      expect(mockTestApiKey).toHaveBeenCalledWith('baidu-aistudio-image', 'bce-image-token', undefined)
+    })
+    await waitFor(() => {
+      expect(mockSetApiKey).toHaveBeenCalledWith('baidu-aistudio-image', 'bce-image-token', undefined)
+    })
+  })
+
+  it('lists Gemini Image in the image provider section and submits it through the image-provider flow', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add Provider' }))
+    expect(await screen.findByRole('heading', { name: 'Add Provider' })).toBeInTheDocument()
+
+    const addPanel = getElementById('models-add-provider')
+    expect(within(addPanel).getByText('Image providers')).toBeInTheDocument()
+
+    fireEvent.click(within(addPanel).getByRole('button', { name: 'Gemini Image' }))
+    expect(screen.getByText('Use Gemini Image for image generation tasks. Keep Gemini chat models in the text provider section.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText('Enter Gemini Image API Key'), {
+      target: { value: 'google-image-key' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Verify & Add' }))
+
+    await waitFor(() => {
+      expect(mockTestApiKey).toHaveBeenCalledWith('google-image', 'google-image-key', undefined)
+    })
+    await waitFor(() => {
+      expect(mockSetApiKey).toHaveBeenCalledWith('google-image', 'google-image-key', undefined)
+    })
+  })
+
+  it('lists GPT Image in the image provider section and submits it through the image-provider flow', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add Provider' }))
+    expect(await screen.findByRole('heading', { name: 'Add Provider' })).toBeInTheDocument()
+
+    const addPanel = getElementById('models-add-provider')
+
+    fireEvent.click(within(addPanel).getByRole('button', { name: 'GPT Image' }))
+    expect(screen.getByText('Use GPT Image for image generation tasks. Keep GPT chat and reasoning models in the text provider section.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText('Enter GPT Image API Key'), {
+      target: { value: 'openai-image-key' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Verify & Add' }))
+
+    await waitFor(() => {
+      expect(mockTestApiKey).toHaveBeenCalledWith('openai-image', 'openai-image-key', undefined)
+    })
+    await waitFor(() => {
+      expect(mockSetApiKey).toHaveBeenCalledWith('openai-image', 'openai-image-key', undefined)
     })
   })
 
@@ -150,23 +279,21 @@ describe('ModelsPage', () => {
       },
     })
 
-    const { container } = render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
 
-    const configuredCards = Array.from(container.querySelectorAll('#models-providers > .surface-card'))
+    const configuredCards = Array.from(document.querySelectorAll('#models-text-providers .surface-card'))
     expect(configuredCards).toHaveLength(2)
     expect(configuredCards[0]?.textContent).toContain('ERNIE LLM API')
     expect(configuredCards[1]?.textContent).toContain('SiliconFlow')
 
     fireEvent.click(screen.getByRole('button', { name: '+ Add Provider' }))
-    const addPanel = document.getElementById('models-add-provider')
-    expect(addPanel).not.toBeNull()
-
-    const sponsorLabel = within(addPanel!).getAllByText('Golden Sponsor')[0]
-    const sponsorSection = sponsorLabel.parentElement
-    expect(sponsorSection?.textContent).toContain('ERNIE LLM API')
-    expect(sponsorSection?.textContent).not.toContain('OpenAI')
+    const addPanel = getElementById('models-add-provider')
+    const providerButtons = Array.from(addPanel.querySelectorAll<HTMLButtonElement>('[data-provider-id]'))
+    expect(providerButtons[0]?.dataset.providerId).toBe('baidu-aistudio')
+    expect(providerButtons[0]?.textContent).toContain('Golden Sponsor')
+    expect(providerButtons[0]?.textContent).toContain('ERNIE LLM API')
   })
 
   it('shows the canonical ERNIE catalog on configured cards even when saved config still has the old model list', async () => {
@@ -190,16 +317,15 @@ describe('ModelsPage', () => {
       },
     })
 
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
     expect(screen.getByText('ERNIE 5.0 Thinking Preview')).toBeInTheDocument()
     expect(screen.getByText('deepseek-v3')).toBeInTheDocument()
     expect(screen.queryByText('ERNIE 4.5 Turbo VL')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
-    const picker = document.getElementById('models-provider-picker-baidu-aistudio')
-    expect(picker).not.toBeNull()
+    fireEvent.click(within(getProviderCardByLabel('ERNIE LLM API')).getByRole('button', { name: 'Choose Model' }))
+    const picker = getElementById('models-provider-picker-baidu-aistudio')
     expect(within(picker!).getByRole('button', { name: /ERNIE 5.0 Thinking Preview/ })).toBeInTheDocument()
     expect(within(picker!).getByRole('button', { name: /^ERNIE 4\.5 Turbo VL ernie-4\.5-turbo-vl$/ })).toBeInTheDocument()
     expect(within(picker!).queryByRole('button', { name: /DeepSeek V3/ })).not.toBeInTheDocument()
@@ -224,13 +350,12 @@ describe('ModelsPage', () => {
       },
     })
 
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
+    fireEvent.click(within(getProviderCardByLabel('ERNIE LLM API')).getByRole('button', { name: 'Choose Model' }))
 
-    const picker = document.getElementById('models-provider-picker-baidu-aistudio')
-    expect(picker).not.toBeNull()
+    const picker = getElementById('models-provider-picker-baidu-aistudio')
     expect(within(picker!).getByRole('button', { name: /ERNIE 5.0 Thinking Preview/ })).toBeInTheDocument()
     expect(within(picker!).getByRole('button', { name: /^ERNIE 4\.5 Turbo VL ernie-4\.5-turbo-vl$/ })).toBeInTheDocument()
     expect(within(picker!).getByRole('button', { name: /deepseek-v3 deepseek-v3/i })).toBeInTheDocument()
@@ -257,15 +382,14 @@ describe('ModelsPage', () => {
       },
     })
 
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
     expect(screen.getByText('GPT-4.1 Custom')).toBeInTheDocument()
     expect(screen.getByText('o3 Enterprise')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
-    const picker = document.getElementById('models-provider-picker-openai')
-    expect(picker).not.toBeNull()
+    fireEvent.click(within(getProviderCardByLabel('OpenAI')).getByRole('button', { name: 'Choose Model' }))
+    const picker = getElementById('models-provider-picker-openai')
     expect(within(picker!).getByRole('button', { name: /GPT-4.1 Mini gpt-4.1-mini/ })).toBeInTheDocument()
   })
 
@@ -295,7 +419,7 @@ describe('ModelsPage', () => {
       error: null,
     })
 
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
     await waitFor(() => {
@@ -309,9 +433,8 @@ describe('ModelsPage', () => {
     expect(screen.getByText('Loaded from the provider account in real time.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Refresh Models' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
-    const picker = document.getElementById('models-provider-picker-openai')
-    expect(picker).not.toBeNull()
+    fireEvent.click(within(getProviderCardByLabel('OpenAI')).getByRole('button', { name: 'Choose Model' }))
+    const picker = getElementById('models-provider-picker-openai')
     expect(within(picker!).getByText('Live catalog')).toBeInTheDocument()
     expect(within(picker!).getByRole('button', { name: /GPT-5 Mini gpt-5-mini/ })).toBeInTheDocument()
     expect(within(picker!).getByRole('button', { name: /gpt-4\.1-custom gpt-4\.1-custom/i })).toBeInTheDocument()
@@ -341,16 +464,15 @@ describe('ModelsPage', () => {
       error: 'Remote catalog failed',
     })
 
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByText('Catalog unavailable')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
-    const picker = document.getElementById('models-provider-picker-siliconflow')
-    expect(picker).not.toBeNull()
+    fireEvent.click(within(getProviderCardByLabel('SiliconFlow')).getByRole('button', { name: 'Choose Model' }))
+    const picker = getElementById('models-provider-picker-siliconflow')
     expect(within(picker!).getByText('Fallback catalog')).toBeInTheDocument()
     expect(within(picker!).getByText('Remote catalog failed')).toBeInTheDocument()
   })
@@ -372,15 +494,14 @@ describe('ModelsPage', () => {
       },
     })
 
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
     expect(screen.getByText('GPT-4.1 Mini')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Choose Model' })).toBeInTheDocument()
+    expect(within(getProviderCardByLabel('OpenAI')).getByRole('button', { name: 'Choose Model' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
-    const picker = document.getElementById('models-provider-picker-openai')
-    expect(picker).not.toBeNull()
+    fireEvent.click(within(getProviderCardByLabel('OpenAI')).getByRole('button', { name: 'Choose Model' }))
+    const picker = getElementById('models-provider-picker-openai')
     expect(within(picker!).getByRole('button', { name: /GPT-4.1 gpt-4.1/ })).toBeInTheDocument()
     expect(within(picker!).getByRole('button', { name: /GPT-4.1 Mini gpt-4.1-mini/ })).toBeInTheDocument()
   })
@@ -404,19 +525,68 @@ describe('ModelsPage', () => {
       },
     })
 
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Refresh Models' })).not.toBeInTheDocument()
     expect(screen.queryByText('Catalog unavailable')).not.toBeInTheDocument()
     expect(mockGetProviderModelCatalog).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
-    const picker = document.getElementById('models-provider-picker-custom-openai-compatible')
-    expect(picker).not.toBeNull()
+    fireEvent.click(within(getProviderCardByLabel('Custom (OpenAI Compatible)')).getByRole('button', { name: 'Choose Model' }))
+    const picker = getElementById('models-provider-picker-custom-openai-compatible')
     expect(within(picker!).queryByText('Live catalog')).not.toBeInTheDocument()
     expect(within(picker!).queryByText('Fallback catalog')).not.toBeInTheDocument()
     expect(within(picker!).getByRole('button', { name: /my-custom-model my-custom-model/i })).toBeInTheDocument()
+  })
+
+  it('sets image generation providers as the image default instead of the text default', async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      agents: {
+        defaults: {
+          model: { primary: 'openai/gpt-4.1-mini' },
+          imageGenerationModel: { primary: '' },
+        },
+      },
+      models: {
+        providers: {
+          openai: {
+            apiKey: 'sk-openai',
+            models: [{ id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' }],
+          },
+          'baidu-aistudio-image': {
+            apiKey: 'bce-image-token',
+            api: 'openai-completions',
+            baseUrl: 'https://aistudio.baidu.com/llm/lmapi/v3',
+            models: [{ id: 'ernie-image-turbo', name: 'ERNIE-Image Turbo' }],
+          },
+        },
+      },
+    })
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+    expect(screen.getByText('Image generation default')).toBeInTheDocument()
+    expect(screen.getByText('Not set')).toBeInTheDocument()
+    const imageProviderCard = screen.getByText('ERNIE-Image').closest('.surface-card')
+    expect(imageProviderCard).not.toBeNull()
+    expect(within(imageProviderCard!).queryByRole('button', { name: 'Refresh Models' })).not.toBeInTheDocument()
+
+    fireEvent.click(within(imageProviderCard!).getByRole('button', { name: 'Choose Model' }))
+
+    const picker = getElementById('models-provider-picker-baidu-aistudio-image')
+    expect(within(picker!).queryByText('Live catalog')).not.toBeInTheDocument()
+    expect(within(picker!).queryByText('Fallback catalog')).not.toBeInTheDocument()
+
+    fireEvent.click(within(picker!).getByRole('button', { name: 'Set as Image Default' }))
+
+    await waitFor(() => {
+      expect(mockSetConfigResult).toHaveBeenCalledWith(
+        'agents.defaults.imageGenerationModel.primary',
+        'baidu-aistudio-image/ernie-image-turbo',
+      )
+    })
+    expect(mockSetDefaultModel).not.toHaveBeenCalled()
   })
 
   it('ignores name-only saved entries and falls back to built-in model ids for built-in providers', async () => {
@@ -436,15 +606,141 @@ describe('ModelsPage', () => {
       },
     })
 
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
+    fireEvent.click(within(getProviderCardByLabel('OpenAI')).getByRole('button', { name: 'Choose Model' }))
 
-    const picker = document.getElementById('models-provider-picker-openai')
-    expect(picker).not.toBeNull()
+    const picker = getElementById('models-provider-picker-openai')
     expect(within(picker!).queryByRole('button', { name: /^GPT-4\.1 Mini GPT-4\.1 Mini$/ })).not.toBeInTheDocument()
     expect(within(picker!).getByRole('button', { name: /GPT-4.1 Mini gpt-4.1-mini/ })).toBeInTheDocument()
+  })
+
+  it('renders aliased GPT and Gemini image cards in the standalone image section', async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      agents: {
+        defaults: {
+          model: { primary: 'openai/gpt-4.1-mini' },
+          imageGenerationModel: { primary: 'google/gemini-3.1-flash-image-preview' },
+        },
+      },
+      models: {
+        providers: {
+          openai: {
+            apiKey: 'sk-openai',
+            models: [{ id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' }],
+          },
+          google: {
+            apiKey: 'sk-google',
+            models: [{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' }],
+          },
+        },
+      },
+    })
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+    const textSection = getElementById('models-text-providers')
+    const imageSection = getElementById('models-image-providers')
+
+    expect(within(textSection).getByText('OpenAI')).toBeInTheDocument()
+    expect(within(textSection).getByText('Google Gemini')).toBeInTheDocument()
+    expect(within(imageSection).getByText('GPT Image')).toBeInTheDocument()
+    expect(within(imageSection).getByText('Gemini Image')).toBeInTheDocument()
+
+    const gptImageCard = getProviderCardByLabel('GPT Image')
+    expect(within(gptImageCard).queryByRole('button', { name: 'Refresh Models' })).not.toBeInTheDocument()
+    fireEvent.click(within(gptImageCard).getByRole('button', { name: 'Choose Model' }))
+
+    const picker = getElementById('models-provider-picker-openai-image')
+    expect(within(picker).getByRole('button', { name: /GPT Image 1 gpt-image-1/ })).toBeInTheDocument()
+    expect(within(picker).queryByRole('button', { name: /GPT-4.1 Mini gpt-4.1-mini/ })).not.toBeInTheDocument()
+  })
+
+  it('tests aliased image providers with their stored image credential instead of the shared chat key', async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      agents: {
+        defaults: {
+          model: { primary: 'openai/gpt-4.1-mini' },
+          imageGenerationModel: { primary: 'openai/gpt-image-1' },
+        },
+      },
+      models: {
+        providers: {
+          openai: {
+            apiKey: 'sk-openai-chat',
+            imageApiKey: 'sk-openai-image',
+            models: [{ id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' }],
+          },
+        },
+      },
+    })
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+
+    fireEvent.click(within(getProviderCardByLabel('OpenAI')).getByRole('button', { name: 'Test Connection' }))
+    await waitFor(() => {
+      expect(mockTestApiKey).toHaveBeenCalledWith('openai', 'sk-openai-chat', undefined)
+    })
+
+    fireEvent.click(within(getProviderCardByLabel('GPT Image')).getByRole('button', { name: 'Test Connection' }))
+    await waitFor(() => {
+      expect(mockTestApiKey).toHaveBeenCalledWith('openai-image', 'sk-openai-image', undefined)
+    })
+  })
+
+  it('does not inherit chat-only base URLs for aliased image providers', async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      agents: {
+        defaults: {
+          model: { primary: 'openai/gpt-4.1-mini' },
+          imageGenerationModel: { primary: 'google/gemini-3.1-flash-image-preview' },
+        },
+      },
+      models: {
+        providers: {
+          openai: {
+            apiKey: 'sk-openai-chat',
+            imageApiKey: 'sk-openai-image',
+            baseUrl: 'https://chat-proxy.example.com/v1',
+            models: [{ id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' }],
+          },
+          google: {
+            apiKey: 'sk-google-chat',
+            imageApiKey: 'sk-google-image',
+            baseUrl: 'https://google-chat-proxy.example.com/v1beta',
+            models: [{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' }],
+          },
+        },
+      },
+    })
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+
+    fireEvent.click(within(getProviderCardByLabel('OpenAI')).getByRole('button', { name: 'Test Connection' }))
+    await waitFor(() => {
+      expect(mockTestApiKey).toHaveBeenCalledWith('openai', 'sk-openai-chat', 'https://chat-proxy.example.com/v1')
+    })
+
+    fireEvent.click(within(getProviderCardByLabel('GPT Image')).getByRole('button', { name: 'Test Connection' }))
+    await waitFor(() => {
+      expect(mockTestApiKey).toHaveBeenCalledWith('openai-image', 'sk-openai-image', undefined)
+    })
+
+    fireEvent.click(within(getProviderCardByLabel('Google Gemini')).getByRole('button', { name: 'Test Connection' }))
+    await waitFor(() => {
+      expect(mockTestApiKey).toHaveBeenCalledWith('google', 'sk-google-chat', 'https://google-chat-proxy.example.com/v1beta')
+    })
+
+    fireEvent.click(within(getProviderCardByLabel('Gemini Image')).getByRole('button', { name: 'Test Connection' }))
+    await waitFor(() => {
+      expect(mockTestApiKey).toHaveBeenCalledWith('google-image', 'sk-google-image', undefined)
+    })
   })
 
   it('lets users pick and set a model from the configured provider card', async () => {
@@ -469,14 +765,13 @@ describe('ModelsPage', () => {
       },
     })
 
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
+    fireEvent.click(within(getProviderCardByLabel('ERNIE LLM API')).getByRole('button', { name: 'Choose Model' }))
 
-    const picker = document.getElementById('models-provider-picker-baidu-aistudio')
-    expect(picker).not.toBeNull()
+    const picker = getElementById('models-provider-picker-baidu-aistudio')
     expect(within(picker!).getByPlaceholderText('Search by model name or ID...')).toBeInTheDocument()
     expect(within(picker!).getByText(/Showing \d+ of \d+ models/)).toBeInTheDocument()
 
@@ -521,13 +816,12 @@ describe('ModelsPage', () => {
       },
     })
 
-    render(<ModelsPage />)
+    renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Model' }))
+    fireEvent.click(within(getProviderCardByLabel('OpenAI')).getByRole('button', { name: 'Choose Model' }))
 
-    const picker = document.getElementById('models-provider-picker-openai')
-    expect(picker).not.toBeNull()
+    const picker = getElementById('models-provider-picker-openai')
     fireEvent.click(within(picker!).getByRole('button', { name: /GPT-4.1 Mini gpt-4.1-mini/ }))
 
     await waitFor(() => {

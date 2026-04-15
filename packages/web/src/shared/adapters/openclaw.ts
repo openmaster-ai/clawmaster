@@ -78,6 +78,33 @@ export async function setConfigResult(path: string, value: unknown): Promise<Ada
   })
 }
 
+export async function resolvePluginRootResult(input: {
+  pluginId: string
+  candidates?: string[]
+}): Promise<AdapterResult<string | null>> {
+  const pluginId = input.pluginId.trim()
+  if (!pluginId) return fail(i18n.t('adapters.missingProviderId'))
+  if (!/^[a-zA-Z0-9._-]+$/.test(pluginId)) return fail(i18n.t('adapters.invalidProviderId'))
+  const candidates = (input.candidates ?? []).filter((candidate) => typeof candidate === 'string' && candidate.trim())
+
+  if (getIsTauri()) {
+    return fromPromise(async () => {
+      return tauriInvoke<string | null>('resolve_plugin_root', {
+        pluginId,
+        candidates,
+      })
+    })
+  }
+
+  const result = await webFetchJson<{ path: string | null }>('/api/config/resolve-plugin-root', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pluginId, candidates }),
+  })
+  if (!result.success) return fail(result.error ?? i18n.t('common.requestFailed'))
+  return ok(result.data?.path ?? null)
+}
+
 export function channelsFromConfig(config: OpenClawConfig): ChannelInfo[] {
   const channels = config.channels || {}
   return Object.entries(channels).map(([id, ch]) => ({

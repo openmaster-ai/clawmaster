@@ -6,6 +6,15 @@ import { registerDomainRoutes, attachLogsStreamServer } from './routes/index.js'
 import { requireServiceAuth } from './serviceAuth.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const ERNIE_IMAGE_PLUGIN_ROOT = path.resolve(__dirname, '../../../plugins/openclaw-ernie-image')
+const ERNIE_IMAGE_SKILL_ROOT = path.resolve(__dirname, '../../../bundled-skills/ernie-image')
+
+if (fs.existsSync(path.join(ERNIE_IMAGE_PLUGIN_ROOT, 'openclaw.plugin.json'))) {
+  process.env.CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT = ERNIE_IMAGE_PLUGIN_ROOT
+}
+if (fs.existsSync(path.join(ERNIE_IMAGE_SKILL_ROOT, 'SKILL.md'))) {
+  process.env.CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT = ERNIE_IMAGE_SKILL_ROOT
+}
 
 export function resolveFrontendDistDir(): string | null {
   const explicit = process.env['CLAWMASTER_FRONTEND_DIST']?.trim()

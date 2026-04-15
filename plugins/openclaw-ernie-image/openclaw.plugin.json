@@ -1,0 +1,20 @@
+{
+  "id": "openclaw-ernie-image",
+  "enabledByDefault": true,
+  "providers": [
+    "baidu-aistudio-image"
+  ],
+  "autoEnableWhenConfiguredProviders": [
+    "baidu-aistudio-image"
+  ],
+  "contracts": {
+    "imageGenerationProviders": [
+      "baidu-aistudio-image"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

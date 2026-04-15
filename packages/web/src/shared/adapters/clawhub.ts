@@ -8,6 +8,7 @@ import { webFetch, webFetchJson } from '@/shared/adapters/webHttp'
 
 /** Same order as packages/backend/src/skillsCli.ts SKILL_CLI_ROOTS */
 const SKILL_CLI_ROOTS = ['skills', 'clawbot', 'clawhub'] as const
+const BUNDLED_SKILL_SLUGS = new Set(['ernie-image'])
 const SKILLGUARD_SCAN_SCRIPT = String.raw`
 const fs = require('fs');
 const os = require('os');
@@ -196,6 +197,7 @@ function mapSkillRow(s: Record<string, unknown>, installed: boolean): SkillInfo 
     (typeof s.slug === 'string' && s.slug) ||
     'unknown'
   const slug = (typeof s.slug === 'string' && s.slug) || skillKey
+  const normalizedSlug = slug.trim().toLowerCase()
   return {
     slug,
     name: (typeof s.name === 'string' && s.name) || skillKey,
@@ -206,7 +208,7 @@ function mapSkillRow(s: Record<string, unknown>, installed: boolean): SkillInfo 
     source: typeof s.source === 'string' ? s.source : undefined,
     disabled: typeof s.disabled === 'boolean' ? s.disabled : undefined,
     eligible: typeof s.eligible === 'boolean' ? s.eligible : undefined,
-    bundled: typeof s.bundled === 'boolean' ? s.bundled : undefined,
+    bundled: typeof s.bundled === 'boolean' ? s.bundled : BUNDLED_SKILL_SLUGS.has(normalizedSlug),
   }
 }
 
@@ -292,13 +294,22 @@ export async function searchSkillsResult(query: string): Promise<AdapterResult<S
 }
 
 export async function installSkillResult(slug: string): Promise<AdapterResult<void>> {
+  const normalizedSlug = slug.trim()
+  if (!normalizedSlug) return fail('Missing slug')
+
   if (getIsTauri()) {
-    return fromPromise(() => tauriOpenclawSkillsVoid(['install', slug]))
+    return fromPromise(async () => {
+      if (BUNDLED_SKILL_SLUGS.has(normalizedSlug.toLowerCase())) {
+        await tauriInvoke('install_bundled_skill', { skillId: normalizedSlug })
+        return
+      }
+      await tauriOpenclawSkillsVoid(['install', normalizedSlug])
+    })
   }
   const res = await webFetch('/api/skills/install', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slug }),
+    body: JSON.stringify({ slug: normalizedSlug }),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')

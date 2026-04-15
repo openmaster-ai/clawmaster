@@ -120,6 +120,10 @@ function sourceLabelKey(skill: SkillInfo): string {
   return 'skills.sourceCustom'
 }
 
+function catalogInstallSource(catalog: CatalogSkill): 'registry' | 'bundled' {
+  return catalog.installSource ?? 'registry'
+}
+
 export default function SkillsPage() {
   return (
     <ErrorBoundary>
@@ -154,7 +158,6 @@ function SkillsContent() {
 
   const skills = installedSkills ?? []
   const clawhubReady = clawhubCli?.installed === true
-  const installLockedReason = clawhubReady ? null : t('skills.clawhub.installFirstAction')
 
   const catalogAliasMap = useMemo(() => {
     const map = new Map<string, CatalogSkill>()
@@ -392,7 +395,9 @@ function SkillsContent() {
               busyKey={operatingKey}
               onInstall={handleInstall}
               onSetEnabled={handleSetEnabled}
-              installLockedReason={installLockedReason}
+              installLockedReason={catalogInstallSource(catalog) === 'bundled' || clawhubReady
+                ? null
+                : t('skills.clawhub.installFirstAction')}
             />
           ))}
         </div>
@@ -715,10 +720,10 @@ function FeaturedSkillCard({
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-background/80 px-2.5 py-1 text-xs text-muted-foreground">
-              {t('skills.featuredClawHub')}
+              {t(catalogInstallSource(catalog) === 'bundled' ? 'skills.featuredBundled' : 'skills.featuredClawHub')}
             </span>
             <span className="rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-xs text-muted-foreground">
-              {t('skills.sourceClawHub')}
+              {t(catalogInstallSource(catalog) === 'bundled' ? 'skills.sourceBundled' : 'skills.sourceClawHub')}
             </span>
           </div>
         )}
