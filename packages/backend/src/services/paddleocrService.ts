@@ -115,21 +115,38 @@ function dedupePaths(items: Array<string | undefined>): string[] {
   for (const item of items) {
     if (!item) continue
     const trimmed = item.trim()
-    if (!trimmed || seen.has(trimmed)) continue
-    seen.add(trimmed)
-    output.push(trimmed)
+    if (!trimmed) continue
+    const resolved = path.resolve(trimmed)
+    if (seen.has(resolved)) continue
+    seen.add(resolved)
+    output.push(resolved)
   }
   return output
 }
 
+function collectAncestorDirs(startDir: string): string[] {
+  const ancestors: string[] = []
+  let current = path.resolve(startDir)
+  while (true) {
+    ancestors.push(current)
+    const parent = path.dirname(current)
+    if (parent === current) {
+      return ancestors
+    }
+    current = parent
+  }
+}
+
 function getResourceRootCandidates(explicitResourceRoot?: string): string[] {
   const execDir = path.dirname(process.execPath)
-  const cwd = process.cwd()
+  const cwdAncestors = collectAncestorDirs(process.cwd())
   return dedupePaths([
     explicitResourceRoot,
     process.env[RESOURCE_ROOT_ENV_KEY],
-    path.join(cwd, 'src-tauri', 'resources'),
-    path.join(cwd, 'resources'),
+    ...cwdAncestors.flatMap((dir) => [
+      path.join(dir, 'src-tauri', 'resources'),
+      path.join(dir, 'resources'),
+    ]),
     path.join(execDir, 'resources'),
     path.resolve(execDir, '..', 'resources'),
   ])

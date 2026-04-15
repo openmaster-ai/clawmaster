@@ -146,6 +146,41 @@ test('setupPaddleOcr can resolve bundled assets from resourceRoot', async () => 
   assert.ok(fs.existsSync(path.join(skillsDir, PADDLEOCR_DOC_SKILL_ID, 'SKILL.md')))
 })
 
+test('setupPaddleOcr can resolve bundled assets from an ancestor repo root when cwd is packages/backend', async () => {
+  const homeDir = makeTempHome('repo-root-cwd')
+  setTempHomeEnv(homeDir)
+
+  const repoRoot = path.join(homeDir, 'repo')
+  const backendCwd = path.join(repoRoot, 'packages', 'backend')
+  const resourceRoot = path.join(repoRoot, 'src-tauri', 'resources')
+  const assetRoot = path.join(resourceRoot, 'paddleocr-skills')
+  fs.mkdirSync(backendCwd, { recursive: true })
+  writeSkillAsset(assetRoot, PADDLEOCR_TEXT_SKILL_ID)
+  writeSkillAsset(assetRoot, PADDLEOCR_DOC_SKILL_ID)
+
+  const previousCwd = process.cwd()
+  process.chdir(backendCwd)
+  try {
+    const skillsDir = path.join(homeDir, '.openclaw', 'workspace', 'skills')
+    await setupPaddleOcr(
+      {
+        moduleId: PADDLEOCR_TEXT_SKILL_ID,
+        apiUrl: 'https://demo.paddleocr.com/ocr',
+        accessToken: 'tok_repo_root',
+      },
+      {
+        skillsDir,
+        validateCredentials: async () => undefined,
+      },
+    )
+
+    assert.ok(fs.existsSync(path.join(skillsDir, PADDLEOCR_TEXT_SKILL_ID, 'SKILL.md')))
+    assert.ok(fs.existsSync(path.join(skillsDir, PADDLEOCR_DOC_SKILL_ID, 'SKILL.md')))
+  } finally {
+    process.chdir(previousCwd)
+  }
+})
+
 test('setupPaddleOcr is idempotent and preserves existing skill files', async () => {
   const homeDir = makeTempHome('idempotent')
   setTempHomeEnv(homeDir)
