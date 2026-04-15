@@ -35,6 +35,10 @@ npm-debug.log*
 
 # Test output
 coverage/
+output/playwright/
+tests/ui/evidence/
+.codex-run/
+_run/
 test-results/
 playwright-report/
 *.snap

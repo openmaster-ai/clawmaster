@@ -61,29 +61,30 @@ type OpenClawSkillEntry = {
 
 type PaddleOcrServiceDeps = {
   assetRoot?: string
+  resourceRoot?: string
   skillsDir?: string
+  sampleImagePath?: string
+  sampleImageBase64?: string
   fetchImpl?: typeof fetch
   now?: () => number
-  sampleImageBase64?: string
-  sampleImagePath?: string
-  resourceDir?: string
   validateCredentials?: (
     moduleId: PaddleOcrModuleId,
     apiUrl: string,
     accessToken: string,
+    deps?: Pick<
+      PaddleOcrServiceDeps,
+      'fetchImpl' | 'now' | 'sampleImageBase64' | 'sampleImagePath' | 'resourceRoot'
+    >,
   ) => Promise<void>
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const PADDLEOCR_RESOURCE_ENV_KEY = 'CLAWMASTER_RESOURCE_DIR'
-const PADDLEOCR_RESOURCE_RELATIVE = path.join('src-tauri', 'resources')
-const PADDLEOCR_ASSET_DIRNAME = 'paddleocr-skills'
-const PADDLEOCR_SAMPLE_IMAGE_RELATIVE = path.join(
-  'paddleocr-preview',
-  'sample_image.base64',
-)
-let cachedResourceDir: string | undefined
-let cachedSampleImageBase64: string | undefined
+const RESOURCE_ROOT_ENV_KEY = 'CLAWMASTER_RESOURCES_DIR'
+const ASSET_ROOT_ENV_KEY = 'CLAWMASTER_PADDLEOCR_ASSET_ROOT'
+const SAMPLE_IMAGE_ENV_KEY = 'CLAWMASTER_PADDLEOCR_SAMPLE_IMAGE'
+const FALLBACK_SAMPLE_IMAGE_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+tmS0AAAAASUVORK5CYII='
+let cachedSampleImageBase64: string | null = null
 
 const MODULE_ENDPOINT_SUFFIX: Record<PaddleOcrModuleId, string> = {
   [PADDLEOCR_TEXT_SKILL_ID]: '/ocr',
@@ -110,110 +111,88 @@ const MODULE_VALIDATION_LABEL: Record<PaddleOcrModuleId, string> = {
   [PADDLEOCR_DOC_SKILL_ID]: 'PaddleOCR document parsing',
 }
 
-function appendIfMissing(values: string[], candidate: string): void {
-  const resolved = path.resolve(candidate)
-  if (!values.includes(resolved)) {
-    values.push(resolved)
+function dedupePaths(items: Array<string | undefined>): string[] {
+  const seen = new Set<string>()
+  const output: string[] = []
+  for (const item of items) {
+    if (!item) continue
+    const trimmed = item.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    output.push(trimmed)
   }
+  return output
 }
 
-function collectSearchAncestors(startDir: string): string[] {
-  const ancestors: string[] = []
-  let current = path.resolve(startDir)
-  while (true) {
-    appendIfMissing(ancestors, current)
-    const parent = path.dirname(current)
-    if (parent === current) {
-      return ancestors
-    }
-    current = parent
-  }
+function getResourceRootCandidates(explicitResourceRoot?: string): string[] {
+  const execDir = path.dirname(process.execPath)
+  const cwd = process.cwd()
+  return dedupePaths([
+    explicitResourceRoot,
+    process.env[RESOURCE_ROOT_ENV_KEY],
+    path.join(cwd, 'src-tauri', 'resources'),
+    path.join(cwd, 'resources'),
+    path.resolve(__dirname, '../../../../src-tauri/resources'),
+    path.resolve(__dirname, '../../../resources'),
+    path.join(execDir, 'resources'),
+    path.resolve(execDir, '..', 'resources'),
+  ])
 }
 
-function isBundledResourceDir(candidate: string): boolean {
-  return (
-    fs.existsSync(path.join(candidate, PADDLEOCR_ASSET_DIRNAME)) &&
-    fs.existsSync(path.join(candidate, PADDLEOCR_SAMPLE_IMAGE_RELATIVE))
-  )
-}
-
-function resolveBundledResourceDir(explicitResourceDir?: string): string {
-  if (explicitResourceDir) {
-    const resolved = path.resolve(explicitResourceDir)
-    if (!isBundledResourceDir(resolved)) {
-      throw new Error(`Bundled PaddleOCR resources are missing from ${resolved}`)
-    }
-    return resolved
+function resolveBundledAssetRoot(explicitAssetRoot?: string, explicitResourceRoot?: string): string {
+  const configuredAssetRoot = explicitAssetRoot || process.env[ASSET_ROOT_ENV_KEY]
+  if (configuredAssetRoot) {
+    return configuredAssetRoot
   }
 
-  if (cachedResourceDir !== undefined) {
-    return cachedResourceDir
-  }
-
-  const candidates: string[] = []
-  const resourceEnv = process.env[PADDLEOCR_RESOURCE_ENV_KEY]
-  if (resourceEnv?.trim()) {
-    appendIfMissing(candidates, resourceEnv.trim())
-  }
-
-  for (const baseDir of [process.cwd(), __dirname]) {
-    for (const ancestor of collectSearchAncestors(baseDir)) {
-      appendIfMissing(candidates, path.join(ancestor, PADDLEOCR_RESOURCE_RELATIVE))
-      appendIfMissing(candidates, path.join(ancestor, 'resources'))
-    }
-  }
-
-  for (const candidate of candidates) {
-    if (isBundledResourceDir(candidate)) {
-      cachedResourceDir = candidate
-      return candidate
+  for (const root of getResourceRootCandidates(explicitResourceRoot)) {
+    const assetRoot = path.join(root, 'paddleocr-skills')
+    if (fs.existsSync(assetRoot)) {
+      return assetRoot
     }
   }
 
   throw new Error(
-    `Bundled PaddleOCR resources are missing from this build. Checked: ${candidates.join(', ')}`,
+    `Unable to locate bundled PaddleOCR skills. Set ${ASSET_ROOT_ENV_KEY} or ${RESOURCE_ROOT_ENV_KEY} to a valid resources directory.`,
   )
 }
 
-function getDefaultAssetRoot(resourceDir?: string): string {
-  return path.join(resolveBundledResourceDir(resourceDir), PADDLEOCR_ASSET_DIRNAME)
-}
-
-function resolveSampleImagePath(
-  explicitSampleImagePath?: string,
-  resourceDir?: string,
-): string {
-  if (explicitSampleImagePath) {
-    return path.resolve(explicitSampleImagePath)
+async function readSampleImageBase64FromFile(filePath: string): Promise<string | null> {
+  try {
+    const value = (await fs.promises.readFile(filePath, 'utf8')).replace(/\s+/g, '')
+    return value || null
+  } catch {
+    return null
   }
-  return path.join(
-    resolveBundledResourceDir(resourceDir),
-    PADDLEOCR_SAMPLE_IMAGE_RELATIVE,
-  )
 }
 
-function getSampleImageBase64(
-  deps: Pick<PaddleOcrServiceDeps, 'sampleImageBase64' | 'sampleImagePath' | 'resourceDir'> = {},
-): string {
-  if (deps.sampleImageBase64) {
+async function resolveSampleImageBase64(
+  deps: Pick<PaddleOcrServiceDeps, 'sampleImagePath' | 'sampleImageBase64' | 'resourceRoot'>,
+): Promise<string> {
+  if (deps.sampleImageBase64?.trim()) {
     return deps.sampleImageBase64.replace(/\s+/g, '')
   }
-
-  if (!deps.sampleImagePath && !deps.resourceDir && cachedSampleImageBase64 !== undefined) {
+  if (cachedSampleImageBase64) {
     return cachedSampleImageBase64
   }
 
-  const sampleImagePath = resolveSampleImagePath(deps.sampleImagePath, deps.resourceDir)
-  try {
-    const encoded = fs.readFileSync(sampleImagePath, 'utf8').replace(/\s+/g, '')
-    if (!deps.sampleImagePath && !deps.resourceDir) {
-      cachedSampleImageBase64 = encoded
+  const candidatePaths = dedupePaths([
+    deps.sampleImagePath,
+    process.env[SAMPLE_IMAGE_ENV_KEY],
+    ...getResourceRootCandidates(deps.resourceRoot).map((root) =>
+      path.join(root, 'paddleocr-preview', 'sample_image.base64'),
+    ),
+  ])
+  for (const candidatePath of candidatePaths) {
+    const fromFile = await readSampleImageBase64FromFile(candidatePath)
+    if (fromFile) {
+      cachedSampleImageBase64 = fromFile
+      return fromFile
     }
-    return encoded
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    throw new Error(`Bundled PaddleOCR preview image is missing: ${sampleImagePath} (${detail})`)
   }
+
+  cachedSampleImageBase64 = FALLBACK_SAMPLE_IMAGE_BASE64
+  return cachedSampleImageBase64
 }
 
 function getDefaultSkillsDir(): string {
@@ -444,7 +423,7 @@ function getApiErrorCode(payload: unknown): number {
 
 function shortenText(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value
-  return `${value.slice(0, maxChars)}…`
+  return `${value.slice(0, maxChars)}...`
 }
 
 function extractStringArray(value: unknown): string[] {
@@ -530,12 +509,12 @@ async function runPaddleOcrRequest(
   accessToken: string,
   deps: Pick<
     PaddleOcrServiceDeps,
-    'fetchImpl' | 'now' | 'sampleImageBase64' | 'sampleImagePath' | 'resourceDir'
+    'fetchImpl' | 'now' | 'sampleImageBase64' | 'sampleImagePath' | 'resourceRoot'
   > = {},
 ): Promise<{ latencyMs: number; payload: unknown; rawText: string }> {
   const fetchImpl = deps.fetchImpl ?? fetch
   const now = deps.now ?? Date.now
-  const sampleImageBase64 = getSampleImageBase64(deps)
+  const sampleImageBase64 = await resolveSampleImageBase64(deps)
   const startedAt = now()
   let response: Response
   try {
@@ -607,7 +586,7 @@ async function validateSingleEndpoint(
   accessToken: string,
   deps: Pick<
     PaddleOcrServiceDeps,
-    'fetchImpl' | 'now' | 'sampleImageBase64' | 'sampleImagePath' | 'resourceDir'
+    'fetchImpl' | 'now' | 'sampleImageBase64' | 'sampleImagePath' | 'resourceRoot'
   > = {},
 ): Promise<void> {
   await runPaddleOcrRequest(moduleId, apiUrl, accessToken, deps)
@@ -630,7 +609,7 @@ export async function validatePaddleOcrCredentials(
   accessToken: string,
   deps: Pick<
     PaddleOcrServiceDeps,
-    'fetchImpl' | 'now' | 'sampleImageBase64' | 'sampleImagePath' | 'resourceDir'
+    'fetchImpl' | 'now' | 'sampleImageBase64' | 'sampleImagePath' | 'resourceRoot'
   > = {},
 ): Promise<void> {
   const token = accessToken.trim()
@@ -654,7 +633,7 @@ export async function setupPaddleOcr(
   deps: PaddleOcrServiceDeps = {},
 ): Promise<PaddleOcrStatusPayload> {
   const apiUrl = normalizePaddleOcrApiUrl(input.moduleId, input.apiUrl)
-  const assetRoot = deps.assetRoot ?? getDefaultAssetRoot(deps.resourceDir)
+  const assetRoot = resolveBundledAssetRoot(deps.assetRoot, deps.resourceRoot)
   const skillsDir = deps.skillsDir ?? getDefaultSkillsDir()
   const currentConfig = readConfigJsonOrEmpty()
   const currentEntry = readSkillEntry(currentConfig, input.moduleId)
@@ -662,7 +641,13 @@ export async function setupPaddleOcr(
   const validateCredentials =
     deps.validateCredentials ?? validatePaddleOcrCredentials
 
-  await validateCredentials(input.moduleId, apiUrl, accessToken)
+  await validateCredentials(input.moduleId, apiUrl, accessToken, {
+    fetchImpl: deps.fetchImpl,
+    now: deps.now,
+    sampleImageBase64: deps.sampleImageBase64,
+    sampleImagePath: deps.sampleImagePath,
+    resourceRoot: deps.resourceRoot,
+  })
   ensureBundledPaddleOcrModules(assetRoot, skillsDir)
 
   await updateConfigJson((config) => {

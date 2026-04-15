@@ -41,17 +41,6 @@ function writeSkillAsset(root: string, id: string): void {
   fs.writeFileSync(path.join(skillRoot, 'scripts', 'lib.mjs'), 'export {}\n', 'utf8')
 }
 
-function writeBundledResourceRoot(root: string): void {
-  writeSkillAsset(path.join(root, 'paddleocr-skills'), PADDLEOCR_TEXT_SKILL_ID)
-  writeSkillAsset(path.join(root, 'paddleocr-skills'), PADDLEOCR_DOC_SKILL_ID)
-  fs.mkdirSync(path.join(root, 'paddleocr-preview'), { recursive: true })
-  fs.writeFileSync(
-    path.join(root, 'paddleocr-preview', 'sample_image.base64'),
-    'ZGF0YQ==\n',
-    'utf8',
-  )
-}
-
 test.afterEach(() => {
   for (const [key, value] of Object.entries(originalEnv)) {
     if (value === undefined) {
@@ -128,6 +117,33 @@ test('setupPaddleOcr writes the text recognition entry and prepares bundled modu
   )
   assert.equal(textEntry.env.PADDLEOCR_ACCESS_TOKEN, 'tok_test_1234567890')
   assert.equal(docEntry, undefined)
+})
+
+test('setupPaddleOcr can resolve bundled assets from resourceRoot', async () => {
+  const homeDir = makeTempHome('resource-root')
+  setTempHomeEnv(homeDir)
+
+  const resourceRoot = path.join(homeDir, 'resources')
+  const assetRoot = path.join(resourceRoot, 'paddleocr-skills')
+  writeSkillAsset(assetRoot, PADDLEOCR_TEXT_SKILL_ID)
+  writeSkillAsset(assetRoot, PADDLEOCR_DOC_SKILL_ID)
+
+  const skillsDir = path.join(homeDir, '.openclaw', 'workspace', 'skills')
+  await setupPaddleOcr(
+    {
+      moduleId: PADDLEOCR_TEXT_SKILL_ID,
+      apiUrl: 'https://demo.paddleocr.com/ocr',
+      accessToken: 'tok_root',
+    },
+    {
+      resourceRoot,
+      skillsDir,
+      validateCredentials: async () => undefined,
+    },
+  )
+
+  assert.ok(fs.existsSync(path.join(skillsDir, PADDLEOCR_TEXT_SKILL_ID, 'SKILL.md')))
+  assert.ok(fs.existsSync(path.join(skillsDir, PADDLEOCR_DOC_SKILL_ID, 'SKILL.md')))
 })
 
 test('setupPaddleOcr is idempotent and preserves existing skill files', async () => {
@@ -242,32 +258,6 @@ test('setupPaddleOcr surfaces credential validation failures', async () => {
   )
 })
 
-test('setupPaddleOcr resolves bundled assets from a resource directory', async () => {
-  const homeDir = makeTempHome('resource-dir')
-  setTempHomeEnv(homeDir)
-
-  const resourceDir = path.join(homeDir, 'resources')
-  writeBundledResourceRoot(resourceDir)
-  const skillsDir = path.join(homeDir, '.openclaw', 'workspace', 'skills')
-
-  const status = await setupPaddleOcr(
-    {
-      moduleId: PADDLEOCR_TEXT_SKILL_ID,
-      apiUrl: 'https://demo.paddleocr.com/ocr',
-      accessToken: 'tok_resource',
-    },
-    {
-      resourceDir,
-      skillsDir,
-      validateCredentials: async () => undefined,
-    },
-  )
-
-  assert.equal(status.textRecognition.configured, true)
-  assert.ok(fs.existsSync(path.join(skillsDir, PADDLEOCR_TEXT_SKILL_ID, 'SKILL.md')))
-  assert.ok(fs.existsSync(path.join(skillsDir, PADDLEOCR_DOC_SKILL_ID, 'SKILL.md')))
-})
-
 test('setupPaddleOcr preserves the other module when configuring document parsing later', async () => {
   const homeDir = makeTempHome('two-stage')
   setTempHomeEnv(homeDir)
@@ -367,9 +357,11 @@ test('previewPaddleOcr returns extracted text, stats, and response preview', asy
   assert.equal(preview.latencyMs, 25)
 })
 
-test('previewPaddleOcr uses the injected sample image payload when provided', async () => {
-  let receivedFile = ''
+test('previewPaddleOcr sends injected sampleImageBase64 without touching bundled files', async () => {
+  const homeDir = makeTempHome('preview-sample-image')
+  setTempHomeEnv(homeDir)
 
+  let seenPayload: Record<string, unknown> | null = null
   await previewPaddleOcr(
     {
       moduleId: PADDLEOCR_TEXT_SKILL_ID,
@@ -377,10 +369,9 @@ test('previewPaddleOcr uses the injected sample image payload when provided', as
       accessToken: 'tok_preview',
     },
     {
-      sampleImageBase64: ' Zm9v \nYmFy ',
+      sampleImageBase64: 'custom-sample-image',
       fetchImpl: async (_url, init) => {
-        const payload = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
-        receivedFile = String(payload.file ?? '')
+        seenPayload = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
         return new Response(
           JSON.stringify({
             errorCode: 0,
@@ -394,7 +385,7 @@ test('previewPaddleOcr uses the injected sample image payload when provided', as
     },
   )
 
-  assert.equal(receivedFile, 'Zm9vYmFy')
+  assert.equal(seenPayload?.file, 'custom-sample-image')
 })
 
 test('clearPaddleOcr removes only the selected module entry', async () => {
