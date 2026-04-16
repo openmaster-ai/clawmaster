@@ -3414,6 +3414,8 @@ fn reindex_openclaw_memory() -> Result<OpenclawMemoryReindexPayload, String> {
 #[cfg(test)]
 mod tests {
     use super::{
+        build_paddleocr_request_json,
+        parse_http_status_output,
         get_config_path_candidates_for, get_openclaw_profile_args, get_openclaw_profile_data_dir,
         install_bundled_skill,
         local_data_profile_key, managed_memory_windows_wsl_data_root,
@@ -3427,7 +3429,17 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEST_ENV_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn lock_test_env() -> std::sync::MutexGuard<'static, ()> {
+        TEST_ENV_MUTEX
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("test env mutex should not be poisoned")
+    }
 
     fn unique_test_dir(label: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -3438,6 +3450,39 @@ mod tests {
             "clawmaster-config-path-{label}-{}-{nanos}",
             std::process::id()
         ))
+    }
+
+
+
+    #[test]
+    fn paddleocr_request_json_keeps_large_base64_payload_in_json_body() {
+        let payload = super::PaddleOcrPayload {
+            endpoint: "https://example.com/layout-parsing".to_string(),
+            access_token: "token".to_string(),
+            file: Some("a".repeat(2 * 1024 * 1024)),
+            file_type: Some(0),
+            use_doc_orientation_classify: Some(true),
+            use_doc_unwarping: None,
+            use_layout_detection: None,
+            use_chart_recognition: None,
+            restructure_pages: None,
+            merge_tables: None,
+            relevel_titles: None,
+            prettify_markdown: None,
+            visualize: Some(false),
+        };
+
+        let json = build_paddleocr_request_json(&payload, "fallback", false)
+            .expect("json body should build");
+        assert!(json.len() > 2 * 1024 * 1024);
+        assert!(json.contains("\"fileType\":0"));
+    }
+
+    #[test]
+    fn parse_http_status_output_extracts_body_and_status() {
+        let (body, status) = parse_http_status_output("{\"ok\":true}\n__CLAWMASTER_STATUS__:200");
+        assert_eq!(body, "{\"ok\":true}");
+        assert_eq!(status, 200);
     }
 
     #[test]
@@ -3836,6 +3881,7 @@ mod tests {
 
     #[test]
     fn resolve_plugin_root_falls_back_to_repo_plugin_in_unbundled_dev_runs() {
+        let _guard = lock_test_env();
         std::env::remove_var("CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT");
 
         let resolved = resolve_plugin_root("openclaw-ernie-image".to_string(), vec![])
@@ -3849,6 +3895,7 @@ mod tests {
 
     #[test]
     fn resolve_plugin_root_ignores_candidates_with_the_wrong_manifest_id() {
+        let _guard = lock_test_env();
         let temp_root = unique_test_dir("ernie-plugin-root");
         fs::create_dir_all(&temp_root).expect("should create temp root");
         let stale_candidate = temp_root.join("wrong-plugin");
@@ -3874,6 +3921,7 @@ mod tests {
 
     #[test]
     fn install_bundled_skill_falls_back_to_repo_skill_in_unbundled_dev_runs() {
+        let _guard = lock_test_env();
         let previous_skill_root = std::env::var_os("CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT");
         let previous_xdg_config_home = std::env::var_os("XDG_CONFIG_HOME");
         let previous_home = std::env::var_os("HOME");
@@ -3913,6 +3961,57 @@ mod tests {
         assert!(installed_skill.exists());
         assert!(
             repo_bundled_skill_root("ernie-image")
+                .expect("repo bundled skill root should resolve")
+                .join("SKILL.md")
+                .exists()
+        );
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn install_paddleocr_bundled_skill_falls_back_to_repo_skill_in_unbundled_dev_runs() {
+        let _guard = lock_test_env();
+        let previous_skill_root =
+            std::env::var_os("CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT");
+        let previous_xdg_config_home = std::env::var_os("XDG_CONFIG_HOME");
+        let previous_home = std::env::var_os("HOME");
+        let temp_root = unique_test_dir("paddleocr-skill-install");
+        fs::create_dir_all(&temp_root).expect("should create temp root");
+
+        std::env::remove_var("CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT");
+        std::env::set_var("XDG_CONFIG_HOME", &temp_root);
+        std::env::set_var("HOME", &temp_root);
+
+        let install_result = install_bundled_skill("paddleocr-doc-parsing".to_string());
+
+        if let Some(value) = previous_skill_root {
+            std::env::set_var("CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT", value);
+        } else {
+            std::env::remove_var("CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT");
+        }
+        if let Some(value) = previous_xdg_config_home {
+            std::env::set_var("XDG_CONFIG_HOME", value);
+        } else {
+            std::env::remove_var("XDG_CONFIG_HOME");
+        }
+        if let Some(value) = previous_home {
+            std::env::set_var("HOME", value);
+        } else {
+            std::env::remove_var("HOME");
+        }
+
+        install_result.expect("repo bundled skill fallback should install successfully");
+
+        let installed_skill = temp_root
+            .join(".openclaw")
+            .join("workspace")
+            .join("skills")
+            .join("paddleocr-doc-parsing")
+            .join("SKILL.md");
+        assert!(installed_skill.exists());
+        assert!(
+            repo_bundled_skill_root("paddleocr-doc-parsing")
                 .expect("repo bundled skill root should resolve")
                 .join("SKILL.md")
                 .exists()
@@ -4370,6 +4469,7 @@ fn resolve_plugin_root(plugin_id: String, candidates: Vec<String>) -> Result<Opt
 fn bundled_skill_dir_name(skill_id: &str) -> Option<&'static str> {
     match skill_id.trim().to_ascii_lowercase().as_str() {
         "ernie-image" => Some("ernie-image"),
+        "paddleocr-doc-parsing" => Some("paddleocr-doc-parsing"),
         _ => None,
     }
 }
@@ -4377,6 +4477,7 @@ fn bundled_skill_dir_name(skill_id: &str) -> Option<&'static str> {
 fn bundled_skill_env_key(skill_id: &str) -> Option<&'static str> {
     match skill_id.trim().to_ascii_lowercase().as_str() {
         "ernie-image" => Some("CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT"),
+        "paddleocr-doc-parsing" => Some("CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT"),
         _ => None,
     }
 }
@@ -5819,27 +5920,10 @@ struct FetchProviderCatalogPayload {
     headers: std::collections::HashMap<String, String>,
 }
 
-#[tauri::command]
-fn fetch_provider_catalog(payload: FetchProviderCatalogPayload) -> Result<String, String> {
-    let mut curl_config = String::from("silent\nshow-error\nlocation\nmax-time = 10\n");
-    for (key, value) in payload.headers {
-        curl_config.push_str("header = ");
-        curl_config.push_str(&serde_json::to_string(&format!("{key}: {value}")).map_err(|e| {
-            cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e)
-        })?);
-        curl_config.push('\n');
-    }
-    curl_config.push_str("write-out = \"\\n__CLAWMASTER_STATUS__:%{http_code}\"\n");
-    curl_config.push_str("url = ");
-    curl_config.push_str(
-        &serde_json::to_string(&payload.url)
-            .map_err(|e| cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e))?,
-    );
-    curl_config.push('\n');
-
+fn run_curl_config(curl_config: &str) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     if let Some(distro) = active_wsl_distro() {
-        let output = run_wsl_shell(&distro, "curl --config -", Some(&curl_config))?;
+        let output = run_wsl_shell(&distro, "curl --config -", Some(curl_config))?;
         if output.code == 0 {
             return Ok(output.stdout);
         }
@@ -5887,6 +5971,280 @@ fn fetch_provider_catalog(payload: FetchProviderCatalogPayload) -> Result<String
         };
         Err(cmd_err_d("SYSTEM_CMD_FAILED", msg.trim()))
     }
+}
+
+#[tauri::command]
+fn fetch_provider_catalog(payload: FetchProviderCatalogPayload) -> Result<String, String> {
+    let mut curl_config = String::from("silent\nshow-error\nlocation\nmax-time = 10\n");
+    for (key, value) in payload.headers {
+        curl_config.push_str("header = ");
+        curl_config.push_str(&serde_json::to_string(&format!("{key}: {value}")).map_err(|e| {
+            cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e)
+        })?);
+        curl_config.push('\n');
+    }
+    curl_config.push_str("write-out = \"\\n__CLAWMASTER_STATUS__:%{http_code}\"\n");
+    curl_config.push_str("url = ");
+    curl_config.push_str(
+        &serde_json::to_string(&payload.url)
+            .map_err(|e| cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e))?,
+    );
+    curl_config.push('\n');
+
+    run_curl_config(&curl_config)
+}
+
+const DEFAULT_PADDLEOCR_TEST_FILE: &str =
+    "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/release/3.3/docs/datasets/images/ch_doc1.jpg";
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PaddleOcrPayload {
+    endpoint: String,
+    access_token: String,
+    file: Option<String>,
+    file_type: Option<u8>,
+    use_doc_orientation_classify: Option<bool>,
+    use_doc_unwarping: Option<bool>,
+    use_layout_detection: Option<bool>,
+    use_chart_recognition: Option<bool>,
+    restructure_pages: Option<bool>,
+    merge_tables: Option<bool>,
+    relevel_titles: Option<bool>,
+    prettify_markdown: Option<bool>,
+    visualize: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PaddleOcrTestResultDto {
+    ok: bool,
+    sample_file: String,
+    page_count: usize,
+}
+
+fn paddleocr_required_text(value: &str, code: &'static str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(cmd_err(code));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn paddleocr_endpoint(value: &str) -> Result<String, String> {
+    let endpoint = paddleocr_required_text(value, "PADDLEOCR_ENDPOINT_REQUIRED")?;
+    if !endpoint.starts_with("https://") && !endpoint.starts_with("http://") {
+        return Err(cmd_err("PADDLEOCR_ENDPOINT_INVALID"));
+    }
+    Ok(endpoint)
+}
+
+fn paddleocr_file_type(value: Option<u8>) -> Result<Option<u8>, String> {
+    match value {
+        Some(file_type) if file_type == 0 || file_type == 1 => Ok(Some(file_type)),
+        Some(_) => Err(cmd_err("PADDLEOCR_FILE_TYPE_INVALID")),
+        None => Ok(None),
+    }
+}
+
+fn build_paddleocr_request_json(
+    payload: &PaddleOcrPayload,
+    fallback_file: &str,
+    force_visualize_false: bool,
+) -> Result<String, String> {
+    let file = payload
+        .file
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(fallback_file)
+        .to_string();
+
+    let mut body = serde_json::Map::new();
+    body.insert("file".to_string(), serde_json::Value::String(file));
+
+    if let Some(file_type) = paddleocr_file_type(payload.file_type)? {
+        body.insert(
+            "fileType".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(file_type)),
+        );
+    }
+
+    let option_pairs = [
+        ("useDocOrientationClassify", payload.use_doc_orientation_classify),
+        ("useDocUnwarping", payload.use_doc_unwarping),
+        ("useLayoutDetection", payload.use_layout_detection),
+        ("useChartRecognition", payload.use_chart_recognition),
+        ("restructurePages", payload.restructure_pages),
+        ("mergeTables", payload.merge_tables),
+        ("relevelTitles", payload.relevel_titles),
+        ("prettifyMarkdown", payload.prettify_markdown),
+        (
+            "visualize",
+            if force_visualize_false {
+                Some(false)
+            } else {
+                payload.visualize
+            },
+        ),
+    ];
+    for (key, value) in option_pairs {
+        if let Some(enabled) = value {
+            body.insert(key.to_string(), serde_json::Value::Bool(enabled));
+        }
+    }
+
+    serde_json::to_string(&serde_json::Value::Object(body))
+        .map_err(|e| cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e))
+}
+
+fn parse_http_status_output(raw: &str) -> (String, u16) {
+    let marker = "\n__CLAWMASTER_STATUS__:";
+    if let Some(index) = raw.rfind(marker) {
+        let body = raw[..index].to_string();
+        let status_text = raw[index + marker.len()..].trim();
+        let status = status_text.parse::<u16>().unwrap_or(0);
+        (body, status)
+    } else {
+        (raw.to_string(), 0)
+    }
+}
+
+fn paddleocr_request(payload: &PaddleOcrPayload, fallback_file: &str) -> Result<serde_json::Value, String> {
+    let endpoint = paddleocr_endpoint(&payload.endpoint)?;
+    let access_token = paddleocr_required_text(&payload.access_token, "PADDLEOCR_TOKEN_REQUIRED")?;
+    let body_json = build_paddleocr_request_json(payload, fallback_file, false)?;
+
+    let body_path = std::env::temp_dir().join(format!(
+        "clawmaster-paddleocr-body-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|value| value.as_nanos())
+            .unwrap_or(0)
+    ));
+    fs::write(&body_path, body_json.as_bytes())
+        .map_err(|e| cmd_err_d("SYSTEM_CMD_TEMPFILE_WRITE_FAILED", e))?;
+
+    let mut curl_config = String::from("silent
+show-error
+location
+max-time = 60
+request = POST
+");
+    for header in [
+        format!("Authorization: token {}", access_token),
+        "Content-Type: application/json".to_string(),
+    ] {
+        curl_config.push_str("header = ");
+        curl_config.push_str(
+            &serde_json::to_string(&header)
+                .map_err(|e| cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e))?,
+        );
+        curl_config.push('\n');
+    }
+    curl_config.push_str("data-binary = ");
+    curl_config.push_str(
+        &serde_json::to_string(&format!("@{}", body_path.display()))
+            .map_err(|e| cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e))?,
+    );
+    curl_config.push('\n');
+    curl_config.push_str("write-out = \"\\n__CLAWMASTER_STATUS__:%{http_code}\"\n");
+    curl_config.push_str("url = ");
+    curl_config.push_str(
+        &serde_json::to_string(&endpoint)
+            .map_err(|e| cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e))?,
+    );
+    curl_config.push('\n');
+
+    let raw = run_curl_config(&curl_config);
+    let _ = fs::remove_file(&body_path);
+    let raw = raw?;
+    let (body, status) = parse_http_status_output(&raw);
+    if !(200..300).contains(&status) {
+        let message = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|parsed| {
+                parsed
+                    .get("errorMsg")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string())
+            })
+            .unwrap_or_else(|| shorten_chars(body.trim(), 240));
+        return Err(cmd_err_d(
+            "PADDLEOCR_REQUEST_FAILED",
+            format!("status {}: {}", status, message),
+        ));
+    }
+
+    let parsed = serde_json::from_str::<serde_json::Value>(&body)
+        .map_err(|e| cmd_err_d("PADDLEOCR_RESPONSE_INVALID", e))?;
+    if let Some(error_code) = parsed.get("errorCode").and_then(|value| value.as_i64()) {
+        if error_code != 0 {
+            let error_message = parsed
+                .get("errorMsg")
+                .and_then(|value| value.as_str())
+                .unwrap_or("Unknown error");
+            return Err(cmd_err_d(
+                "PADDLEOCR_RESPONSE_ERROR",
+                format!("{}: {}", error_code, error_message),
+            ));
+        }
+    }
+
+    parsed
+        .get("result")
+        .cloned()
+        .ok_or_else(|| cmd_err("PADDLEOCR_RESULT_MISSING"))
+}
+
+#[tauri::command]
+fn paddleocr_test_connection(payload: PaddleOcrPayload) -> Result<PaddleOcrTestResultDto, String> {
+    let sample_file = payload
+        .file
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_PADDLEOCR_TEST_FILE)
+        .to_string();
+    let request_payload = PaddleOcrPayload {
+        endpoint: payload.endpoint,
+        access_token: payload.access_token,
+        file: Some(sample_file.clone()),
+        file_type: Some(payload.file_type.unwrap_or(1)),
+        use_doc_orientation_classify: payload.use_doc_orientation_classify,
+        use_doc_unwarping: payload.use_doc_unwarping,
+        use_layout_detection: payload.use_layout_detection,
+        use_chart_recognition: payload.use_chart_recognition,
+        restructure_pages: payload.restructure_pages,
+        merge_tables: payload.merge_tables,
+        relevel_titles: payload.relevel_titles,
+        prettify_markdown: payload.prettify_markdown,
+        visualize: Some(false),
+    };
+    let result = paddleocr_request(&request_payload, &sample_file)?;
+    let page_count = result
+        .get("layoutParsingResults")
+        .and_then(|value| value.as_array())
+        .map(|pages| pages.len())
+        .unwrap_or(0);
+    Ok(PaddleOcrTestResultDto {
+        ok: true,
+        sample_file,
+        page_count,
+    })
+}
+
+#[tauri::command]
+fn paddleocr_parse_document(payload: PaddleOcrPayload) -> Result<serde_json::Value, String> {
+    let fallback_file = payload
+        .file
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| cmd_err("PADDLEOCR_FILE_REQUIRED"))?
+        .to_string();
+    paddleocr_request(&payload, &fallback_file)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -5942,6 +6300,8 @@ pub fn run() {
             start_ollama,
             run_system_command,
             fetch_provider_catalog,
+            paddleocr_test_connection,
+            paddleocr_parse_document,
         ])
         .setup(|app| {
             if let Ok(resource_dir) = app.path().resource_dir() {
@@ -5964,6 +6324,14 @@ pub fn run() {
                     std::env::set_var(
                         "CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT",
                         ernie_image_skill_root.to_string_lossy().to_string(),
+                    );
+                }
+                let paddleocr_skill_root =
+                    resource_dir.join("bundled-skills").join("paddleocr-doc-parsing");
+                if paddleocr_skill_root.join("SKILL.md").exists() {
+                    std::env::set_var(
+                        "CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT",
+                        paddleocr_skill_root.to_string_lossy().to_string(),
                     );
                 }
             }

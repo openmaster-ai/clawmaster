@@ -101,6 +101,21 @@ export interface OpenClawModelProvider {
   models?: Array<string | OpenClawModelRef>
 }
 
+export interface OpenClawOcrProvider {
+  endpoint?: string
+  accessToken?: string
+  defaultFileType?: 0 | 1
+  useDocOrientationClassify?: boolean
+  useDocUnwarping?: boolean
+  useLayoutDetection?: boolean
+  useChartRecognition?: boolean
+  restructurePages?: boolean
+  mergeTables?: boolean
+  relevelTitles?: boolean
+  prettifyMarkdown?: boolean
+  visualize?: boolean
+}
+
 export interface OpenClawBinding {
   match?: { channel?: string }
   agentId: string
@@ -147,6 +162,20 @@ export interface OpenClawConfig {
   }
   channels?: Record<string, OpenClawChannelEntry>
   models?: { providers?: Record<string, OpenClawModelProvider> }
+  ocr?: {
+    providers?: Record<string, OpenClawOcrProvider>
+    defaults?: {
+      provider?: string
+    }
+  }
+  skills?: {
+    entries?: Record<
+      string,
+      {
+        enabled?: boolean
+      }
+    >
+  }
   bindings?: OpenClawBinding[]
   /** OpenClaw plugins.entries + metadata (from openclaw.json) */
   plugins?: {
@@ -171,6 +200,63 @@ export interface OpenClawConfig {
       }
     >
   }
+}
+
+export interface PaddleOcrSampleAsset {
+  id: string
+  name: string
+  description: string
+  type: 'image' | 'pdf'
+  url: string
+  previewUrl?: string
+}
+
+export interface PaddleOcrRequestOptions {
+  fileType?: 0 | 1
+  useDocOrientationClassify?: boolean
+  useDocUnwarping?: boolean
+  useLayoutDetection?: boolean
+  useChartRecognition?: boolean
+  restructurePages?: boolean
+  mergeTables?: boolean
+  relevelTitles?: boolean
+  prettifyMarkdown?: boolean
+  visualize?: boolean
+}
+
+export interface PaddleOcrParseRequest extends PaddleOcrRequestOptions {
+  endpoint: string
+  accessToken: string
+  file: string
+}
+
+export interface PaddleOcrTestRequest extends PaddleOcrRequestOptions {
+  endpoint: string
+  accessToken: string
+  file?: string
+}
+
+export interface PaddleOcrMarkdownPayload {
+  text: string
+  images: Record<string, string>
+}
+
+export interface PaddleOcrPageResult {
+  prunedResult?: unknown
+  markdown: PaddleOcrMarkdownPayload
+  outputImages?: Record<string, string> | null
+  inputImage?: string | null
+}
+
+export interface PaddleOcrParseResult {
+  layoutParsingResults: PaddleOcrPageResult[]
+  dataInfo?: Record<string, unknown>
+}
+
+export interface PaddleOcrTestResult {
+  ok: boolean
+  sampleFile: string
+  pageCount: number
 }
 
 /** `openclaw memory status --json` (backend may still set exitCode !== 0) */

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import express from 'express'
 import test from 'node:test'
 
 import { createApp, resolveFrontendDistDir } from './index.js'
@@ -78,6 +79,64 @@ test('createApp serves the packaged frontend index for non-api routes', async ()
         })
       }
     }
+  })
+})
+
+
+
+
+
+test('createApp keeps the default JSON parser limit for non-OCR routes', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-frontend-json-limit-'))
+  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><body>ClawMaster Service</body></html>', 'utf8')
+
+  await withFrontendDist(dir, async () => {
+    const app = createApp()
+    app.post('/api/test/default-json-limit', express.json(), (req, res) => {
+      res.status(200).json({ ok: true, size: JSON.stringify(req.body).length })
+    })
+
+    const server = app.listen(0, '127.0.0.1')
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('listening', resolve)
+        server.once('error', reject)
+      })
+
+      const address = server.address()
+      assert.ok(address && typeof address === 'object')
+
+      const payload = { file: 'a'.repeat(2 * 1024 * 1024) }
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/test/default-json-limit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      assert.equal(response.status, 413)
+    } finally {
+      if (server.listening) {
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error) reject(error)
+            else resolve()
+          })
+        })
+      }
+    }
+  })
+})
+
+test('createApp wires the OCR JSON parser before OCR routes', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-frontend-ocr-limit-'))
+  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><body>ClawMaster Service</body></html>', 'utf8')
+
+  await withFrontendDist(dir, async () => {
+    const app = createApp()
+    const stack = (app as unknown as { _router?: { stack?: Array<{ route?: { path?: string }; name?: string; handle?: unknown }> } })._router?.stack ?? []
+    const ocrJsonLayer = stack.find((layer) => layer.name === 'jsonParser')
+    assert.ok(ocrJsonLayer)
   })
 })
 

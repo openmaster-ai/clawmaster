@@ -8,6 +8,7 @@
   "files": [
     "bin/clawmaster.mjs",
     "bundled-skills/ernie-image/",
+    "bundled-skills/paddleocr-doc-parsing/",
     "plugins/memory-clawmaster-powermem/",
     "plugins/openclaw-ernie-image/",
     "packages/backend/dist/",

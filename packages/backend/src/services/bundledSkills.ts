@@ -7,6 +7,10 @@ const BUNDLED_SKILLS = {
     dirName: 'ernie-image',
     envKey: 'CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT',
   },
+  'paddleocr-doc-parsing': {
+    dirName: 'paddleocr-doc-parsing',
+    envKey: 'CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT',
+  },
 } as const
 
 export type BundledSkillSlug = keyof typeof BUNDLED_SKILLS

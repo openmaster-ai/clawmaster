@@ -4,6 +4,7 @@ import { Check, ChevronsUpDown, Search, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { platform } from '@/adapters'
 import { PasswordField } from '@/shared/components/PasswordField'
+import { WorkflowModelSuggestion } from '@/shared/components/WorkflowModelSuggestion'
 import { getProviderModelCatalogResult, setConfigResult } from '@/shared/adapters/openclaw'
 import { supportsProviderCatalog, type ProviderCatalogModel } from '@/shared/providerCatalog'
 import { getSetupAdapter } from '@/modules/setup/adapters'
@@ -18,6 +19,7 @@ import {
   getProviderLabel,
   getProviderRuntimeId,
 } from '@/modules/setup/types'
+import { getToolModelRecommendations } from '@/modules/setup/toolModelRecommendations'
 import type { OpenClawConfig, ModelInfo, OpenClawModelProvider, OpenClawModelRef } from '@/lib/types'
 
 const providerBadgeToneClass = 'border-amber-400/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
@@ -216,10 +218,17 @@ function ProviderBadge({ providerId }: { providerId: string }) {
   )
 }
 
-function ProviderGuidancePanel({ providerId }: { providerId: string }) {
+function ProviderGuidancePanel({
+  providerId,
+  toolModelExamples,
+}: {
+  providerId: string
+  toolModelExamples: string[]
+}) {
   const { t } = useTranslation()
   const provider = PROVIDERS[providerId]
-  if (!provider?.guideKey && !provider?.recommendedSkill) {
+  const shouldShowModelSuggestion = getProviderKind(providerId) === 'text-to-image'
+  if (!provider?.guideKey && !provider?.recommendedSkill && !shouldShowModelSuggestion) {
     return null
   }
 
@@ -238,6 +247,17 @@ function ProviderGuidancePanel({ providerId }: { providerId: string }) {
           <Link to="/skills" className="button-secondary text-center">
             {t('models.openSkills')}
           </Link>
+        </div>
+      )}
+      {shouldShowModelSuggestion && (
+        <div className={provider.recommendedSkill ? 'mt-4' : 'mt-0'}>
+          <WorkflowModelSuggestion
+            title={t('workflowModel.title')}
+            body={t('workflowModel.imageBody')}
+            examples={toolModelExamples}
+            examplesLabel={t('workflowModel.examples')}
+            footnote={t('workflowModel.examplesOnly')}
+          />
         </div>
       )}
     </div>
@@ -269,6 +289,9 @@ export default function Models() {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  const toolModelExamples = getToolModelRecommendations(config, i18n.language)
+    .map((example) => `${example.providerLabel} / ${example.modelLabel}`)
 
   if (loading) {
     return <div className="state-panel text-muted-foreground">{t('common.loading')}</div>
@@ -332,6 +355,7 @@ export default function Models() {
                   provider={provider}
                   isDefault={defaultModel.startsWith(runtimeProviderId + '/')}
                   defaultModel={defaultModel}
+                  toolModelExamples={toolModelExamples}
                   onRefresh={loadData}
                 />
               )
@@ -358,6 +382,7 @@ export default function Models() {
                   provider={provider}
                   isDefault={defaultImageModel.startsWith(runtimeProviderId + '/')}
                   defaultModel={defaultImageModel}
+                  toolModelExamples={toolModelExamples}
                   onRefresh={loadData}
                 />
               )
@@ -460,6 +485,7 @@ export default function Models() {
       {showAdd && (
         <AddProviderPanel
           initialProvider={preferredProvider}
+          toolModelExamples={toolModelExamples}
           onClose={() => setShowAdd(false)}
           onAdded={() => {
             setShowAdd(false)
@@ -479,6 +505,7 @@ function ProviderCard({
   provider,
   isDefault,
   defaultModel,
+  toolModelExamples,
   onRefresh,
 }: {
   providerId: string
@@ -486,6 +513,7 @@ function ProviderCard({
   provider: ConfiguredProvider
   isDefault: boolean
   defaultModel: string
+  toolModelExamples: string[]
   onRefresh: () => void
 }) {
   const { t, i18n } = useTranslation()
@@ -682,7 +710,7 @@ function ProviderCard({
         </div>
       </div>
 
-      <ProviderGuidancePanel providerId={providerId} />
+      <ProviderGuidancePanel providerId={providerId} toolModelExamples={toolModelExamples} />
 
       {canLoadProviderCatalog && (
         <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
@@ -967,10 +995,12 @@ function ProviderSelectButton({
 
 function AddProviderPanel({
   initialProvider,
+  toolModelExamples,
   onClose,
   onAdded,
 }: {
   initialProvider: string
+  toolModelExamples: string[]
   onClose: () => void
   onAdded: () => void
 }) {
@@ -1095,7 +1125,7 @@ function AddProviderPanel({
           </p>
         </div>
       )}
-      <ProviderGuidancePanel providerId={provider} />
+      <ProviderGuidancePanel providerId={provider} toolModelExamples={toolModelExamples} />
       {cfg?.needsBaseUrl && (
         <input
           id="models-provider-base-url"

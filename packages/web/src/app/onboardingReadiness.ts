@@ -78,7 +78,7 @@ function hasExistingConfig(systemInfo: SystemInfo | null | undefined): boolean {
 
 function hasNonProviderConfig(config: OpenClawConfig): boolean {
   return Object.entries(config).some(([key, value]) => {
-    if (key === 'models') return false
+    if (key === 'models' || key === 'ocr') return false
     if (Array.isArray(value)) return value.length > 0
     if (isRecord(value)) return Object.keys(value).length > 0
     return value !== null && value !== undefined && value !== ''

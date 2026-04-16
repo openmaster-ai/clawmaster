@@ -134,3 +134,23 @@ cases:
       - ClawMaster 中的 MCP 服务状态变更会写回当前 profile
       - OpenClaw WebUI 能识别新启用的 MCP 服务
       - 若禁用该服务，OpenClaw WebUI 中对应入口会消失或不可用
+
+  - id: flow-07
+    name: OCR setup、技能启用与文档解析全流程生效
+    preconditions:
+      - PaddleOCR OCR 页面可访问
+      - 当前 profile 允许保存 OCR provider 配置与技能状态
+      - 已准备可用于解析的样例文档或本地 PDF/图片
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/ocr"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: flow-ocr-start
+    assertions:
+      - OCR 页面会显示 PaddleOCR 提供商、技能引导与稳定触发技能的提示词
+      - 填写 endpoint 与 token 后可成功保存，并自动安装启用 bundled PaddleOCR skill
+      - 选择 sample 或 upload 文档后可触发解析，结果区会显示页数、合并后的 markdown 与结果元数据
+      - 打开 Skills 页面时，PaddleOCR Doc Parsing skill 已显示为已安装/已启用状态
+      - 将 OCR 页面中的提示词复制到 OpenClaw WebUI 新会话后，智能体会按提示读取 skill 并通过 exec 实际执行解析，而不是只讨论 OCR 配置

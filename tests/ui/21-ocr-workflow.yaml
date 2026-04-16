@@ -1,0 +1,100 @@
+suite: ocr-workflow
+name: OCR 配置与解析主流程
+description: |
+  验证 PaddleOCR 在 ClawMaster 中的关键主路径：
+  1. 进入 OCR 页面并确认技能引导可见
+  2. 保存 OCR provider 配置并自动启用 bundled skill
+  3. 使用 sample 或 upload 触发解析
+  4. 在结果区确认 markdown / 页数 / 元数据渲染
+  5. 在 Skills 页面确认 PaddleOCR Doc Parsing skill 已安装并启用
+  6. 将 OCR 提示词带到 OpenClaw WebUI 新会话时，代理会按要求 read skill + exec 脚本
+
+preconditions:
+  - npm run dev:web 已启动
+  - 若验证真实链路，当前 profile 已存在可写 openclaw.json
+  - 若验证真实解析，已准备可用的 PaddleOCR endpoint 与 token
+  - 若验证 upload 流程，已准备本地 PDF 或图片样例
+
+viewport: { width: 1440, height: 960 }
+
+cases:
+  - id: ocr-01
+    name: OCR 页面渲染技能引导与执行提示词
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/ocr?demo=skip"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: ocr-01-page-render
+    assertions:
+      - 页面显示“OCR 与文档解析”主标题
+      - 页面显示“内置技能引导”与“专用 PaddleOCR 解析技能”说明
+      - 页面显示“更稳妥的执行提示词”文本区域
+      - 页面显示“保存并启用 OCR”“测试连接”“开始解析”操作入口
+
+  - id: ocr-02
+    name: 保存 OCR 配置后自动启用 bundled skill
+    preconditions:
+      - 当前环境允许写入 profile 配置与 skill 状态
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/ocr"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: ocr-02-before-save
+    assertions:
+      - 填写 endpoint 与 token 后可以点击保存
+      - 保存成功后页面会提示 OCR 已就绪或技能已自动启用
+      - 进入技能页后，PaddleOCR Doc Parsing skill 显示为已安装或已启用
+
+  - id: ocr-03
+    name: 使用公开 sample 触发 OCR 解析并查看结果
+    preconditions:
+      - 已配置可用的 PaddleOCR endpoint 与 token
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/ocr"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: ocr-03-sample-parse
+    assertions:
+      - 选择 sample 后可直接触发解析
+      - 结果区显示“解析结果”区块
+      - 结果区能看到页数、Markdown、图片或元数据中的至少一种结果证明
+
+  - id: ocr-04
+    name: 上传本地 PDF 或图片后触发 OCR 解析
+    preconditions:
+      - 已准备本地 PDF 或图片样例
+      - 已配置可用的 PaddleOCR endpoint 与 token
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/ocr"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: ocr-04-upload-parse
+    assertions:
+      - 切换到上传模式后可看到上传说明与文件摘要区域
+      - 选择本地文件后页面会显示文件名、体积与检测到的类型
+      - 解析成功后结果区会展示输出 Markdown 或分页面结果
+
+  - id: ocr-05
+    name: OCR 提示词在 OpenClaw WebUI 中触发真实技能执行
+    preconditions:
+      - OpenClaw WebUI 可访问，且与 ClawMaster 使用同一 profile
+      - PaddleOCR Doc Parsing skill 已在当前 profile 启用
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/ocr"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: ocr-05-openclaw-handoff
+    assertions:
+      - 从 OCR 页面复制的提示词能明确要求代理使用 read 与 exec 工具
+      - 在 OpenClaw WebUI 新会话中发送该提示词后，代理不会只停留在口头建议
+      - 会话输出中应能看到执行结果证据，例如识别出的 Markdown、实际文件解析结果或工具调用痕迹

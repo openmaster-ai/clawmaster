@@ -26,7 +26,8 @@
 | `18-dashboard-module.yaml` | 11 | 概览页面（系统信息/网关状态/通道/速览卡片/快捷操作/任务清单/页脚一致性） |
 | `19-cross-module-workflows.yaml` | 6 | 跨模块主流程（onboarding→模型→网关→首聊 / 通道→上下文日志 / 技能插件MCP→OpenClaw WebUI 生效） |
 | `20-command-palette.yaml` | 7 | 共享命令面板（快捷键打开/页面跳转/区块跳转/主题操作/空状态/移动端入口） |
-| **合计** | **202** | |
+| `21-ocr-workflow.yaml` | 5 | OCR 主流程（页面引导/保存配置/样例解析/上传解析/OpenClaw WebUI 技能执行） |
+| **合计** | **207** | |
 
 ## 用例格式
 
