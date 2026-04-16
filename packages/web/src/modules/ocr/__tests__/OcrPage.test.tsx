@@ -157,7 +157,15 @@ describe('OcrPage', () => {
   it('saves PaddleOCR config and installs the bundled skill', async () => {
     renderPage()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Save & Enable OCR' }))
+    expect(await screen.findByDisplayValue('https://example.com/layout-parsing')).toBeInTheDocument()
+    expect(await screen.findByDisplayValue('saved-token')).toBeInTheDocument()
+
+    const saveButton = await screen.findByRole('button', { name: 'Save & Enable OCR' })
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled()
+    })
+
+    fireEvent.click(saveButton)
 
     await waitFor(() => {
       expect(mockInstallSkillResult).toHaveBeenCalledWith('paddleocr-doc-parsing')
