@@ -153,4 +153,32 @@ describe('isOnboardingEnvironmentReady', () => {
       ),
     ).toBe(false)
   })
+
+  it('returns false when only OCR provider settings are configured', () => {
+    expect(
+      isOnboardingEnvironmentReady(
+        {
+          nodejs: { installed: true, version: '22.0.0' },
+          npm: { installed: true, version: '11.0.0' },
+          openclaw: {
+            installed: true,
+            version: '2026.4.7',
+            configPath: '/Users/test/.openclaw/openclaw.json',
+            existingConfigPaths: ['/Users/test/.openclaw/openclaw.json'],
+          },
+        },
+        {
+          ocr: {
+            defaults: { provider: 'paddleocr' },
+            providers: {
+              paddleocr: {
+                endpoint: 'https://example.com/layout-parsing',
+                accessToken: 'token',
+              },
+            },
+          },
+        },
+      ),
+    ).toBe(false)
+  })
 })

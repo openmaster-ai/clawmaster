@@ -43,17 +43,18 @@ describe('Skills catalog', () => {
     expect(FEATURED_SKILLS.find((skill) => skill.skillKey === 'find-skills')?.slug).toBe('find-skills-skill')
   })
 
-  it('includes both the generic image workflow and the ERNIE-specific bundled guide', () => {
+  it('includes both OCR and image bundled guides in the curated catalog', () => {
+    expect(SKILL_CATALOG.find((skill) => skill.slug === 'paddleocr-doc-parsing')).toMatchObject({
+      slug: 'paddleocr-doc-parsing',
+      name: 'PaddleOCR Doc Parsing',
+      category: 'ocr',
+      installSource: 'bundled',
+    })
     expect(SKILL_CATALOG.find((skill) => skill.slug === 'ernie-image')).toMatchObject({
       slug: 'ernie-image',
       name: 'ERNIE-Image Guide',
       category: 'productivity',
       installSource: 'bundled',
-    })
-    expect(SKILL_CATALOG.find((skill) => skill.slug === 'image-generate')).toMatchObject({
-      slug: 'image-generate',
-      name: 'Image Generate',
-      category: 'productivity',
     })
   })
 

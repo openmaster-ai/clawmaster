@@ -69,13 +69,10 @@ export const CAPABILITIES: CapabilityDef[] = [
   {
     id: 'ocr',
     name: 'capability.ocr',
-    detectCmd: 'clawhub',
-    detectArgs: ['list', '--json'],
+    detectCmd: 'openclaw',
+    detectArgs: ['skills', 'list', '--json'],
     required: false,
-    installSteps: [
-      { cmd: 'clawhub', args: ['install', 'paddleocr-doc-parsing'] },
-      { cmd: 'clawhub', args: ['install', 'paddleocr-text-recognition'] },
-    ],
+    installSteps: [],
   },
   {
     id: 'agent',

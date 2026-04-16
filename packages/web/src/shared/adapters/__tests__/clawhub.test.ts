@@ -68,6 +68,19 @@ describe('clawhub adapter (web mode)', () => {
     expect(tauriInvoke).toHaveBeenCalledWith('install_bundled_skill', { skillId: 'ernie-image' })
   })
 
+  it('installSkillResult routes bundled PaddleOCR skills through the dedicated desktop command', async () => {
+    const { getIsTauri } = await import('../platform')
+    const { tauriInvoke } = await import('../invoke')
+    vi.mocked(getIsTauri).mockReturnValue(true)
+    vi.mocked(tauriInvoke).mockResolvedValue(undefined)
+
+    const { installSkillResult } = await import('../clawhub')
+    const result = await installSkillResult('paddleocr-doc-parsing')
+
+    expect(result.success).toBe(true)
+    expect(tauriInvoke).toHaveBeenCalledWith('install_bundled_skill', { skillId: 'paddleocr-doc-parsing' })
+  })
+
   it('installSkillResult fails on HTTP 404', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue({
       ok: false, status: 404, text: vi.fn().mockResolvedValue('Not found'),

@@ -51,6 +51,7 @@ describe('moduleRegistry', () => {
     expect(ids).toContain('memory')
     expect(ids).toContain('sessions')
     expect(ids).toContain('models')
+    expect(ids).toContain('ocr')
     expect(ids).toContain('skills')
     expect(ids).toContain('config')
     expect(ids).toContain('settings')

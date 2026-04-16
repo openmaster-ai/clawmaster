@@ -26,6 +26,11 @@ const bundledSkills = [
     sourceRoot: path.join(repoRoot, 'bundled-skills', 'ernie-image'),
     bundledRoot: path.join(resourcesRoot, 'bundled-skills', 'ernie-image'),
   },
+  {
+    id: 'paddleocr-doc-parsing',
+    sourceRoot: path.join(repoRoot, 'bundled-skills', 'paddleocr-doc-parsing'),
+    bundledRoot: path.join(resourcesRoot, 'bundled-skills', 'paddleocr-doc-parsing'),
+  },
 ]
 const builtinModuleNames = new Set([
   ...builtinModules,

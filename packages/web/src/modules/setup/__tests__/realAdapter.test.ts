@@ -16,6 +16,7 @@ vi.mock('@/shared/adapters/openclaw', () => ({
 }))
 
 vi.mock('@/shared/adapters/clawhub', () => ({
+  getSkillsResult: vi.fn(),
   installSkillResult: vi.fn(),
 }))
 
@@ -26,7 +27,7 @@ vi.mock('@/shared/adapters/system', () => ({
 
 import { execCommand } from '@/shared/adapters/platform'
 import { getConfigResult, resolvePluginRootResult, setConfigResult } from '@/shared/adapters/openclaw'
-import { installSkillResult } from '@/shared/adapters/clawhub'
+import { getSkillsResult, installSkillResult } from '@/shared/adapters/clawhub'
 import { detectSystemResult, probeHttpStatusResult } from '@/shared/adapters/system'
 import { realSetupAdapter } from '../adapters'
 import type { InstallProgress } from '../types'
@@ -37,6 +38,7 @@ describe('realSetupAdapter', () => {
     vi.mocked(getConfigResult).mockReset()
     vi.mocked(setConfigResult).mockReset()
     vi.mocked(resolvePluginRootResult).mockReset()
+    vi.mocked(getSkillsResult).mockReset()
     vi.mocked(installSkillResult).mockReset()
     vi.mocked(detectSystemResult).mockReset()
     vi.mocked(probeHttpStatusResult).mockReset()
@@ -60,6 +62,11 @@ describe('realSetupAdapter', () => {
       data: null,
       error: null,
     } as any)
+    vi.mocked(getSkillsResult).mockResolvedValue({
+      success: true,
+      data: [],
+      error: null,
+    } as any)
     vi.mocked(installSkillResult).mockResolvedValue({
       success: true,
       data: undefined,
@@ -81,6 +88,53 @@ describe('realSetupAdapter', () => {
       id: 'engine',
       status: 'error',
       error: 'install failed',
+    })
+  })
+
+  it('detects OCR capability from the bundled PaddleOCR skill', async () => {
+    vi.mocked(getSkillsResult).mockResolvedValue({
+      success: true,
+      data: [
+        {
+          slug: 'paddleocr-doc-parsing',
+          skillKey: 'paddleocr-doc-parsing',
+          name: 'PaddleOCR Doc Parsing',
+          version: '1.0.0',
+          installed: true,
+        },
+      ],
+      error: null,
+    } as any)
+
+    const result = await realSetupAdapter.detectCapabilities(() => {})
+
+    expect(result.find((item) => item.id === 'ocr')).toMatchObject({
+      id: 'ocr',
+      status: 'installed',
+      version: '1.0.0',
+    })
+  })
+
+  it('installs and enables the bundled PaddleOCR skill for OCR capability setup', async () => {
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    const progress: InstallProgress[] = []
+    await expect(
+      realSetupAdapter.installCapabilities(['ocr'], (item) => {
+        progress.push({ ...item })
+      }),
+    ).resolves.toBeUndefined()
+
+    expect(installSkillResult).toHaveBeenCalledWith('paddleocr-doc-parsing')
+    expect(setConfigResult).toHaveBeenCalledWith('skills.entries.paddleocr-doc-parsing.enabled', true)
+    expect(progress.at(-1)).toMatchObject({
+      id: 'ocr',
+      status: 'done',
+      progress: 100,
     })
   })
 

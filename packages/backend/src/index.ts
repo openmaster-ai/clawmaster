@@ -8,12 +8,16 @@ import { requireServiceAuth } from './serviceAuth.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ERNIE_IMAGE_PLUGIN_ROOT = path.resolve(__dirname, '../../../plugins/openclaw-ernie-image')
 const ERNIE_IMAGE_SKILL_ROOT = path.resolve(__dirname, '../../../bundled-skills/ernie-image')
+const PADDLEOCR_SKILL_ROOT = path.resolve(__dirname, '../../../bundled-skills/paddleocr-doc-parsing')
 
 if (fs.existsSync(path.join(ERNIE_IMAGE_PLUGIN_ROOT, 'openclaw.plugin.json'))) {
   process.env.CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT = ERNIE_IMAGE_PLUGIN_ROOT
 }
 if (fs.existsSync(path.join(ERNIE_IMAGE_SKILL_ROOT, 'SKILL.md'))) {
   process.env.CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT = ERNIE_IMAGE_SKILL_ROOT
+}
+if (fs.existsSync(path.join(PADDLEOCR_SKILL_ROOT, 'SKILL.md'))) {
+  process.env.CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT = PADDLEOCR_SKILL_ROOT
 }
 
 export function resolveFrontendDistDir(): string | null {
@@ -35,7 +39,7 @@ export function resolveFrontendDistDir(): string | null {
 
 export function createApp() {
   const app = express()
-  app.use(express.json())
+  app.use(express.json({ limit: '25mb' }))
   app.use('/api', requireServiceAuth)
 
   registerDomainRoutes(app)

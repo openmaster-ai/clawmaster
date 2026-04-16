@@ -171,6 +171,27 @@ describe('ModelsPage', () => {
   })
 
   it('lists ERNIE-Image in the expanded provider catalog and surfaces text-to-image guidance', async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      agents: {
+        defaults: {
+          model: { primary: 'siliconflow/Pro/moonshotai/Kimi-K2.5' },
+          imageGenerationModel: { primary: '' },
+        },
+      },
+      models: {
+        providers: {
+          siliconflow: {
+            apiKey: 'sk-silicon',
+            baseUrl: 'https://api.siliconflow.cn/v1',
+            models: [
+              { id: 'Pro/moonshotai/Kimi-K2.5', name: 'Kimi K2.5' },
+              { id: 'Pro/zai-org/GLM-5.1', name: 'GLM 5.1' },
+            ],
+          },
+        },
+      },
+    })
+
     renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
@@ -189,6 +210,10 @@ describe('ModelsPage', () => {
     expect(screen.getByText('Recommended skill')).toBeInTheDocument()
     expect(screen.getByText('ERNIE-Image Guide')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open Skills' })).toHaveAttribute('href', '/skills')
+    expect(screen.getByText('Better results with strong tool-following text models')).toBeInTheDocument()
+    expect(screen.getByText('Examples from your available text models')).toBeInTheDocument()
+    expect(screen.getByText('SiliconFlow / Kimi K2.5')).toBeInTheDocument()
+    expect(screen.getByText('SiliconFlow / GLM 5.1')).toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('Enter ERNIE-Image Access Token'), {
       target: { value: 'bce-image-token' },

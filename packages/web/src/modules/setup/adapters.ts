@@ -9,7 +9,7 @@
 import { execCommand } from '@/shared/adapters/platform'
 import { startGatewayResult, getGatewayStatusResult } from '@/shared/adapters/gateway'
 import { getConfigResult, resolvePluginRootResult, setConfigResult } from '@/shared/adapters/openclaw'
-import { installSkillResult } from '@/shared/adapters/clawhub'
+import { getSkillsResult, installSkillResult } from '@/shared/adapters/clawhub'
 import { detectSystemResult, probeHttpStatusResult } from '@/shared/adapters/system'
 import {
   CAPABILITIES,
@@ -24,6 +24,7 @@ const ERNIE_IMAGE_PLUGIN_ID = 'openclaw-ernie-image'
 const ERNIE_IMAGE_PLUGIN_DIRNAME = 'openclaw-ernie-image'
 const ERNIE_IMAGE_PLUGIN_VERSION = '0.1.0'
 const ERNIE_IMAGE_SKILL_ID = 'ernie-image'
+const PADDLEOCR_SKILL_ID = 'paddleocr-doc-parsing'
 
 function uniquePaths(paths: string[]): string[] {
   return paths.filter((value, index, array) => value.trim() && array.indexOf(value) === index)
@@ -146,6 +147,18 @@ async function ensureErnieImageSkillInstalledAndEnabled(): Promise<void> {
   const enableResult = await setConfigResult(`skills.entries.${ERNIE_IMAGE_SKILL_ID}.enabled`, true)
   if (!enableResult.success) {
     throw new Error(enableResult.error ?? 'Failed to enable ERNIE-Image skill')
+  }
+}
+
+async function ensurePaddleOcrSkillInstalledAndEnabled(): Promise<void> {
+  const installResult = await installSkillResult(PADDLEOCR_SKILL_ID)
+  if (!installResult.success) {
+    throw new Error(installResult.error ?? 'Failed to install PaddleOCR parsing skill')
+  }
+
+  const enableResult = await setConfigResult(`skills.entries.${PADDLEOCR_SKILL_ID}.enabled`, true)
+  if (!enableResult.success) {
+    throw new Error(enableResult.error ?? 'Failed to enable PaddleOCR parsing skill')
   }
 }
 
@@ -419,6 +432,40 @@ export const realSetupAdapter: SetupAdapter = {
       CAPABILITIES.map(async (cap) => {
         onUpdate({ id: cap.id, name: cap.name, status: 'checking' })
 
+        if (cap.id === 'ocr') {
+          try {
+            const skillsResult = await getSkillsResult()
+            const installedSkill = skillsResult.success
+              ? skillsResult.data?.find((skill) =>
+                [skill.slug, skill.skillKey, skill.name]
+                  .some((value) => value?.trim().toLowerCase() === PADDLEOCR_SKILL_ID),
+              )
+              : undefined
+            const status: CapabilityStatus = installedSkill
+              ? {
+                id: cap.id,
+                name: cap.name,
+                status: 'installed',
+                version: installedSkill.version,
+              }
+              : {
+                id: cap.id,
+                name: cap.name,
+                status: 'not_installed',
+              }
+            onUpdate(status)
+            return status
+          } catch {
+            const status: CapabilityStatus = {
+              id: cap.id,
+              name: cap.name,
+              status: 'not_installed',
+            }
+            onUpdate(status)
+            return status
+          }
+        }
+
         if (
           (cap.id === 'engine' || cap.id === 'memory' || cap.id === 'agent') &&
           detectedOpenclawInstalled
@@ -468,6 +515,18 @@ export const realSetupAdapter: SetupAdapter = {
       onProgress({ id, status: 'installing', progress: 0 })
 
       try {
+        if (id === 'ocr') {
+          onProgress({
+            id,
+            status: 'installing',
+            progress: 50,
+            log: `skills install ${PADDLEOCR_SKILL_ID}`,
+          })
+          await ensurePaddleOcrSkillInstalledAndEnabled()
+          onProgress({ id, status: 'done', progress: 100 })
+          continue
+        }
+
         const totalSteps = cap.installSteps.length
         for (let i = 0; i < totalSteps; i++) {
           const step = cap.installSteps[i]
