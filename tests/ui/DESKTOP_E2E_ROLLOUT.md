@@ -1,6 +1,6 @@
 # Desktop E2E Rollout
 
-Tracking issue: [#29](https://github.com/clawmaster-ai/clawmaster/issues/29)
+Tracking issue: [#29](https://github.com/openmaster-ai/clawmaster/issues/29)
 
 ## Goal
 

@@ -73,7 +73,7 @@ cases:
 
 ## Native Desktop E2E Track
 
-桌面原生 E2E 单独跟踪于 [#29](https://github.com/clawmaster-ai/clawmaster/issues/29)，规划文档见 [DESKTOP_E2E_ROLLOUT.md](/Users/haili/workspaces/clawmaster/tests/ui/DESKTOP_E2E_ROLLOUT.md)。
+桌面原生 E2E 单独跟踪于 [#29](https://github.com/openmaster-ai/clawmaster/issues/29)，规划文档见 [DESKTOP_E2E_ROLLOUT.md](/Users/haili/workspaces/clawmaster/tests/ui/DESKTOP_E2E_ROLLOUT.md)。
 
 当前建议：
 - 日常 UI 改动继续优先使用 `dev-browser` + YAML 描述流做快速验证

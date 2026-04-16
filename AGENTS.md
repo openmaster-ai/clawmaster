@@ -12,16 +12,16 @@ Read this file before any other. Full contributor guide: [CONTRIBUTING.md](./CON
 > and give the PR a clear issue to close.
 
 **1. Search existing issues and PRs**
-→ https://github.com/clawmaster-ai/clawmaster/issues
+→ https://github.com/openmaster-ai/clawmaster/issues
 
 **2. If no issue exists, create one using the right template:**
 
 | Situation | Template link |
 |---|---|
-| Something is broken | [Bug Report](https://github.com/clawmaster-ai/clawmaster/issues/new?template=bug_report.yml) |
-| New capability or improvement | [Feature Request](https://github.com/clawmaster-ai/clawmaster/issues/new?template=feature_request.yml) |
-| Picking up a roadmap item | [Contributor Sign-Up](https://github.com/clawmaster-ai/clawmaster/issues/new?template=contributor-signup.yml) |
-| Question about the codebase | [Discussions](https://github.com/clawmaster-ai/clawmaster/discussions) (not an issue) |
+| Something is broken | [Bug Report](https://github.com/openmaster-ai/clawmaster/issues/new?template=bug_report.yml) |
+| New capability or improvement | [Feature Request](https://github.com/openmaster-ai/clawmaster/issues/new?template=feature_request.yml) |
+| Picking up a roadmap item | [Contributor Sign-Up](https://github.com/openmaster-ai/clawmaster/issues/new?template=contributor-signup.yml) |
+| Question about the codebase | [Discussions](https://github.com/openmaster-ai/clawmaster/discussions) (not an issue) |
 
 **3. Comment on the issue** — state what you plan to do and how.
 

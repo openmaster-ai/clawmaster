@@ -27,9 +27,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/clawmaster-ai/clawmaster/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/clawmaster-ai/clawmaster/build.yml?branch=main" alt="Build" /></a>
+  <a href="https://github.com/openmaster-ai/clawmaster/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/openmaster-ai/clawmaster/build.yml?branch=main" alt="Build" /></a>
   <img src="https://img.shields.io/badge/version-0.3.0-blue" alt="Version" />
-  <a href="https://github.com/clawmaster-ai/clawmaster/stargazers"><img src="https://img.shields.io/github/stars/clawmaster-ai/clawmaster?style=social" alt="Stars" /></a>
+  <a href="https://github.com/openmaster-ai/clawmaster/stargazers"><img src="https://img.shields.io/github/stars/openmaster-ai/clawmaster?style=social" alt="Stars" /></a>
   <img src="https://img.shields.io/badge/tests-74_passing-brightgreen" alt="Tests" />
 </p>
 
@@ -41,9 +41,9 @@
 -->
 
 <p align="center">
-  <a href="https://github.com/clawmaster-ai/clawmaster/releases"><strong>📦 Releases</strong></a> &nbsp;·&nbsp;
-  <a href="https://github.com/clawmaster-ai/clawmaster/discussions"><strong>💬 Discussions</strong></a> &nbsp;·&nbsp;
-  <a href="https://github.com/clawmaster-ai/clawmaster/issues"><strong>🐛 Issues</strong></a> &nbsp;·&nbsp;
+  <a href="https://github.com/openmaster-ai/clawmaster/releases"><strong>📦 Releases</strong></a> &nbsp;·&nbsp;
+  <a href="https://github.com/openmaster-ai/clawmaster/discussions"><strong>💬 Discussions</strong></a> &nbsp;·&nbsp;
+  <a href="https://github.com/openmaster-ai/clawmaster/issues"><strong>🐛 Issues</strong></a> &nbsp;·&nbsp;
   <a href="https://discord.gg/openclaw"><strong>Discord</strong></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
   <a href="./README.md">English</a> &nbsp;·&nbsp; <a href="./README_CN.md">中文</a> &nbsp;·&nbsp; 日本語
@@ -86,7 +86,7 @@
 <details>
 <summary>方法 1: デスクトップインストーラーをダウンロード</summary>
 
-[GitHub Releases](https://github.com/clawmaster-ai/clawmaster/releases) から各プラットフォーム向けインストーラーを取得してください。
+[GitHub Releases](https://github.com/openmaster-ai/clawmaster/releases) から各プラットフォーム向けインストーラーを取得してください。
 
 | プラットフォーム | 形式 |
 |---|---|
@@ -104,7 +104,7 @@
 <summary>方法 2: ソースから実行</summary>
 
 ```bash
-git clone https://github.com/clawmaster-ai/clawmaster.git
+git clone https://github.com/openmaster-ai/clawmaster.git
 cd clawmaster
 npm install
 npm run dev:web     # Web コンソール + バックエンド
@@ -159,7 +159,7 @@ clawmaster doctor
 | 能構築 | 計画中 | 対話型エージェントビルダー（LangChain DeepAgents） |
 | 能守護 | 計画中 | キー暗号化、支出制限、RBAC |
 
-[`label:roadmap`](https://github.com/clawmaster-ai/clawmaster/issues?q=label%3Aroadmap) でオープンな issue を確認できます。作業を始める前に issue にコメントを — ロードマップ機能を完成させたコアコントリビューターは OpenClaw チームからモデルクレジットを受け取れます。
+[`label:roadmap`](https://github.com/openmaster-ai/clawmaster/issues?q=label%3Aroadmap) でオープンな issue を確認できます。作業を始める前に issue にコメントを — ロードマップ機能を完成させたコアコントリビューターは OpenClaw チームからモデルクレジットを受け取れます。
 
 ## 📰 ニュース
 
@@ -218,11 +218,11 @@ clawmaster/
 > [!IMPORTANT]
 > PR を開く前にローカルで `npm test` を通過させてください。スクリーンショット、テストログ、生成ファイルをコミットに含めないでください。Node.js が唯一許可されているランタイムです。
 
-コミュニティ: [GitHub Discussions](https://github.com/clawmaster-ai/clawmaster/discussions) · [Discord](https://discord.gg/openclaw) · [Feishu](https://openclaw.feishu.cn/community)
+コミュニティ: [GitHub Discussions](https://github.com/openmaster-ai/clawmaster/discussions) · [Discord](https://discord.gg/openclaw) · [Feishu](https://openclaw.feishu.cn/community)
 
 ## コントリビューター
 
-[![Contributors](https://contrib.rocks/image?repo=clawmaster-ai/clawmaster)](https://github.com/clawmaster-ai/clawmaster/graphs/contributors)
+[![Contributors](https://contrib.rocks/image?repo=openmaster-ai/clawmaster)](https://github.com/openmaster-ai/clawmaster/graphs/contributors)
 
 ---
 

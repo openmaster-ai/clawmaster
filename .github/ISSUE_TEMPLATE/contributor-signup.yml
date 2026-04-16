@@ -9,7 +9,7 @@ body:
         ## Welcome to ClawMaster!
 
         Core contributors who land a roadmap feature are eligible for model credits from the OpenClaw team.
-        Please read [CONTRIBUTING.md](https://github.com/clawmaster-ai/clawmaster/blob/main/CONTRIBUTING.md) before starting — in particular the Testing Requirements and Dependency Policy sections.
+        Please read [CONTRIBUTING.md](https://github.com/openmaster-ai/clawmaster/blob/main/CONTRIBUTING.md) before starting — in particular the Testing Requirements and Dependency Policy sections.
 
   - type: checkboxes
     id: contributing-read

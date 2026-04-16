@@ -27,9 +27,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/clawmaster-ai/clawmaster/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/clawmaster-ai/clawmaster/build.yml?branch=main" alt="Build" /></a>
+  <a href="https://github.com/openmaster-ai/clawmaster/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/openmaster-ai/clawmaster/build.yml?branch=main" alt="Build" /></a>
   <img src="https://img.shields.io/badge/version-0.3.0-blue" alt="Version" />
-  <a href="https://github.com/clawmaster-ai/clawmaster/stargazers"><img src="https://img.shields.io/github/stars/clawmaster-ai/clawmaster?style=social" alt="Stars" /></a>
+  <a href="https://github.com/openmaster-ai/clawmaster/stargazers"><img src="https://img.shields.io/github/stars/openmaster-ai/clawmaster?style=social" alt="Stars" /></a>
   <img src="https://img.shields.io/badge/tests-74_passing-brightgreen" alt="Tests" />
 </p>
 
@@ -41,9 +41,9 @@
 -->
 
 <p align="center">
-  <a href="https://github.com/clawmaster-ai/clawmaster/releases"><strong>📦 Releases</strong></a> &nbsp;·&nbsp;
-  <a href="https://github.com/clawmaster-ai/clawmaster/discussions"><strong>💬 Discussions</strong></a> &nbsp;·&nbsp;
-  <a href="https://github.com/clawmaster-ai/clawmaster/issues"><strong>🐛 Issues</strong></a> &nbsp;·&nbsp;
+  <a href="https://github.com/openmaster-ai/clawmaster/releases"><strong>📦 Releases</strong></a> &nbsp;·&nbsp;
+  <a href="https://github.com/openmaster-ai/clawmaster/discussions"><strong>💬 Discussions</strong></a> &nbsp;·&nbsp;
+  <a href="https://github.com/openmaster-ai/clawmaster/issues"><strong>🐛 Issues</strong></a> &nbsp;·&nbsp;
   <a href="https://discord.gg/openclaw"><strong>Discord</strong></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
   <a href="./README.md">English</a> &nbsp;·&nbsp; 中文 &nbsp;·&nbsp; <a href="./README_JP.md">日本語</a>
@@ -86,7 +86,7 @@
 <details>
 <summary>方式一：下载桌面安装包</summary>
 
-从 [GitHub Releases](https://github.com/clawmaster-ai/clawmaster/releases) 下载对应平台安装包。
+从 [GitHub Releases](https://github.com/openmaster-ai/clawmaster/releases) 下载对应平台安装包。
 
 | 平台 | 格式 |
 |---|---|
@@ -104,7 +104,7 @@
 <summary>方式二：从源码运行</summary>
 
 ```bash
-git clone https://github.com/clawmaster-ai/clawmaster.git
+git clone https://github.com/openmaster-ai/clawmaster.git
 cd clawmaster
 npm install
 npm run dev:web     # Web 控制台 + 后端
@@ -159,7 +159,7 @@ clawmaster doctor
 | 能构建 | 规划中 | 对话式智能体构建器（LangChain DeepAgents） |
 | 能守护 | 规划中 | 密钥加密、花费熔断、权限管控（RBAC） |
 
-浏览 [`label:roadmap`](https://github.com/clawmaster-ai/clawmaster/issues?q=label%3Aroadmap) 领取任务。开始前请先在对应 issue 留言 — 完成路线图功能的核心贡献者可向 OpenClaw 团队申领模型额度。
+浏览 [`label:roadmap`](https://github.com/openmaster-ai/clawmaster/issues?q=label%3Aroadmap) 领取任务。开始前请先在对应 issue 留言 — 完成路线图功能的核心贡献者可向 OpenClaw 团队申领模型额度。
 
 ## 📰 动态
 
@@ -218,11 +218,11 @@ clawmaster/
 > [!IMPORTANT]
 > 提 PR 前必须在本地通过 `npm test`。禁止在提交中包含截图、测试日志或生成文件。Node.js 是唯一允许的运行时。
 
-社区：[GitHub Discussions](https://github.com/clawmaster-ai/clawmaster/discussions) · [Discord](https://discord.gg/openclaw) · [飞书社区](https://openclaw.feishu.cn/community)
+社区：[GitHub Discussions](https://github.com/openmaster-ai/clawmaster/discussions) · [Discord](https://discord.gg/openclaw) · [飞书社区](https://openclaw.feishu.cn/community)
 
 ## 贡献者
 
-[![Contributors](https://contrib.rocks/image?repo=clawmaster-ai/clawmaster)](https://github.com/clawmaster-ai/clawmaster/graphs/contributors)
+[![Contributors](https://contrib.rocks/image?repo=openmaster-ai/clawmaster)](https://github.com/openmaster-ai/clawmaster/graphs/contributors)
 
 ---
 

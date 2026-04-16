@@ -104,7 +104,7 @@ export const SKILL_CATALOG: CatalogSkill[] = [
     skillKey: 'ernie-image',
     installSource: 'bundled',
     featured: true,
-    sourceUrl: 'https://github.com/clawmaster-ai/clawmaster',
+    sourceUrl: 'https://github.com/openmaster-ai/clawmaster',
   },
   {
     slug: 'image-generate',

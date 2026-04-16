@@ -16,7 +16,7 @@ Thank you for your interest in contributing to ClawMaster! This guide will help 
 Prerequisites: **Node.js 20+** and npm.
 
 ```bash
-git clone https://github.com/clawmaster-ai/clawmaster.git
+git clone https://github.com/openmaster-ai/clawmaster.git
 cd clawmaster
 npm install
 npm run dev:web    # Starts backend (port 3001) + frontend (port 3000)
@@ -101,7 +101,7 @@ Every pull request must be tested before review:
 > [!WARNING]
 > PRs containing any of the following will be asked to remove them before merge:
 
-- **No screenshots or screen recordings** — post demos in [Discussions](https://github.com/clawmaster-ai/clawmaster/discussions) instead.
+- **No screenshots or screen recordings** — post demos in [Discussions](https://github.com/openmaster-ai/clawmaster/discussions) instead.
 - **No test output logs** or captured terminal output pasted inline.
 - **No debug `console.log` calls** left in production code paths.
 - **No generated files**: `dist/`, `coverage/`, `*.tsbuildinfo`, `src-tauri/target/`.
@@ -127,6 +127,6 @@ Open your PR as a **draft** if it is not yet ready for review. This avoids trigg
 
 ## Questions?
 
-Open a [Discussion](https://github.com/clawmaster-ai/clawmaster/discussions) or reach out to the OpenClaw community.
+Open a [Discussion](https://github.com/openmaster-ai/clawmaster/discussions) or reach out to the OpenClaw community.
 
 <!-- 欢迎参与贡献！如有疑问，请在 GitHub Discussions 中提问。 -->

@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         > [!TIP]
-        > For real-time help, try [GitHub Discussions](https://github.com/clawmaster-ai/clawmaster/discussions) first — questions often get faster responses there.
+        > For real-time help, try [GitHub Discussions](https://github.com/openmaster-ai/clawmaster/discussions) first — questions often get faster responses there.
 
   - type: textarea
     id: question
