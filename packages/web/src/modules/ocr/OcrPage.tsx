@@ -172,6 +172,11 @@ export default function OcrPage() {
     setAutoSyncAttempted(true)
 
     ;(async () => {
+      // successMessage is set only after both install and enable succeed.
+      // It is read outside the cancelled guard so the message still shows
+      // even when refetch() triggers a dep-change effect cleanup mid-flight
+      // (cancelled=true due to config update, not unmount).
+      let successMessage: string | null = null
       try {
         const installResult = await installSkillResult(PADDLEOCR_SKILL_ID)
         if (!installResult.success) {
@@ -183,14 +188,19 @@ export default function OcrPage() {
           throw new Error(enableResult.error ?? t('ocr.skillInstallFailed'))
         }
 
+        successMessage = t('ocr.skillAutoEnabled')
         if (!cancelled) {
-          setSaveMessage(t('ocr.skillAutoEnabled'))
           await Promise.all([refetch(), refetchSkills()])
         }
       } catch (error: unknown) {
         if (!cancelled) {
           setSaveError(error instanceof Error ? error.message : String(error))
         }
+        return
+      }
+
+      if (successMessage !== null) {
+        setSaveMessage(successMessage)
       }
     })()
 

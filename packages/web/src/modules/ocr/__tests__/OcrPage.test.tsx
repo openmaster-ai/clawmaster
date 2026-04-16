@@ -157,17 +157,21 @@ describe('OcrPage', () => {
   })
 
   it('preserves existing PaddleOCR skill entry settings when saving OCR config', async () => {
-    // Use mockResolvedValue (not Once) so refetch() after save still returns the same
-    // config with skills.entries intact. Also mark the skill as installed so the
-    // auto-sync effect short-circuits (skillReady=true) and does not call refetch()
-    // before the save button is clicked.
+    // skillReady is evaluated as config?.skills?.entries?.[key]?.enabled === true.
+    // Setting enabled:true makes skillReady=true synchronously on the first config
+    // load, before any skills promise resolves. This prevents the auto-sync effect
+    // from firing (and calling refetch() which would swap config before the save
+    // click). Using mockResolvedValue keeps the same config for refetch() calls so
+    // customPrompt is intact when handleSave reads config. buildSkillEnabledConfig
+    // spreads the existing entry then overwrites enabled:true — customPrompt is
+    // preserved regardless of the initial enabled value.
     mockGetConfigResult.mockResolvedValue({
       success: true,
       data: {
         skills: {
           entries: {
             'paddleocr-doc-parsing': {
-              enabled: false,
+              enabled: true,
               customPrompt: 'keep-me',
             },
           },
@@ -186,15 +190,11 @@ describe('OcrPage', () => {
       },
       error: null,
     })
-    mockGetSkillsResult.mockResolvedValue({
-      success: true,
-      data: [{ slug: 'paddleocr-doc-parsing', skillKey: '', name: '' }],
-      error: null,
-    })
 
     renderPage()
 
     const saveButton = await screen.findByRole('button', { name: 'Save & Enable OCR' })
+    await waitFor(() => { expect(saveButton).toBeEnabled() })
     fireEvent.click(saveButton)
 
     await waitFor(() => {
