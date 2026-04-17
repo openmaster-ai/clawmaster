@@ -6,14 +6,6 @@
 </p>
 
 <p align="center">
-  <strong>Master the Claw, Command the Core.</strong>
-</p>
-
-<p align="center">
-  <em>OpenClaw companion for real life.</em>
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white" alt="macOS" />
   <img src="https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Windows" />
   <img src="https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black" alt="Linux" />
@@ -106,9 +98,7 @@ Requires Node.js 20+. Tauri desktop builds also need Rust — see [tauri.app/sta
 
 ## Why ClawMaster
 
-Most OpenClaw tooling stops at configuration.
-
-ClawMaster goes one step further: it aims to help **normal, non-technical users actually make practical use of OpenClaw as a digital personal assistant**.
+Most OpenClaw tooling stops at configuration. ClawMaster is your **OpenClaw companion for real life** — it goes beyond setup to help normal, non-technical users actually make practical use of OpenClaw as a digital personal assistant.
 
 That means ClawMaster is not only for:
 - editing config safely,

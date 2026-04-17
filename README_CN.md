@@ -6,14 +6,6 @@
 </p>
 
 <p align="center">
-  <strong>执掌利爪，驯服混乱</strong>
-</p>
-
-<p align="center">
-  <em>让 OpenClaw 真正走进日常生活。</em>
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white" alt="macOS" />
   <img src="https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Windows" />
   <img src="https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black" alt="Linux" />
@@ -106,9 +98,7 @@ npm run tauri:dev            # 桌面应用
 
 ## 为什么是 ClawMaster
 
-大多数 OpenClaw 工具，重点都停留在“把配置配对”。
-
-而 ClawMaster 想再往前走一步：**不仅帮助用户完成配置，更重要的是帮助普通、非技术用户，开始把 OpenClaw 实际用于日常工作与生活。**
+大多数 OpenClaw 工具，重点都停留在”把配置配对”。ClawMaster 是你**真正走进日常生活的 OpenClaw 伙伴** —— 不仅帮助用户完成配置，更重要的是帮助普通、非技术用户，开始把 OpenClaw 实际用于日常工作与生活。
 
 这意味着 ClawMaster 不只是：
 - 更安全地编辑配置，

@@ -6,14 +6,6 @@
 </p>
 
 <p align="center">
-  <strong>爪に道あり、要を制せ</strong>
-</p>
-
-<p align="center">
-  <em>OpenClaw を日常で使えるようにする相棒。</em>
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white" alt="macOS" />
   <img src="https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Windows" />
   <img src="https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black" alt="Linux" />
@@ -106,9 +98,7 @@ npm run tauri:dev            # デスクトップアプリ
 
 ## なぜ ClawMaster なのか
 
-多くの OpenClaw ツールは、設定を整えるところで止まります。
-
-ClawMaster はその先を目指します。**OpenClaw の設定を助けるだけでなく、一般の非技術ユーザーが OpenClaw を日常の仕事や生活で実際に使い始められるようにする**ことが重要な目的です。
+多くの OpenClaw ツールは、設定を整えるところで止まります。ClawMaster は**日常で使える OpenClaw の相棒**です — 設定を助けるだけでなく、一般の非技術ユーザーが OpenClaw を日常の仕事や生活で実際に使い始められるようにすることが重要な目的です。
 
 つまり ClawMaster は、単に：
 - 設定を安全に編集するための UI、
