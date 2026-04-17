@@ -179,6 +179,18 @@ Six capabilities — tracked as labeled issues:
 
 Browse [`label:roadmap`](https://github.com/openmaster-ai/clawmaster/issues?q=label%3Aroadmap) to pick up an item. Leave a comment before starting so work does not overlap.
 
+## Versioning
+
+ClawMaster follows [Pride Versioning](https://news.ycombinator.com/item?id=44754717) — `PROUD.DEFAULT.SHAME`:
+
+| Segment | When to bump |
+|---|---|
+| **Proud** | A release you are genuinely proud of |
+| **Default** | Normal, solid releases |
+| **Shame** | Fixing something too embarrassing to talk about |
+
+Pre-release tags (`-rc.N`) are used for release candidates.
+
 ## 📰 News
 
 - **2026-04-13** 🏗️ Contribution workflow tightened with issue forms, a stronger PR template, PR description validation, and architecture boundary tests.

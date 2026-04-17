@@ -1,6 +1,6 @@
 {
   "name": "openclaw-ernie-image",
-  "version": "0.1.0",
+  "version": "0.3.0-rc.1",
   "description": "OpenClaw ERNIE-Image provider plugin managed by ClawMaster.",
   "type": "module",
   "main": "index.ts",

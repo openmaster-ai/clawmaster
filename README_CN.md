@@ -179,6 +179,18 @@ ClawMaster 的核心目标，是缩短“安装完成”到“真实产出”之
 
 浏览 [`label:roadmap`](https://github.com/openmaster-ai/clawmaster/issues?q=label%3Aroadmap) 领取任务。开始前请先在对应 issue 留言，避免重复工作。
 
+## 版本策略
+
+ClawMaster 采用 [Pride Versioning](https://news.ycombinator.com/item?id=44754717)（自豪版本号）—— `PROUD.DEFAULT.SHAME`：
+
+| 位 | 何时递增 |
+|---|---|
+| **Proud** | 你真心引以为豪的发布 |
+| **Default** | 正常、稳定的发布 |
+| **Shame** | 修复了不好意思说出口的问题 |
+
+预发布使用 `-rc.N` 标签。
+
 ## 📰 动态
 
 - **2026-04-13** 🏗️ 贡献流程升级：issue 表单、更严格的 PR 模板、PR 描述自动校验，以及架构边界测试。

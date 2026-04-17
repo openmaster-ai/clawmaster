@@ -1,6 +1,6 @@
 {
   "name": "clawmaster",
-  "version": "0.1.0",
+  "version": "0.3.0-rc.1",
   "description": "龙虾管理大师——OpenClaw 生态的六边形战士",
   "bin": {
     "clawmaster": "./bin/clawmaster.mjs"

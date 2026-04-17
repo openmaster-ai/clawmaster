@@ -1,6 +1,6 @@
 {
   "name": "memory-clawmaster-powermem",
-  "version": "0.1.0",
+  "version": "0.3.0-rc.1",
   "description": "ClawMaster-managed OpenClaw memory plugin powered by PowerMem.",
   "type": "module",
   "main": "index.ts",
