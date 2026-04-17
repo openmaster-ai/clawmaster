@@ -500,6 +500,10 @@ export function execShellCommand(command: string): Promise<{
   })
 }
 
+function resolveNpmExecFileCommand(): string {
+  return process.platform === 'win32' ? 'npm.cmd' : 'npm'
+}
+
 /** `npm install -g <absolute path>` via execFile (no shell) to avoid special chars in path */
 export function execNpmInstallGlobalFile(absolutePath: string): Promise<{
   code: number
@@ -517,9 +521,9 @@ export function execNpmInstallGlobalFile(absolutePath: string): Promise<{
 
   return new Promise((resolve, reject) => {
     execFile(
-      'npm',
+      resolveNpmExecFileCommand(),
       ['install', '-g', absolutePath],
-      { maxBuffer: 20 * 1024 * 1024, env: process.env },
+      { maxBuffer: 20 * 1024 * 1024, env: process.env, shell: process.platform === 'win32' },
       (error: ExecFileException | null, stdout: string, stderr: string) => {
         if (error && error.message?.includes('maxBuffer')) {
           reject(error)
