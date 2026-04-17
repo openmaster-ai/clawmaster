@@ -1,21 +1,8 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/openmaster-ai/brand/main/logos/clawmaster/animated/v3-animated.svg" width="84" alt="ClawMaster animated icon" />
-</p>
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/openmaster-ai/brand/main/marketing/readme/zh.png" width="100%" alt="ClawMaster brand banner" />
-</p>
-
-<h1 align="center">
-  <code>ClawMaster</code>
-</h1>
-
-<p align="center">
-  <strong>执掌利爪，驯服混乱</strong>
-</p>
-
-<p align="center">
-  <em>让 OpenClaw 真正走进日常生活。</em>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/openmaster-ai/brand/main/marketing/readme/zh.png" />
+    <img src="https://raw.githubusercontent.com/openmaster-ai/brand/main/marketing/readme/zh-light.png" width="100%" alt="ClawMaster" />
+  </picture>
 </p>
 
 <p align="center">

@@ -1,21 +1,8 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/openmaster-ai/brand/main/logos/clawmaster/animated/v3-animated.svg" width="84" alt="ClawMaster animated icon" />
-</p>
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/openmaster-ai/brand/main/marketing/readme/jp.png" width="100%" alt="ClawMaster brand banner" />
-</p>
-
-<h1 align="center">
-  <code>ClawMaster</code>
-</h1>
-
-<p align="center">
-  <strong>爪に道あり、要を制せ</strong>
-</p>
-
-<p align="center">
-  <em>OpenClaw を日常で使えるようにする相棒。</em>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/openmaster-ai/brand/main/marketing/readme/jp.png" />
+    <img src="https://raw.githubusercontent.com/openmaster-ai/brand/main/marketing/readme/jp-light.png" width="100%" alt="ClawMaster" />
+  </picture>
 </p>
 
 <p align="center">
