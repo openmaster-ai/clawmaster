@@ -4,7 +4,7 @@ import { promisify } from 'util'
 import { homedir } from 'os'
 import path from 'path'
 import { getClawmasterRuntimeSelection } from '../clawmasterSettings.js'
-import { execOpenclaw } from '../execOpenclaw.js'
+import { execOpenclaw, resolveNpmExecFileCommand } from '../execOpenclaw.js'
 import { runClawprobeCommand } from '../execClawprobe.js'
 import { execWslCommand, resolveSelectedWslDistroSync, shouldUseWslRuntime } from '../wslRuntime.js'
 
@@ -58,10 +58,9 @@ export function normalizeExecRequest(
  * Generic exec endpoint — used as a fallback for CLI commands that don't yet
  * have dedicated backend routes.
  *
- * NOTE: On Windows, ClawMaster (like OpenClaw) expects WSL2 as the runtime
- * environment. The `shell: false` flag works correctly inside WSL2 since the
- * backend runs in a Linux environment. Native Windows `.cmd/.bat` wrappers
- * are NOT supported without WSL2.
+ * NOTE: On Windows without WSL2, `npm` is resolved to `npm.cmd` and executed
+ * with `shell: true` to avoid ENOENT errors (`.cmd` shims require the CMD
+ * interpreter). Other commands use `shell: false` as before.
  */
 export function registerExecRoutes(app: Express): void {
   app.post('/api/exec', async (req, res) => {
@@ -119,7 +118,11 @@ export function registerExecRoutes(app: Express): void {
         })
         return
       }
-      const { stdout, stderr } = await execFileAsync(normalized.cmd, normalized.args, { shell: false })
+      const isNpm = normalized.cmd === 'npm'
+      const resolvedCmd = isNpm ? resolveNpmExecFileCommand() : normalized.cmd
+      const { stdout, stderr } = await execFileAsync(resolvedCmd, normalized.args, {
+        shell: isNpm && process.platform === 'win32',
+      })
       res.json({ ok: true, stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0 })
     } catch (err: any) {
       const message = err instanceof Error ? err.message : String(err)

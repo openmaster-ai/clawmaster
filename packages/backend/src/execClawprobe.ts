@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { getClawmasterRuntimeSelection } from './clawmasterSettings.js'
+import { resolveNpmExecFileCommand } from './execOpenclaw.js'
 import { normalizeLoginShellWhichLine } from './shellWhichNormalize.js'
 import {
   getWslRuntimeUnavailableMessage,
@@ -57,9 +58,10 @@ function getClawprobePackageRoot(): string | null {
 
 function getGlobalNpmRoot(): string | null {
   try {
-    const out = execFileSync('npm', ['root', '-g'], {
+    const out = execFileSync(resolveNpmExecFileCommand(), ['root', '-g'], {
       encoding: 'utf8',
       env: process.env,
+      shell: process.platform === 'win32',
       windowsHide: true,
     }).trim()
     return out || null

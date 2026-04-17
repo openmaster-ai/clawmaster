@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { execNpmInstallGlobalFile } from './execOpenclaw.js'
+import { execNpmInstallGlobalFile, resolveNpmExecFileCommand } from './execOpenclaw.js'
 
 function withPlatform<T>(platform: NodeJS.Platform, fn: () => Promise<T> | T): Promise<T> {
   const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
@@ -12,6 +12,18 @@ function withPlatform<T>(platform: NodeJS.Platform, fn: () => Promise<T> | T): P
       if (originalPlatform) Object.defineProperty(process, 'platform', originalPlatform)
     })
 }
+
+test('resolveNpmExecFileCommand returns npm.cmd on Windows', async () => {
+  await withPlatform('win32', () => {
+    assert.equal(resolveNpmExecFileCommand(), 'npm.cmd')
+  })
+})
+
+test('resolveNpmExecFileCommand returns npm on non-Windows', async () => {
+  await withPlatform('linux', () => {
+    assert.equal(resolveNpmExecFileCommand(), 'npm')
+  })
+})
 
 test('execNpmInstallGlobalFile switches to Windows npm.cmd resolution path', async () => {
   await withPlatform('win32', async () => {

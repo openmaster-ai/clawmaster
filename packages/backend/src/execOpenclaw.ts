@@ -500,7 +500,7 @@ export function execShellCommand(command: string): Promise<{
   })
 }
 
-function resolveNpmExecFileCommand(): string {
+export function resolveNpmExecFileCommand(): string {
   return process.platform === 'win32' ? 'npm.cmd' : 'npm'
 }
 
