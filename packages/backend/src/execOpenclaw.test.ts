@@ -17,7 +17,6 @@ test('execNpmInstallGlobalFile switches to Windows npm.cmd resolution path', asy
   await withPlatform('win32', async () => {
     const result = await execNpmInstallGlobalFile('C:/tmp/openclaw.tgz')
     assert.notEqual(result.code, 0)
-    assert.equal(result.stderr, '')
   })
 })
 

@@ -523,7 +523,7 @@ export function execNpmInstallGlobalFile(absolutePath: string): Promise<{
     execFile(
       resolveNpmExecFileCommand(),
       ['install', '-g', absolutePath],
-      { maxBuffer: 20 * 1024 * 1024, env: process.env },
+      { maxBuffer: 20 * 1024 * 1024, env: process.env, shell: process.platform === 'win32' },
       (error: ExecFileException | null, stdout: string, stderr: string) => {
         if (error && error.message?.includes('maxBuffer')) {
           reject(error)
