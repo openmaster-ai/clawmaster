@@ -49,6 +49,61 @@
   English &nbsp;·&nbsp; <a href="./README_CN.md">中文</a> &nbsp;·&nbsp; <a href="./README_JP.md">日本語</a>
 </p>
 
+## Quick Start
+
+### Desktop App (recommended)
+
+Download the installer for your platform from [GitHub Releases](https://github.com/openmaster-ai/clawmaster/releases):
+
+| Platform | Format |
+|---|---|
+| macOS Apple Silicon | `.dmg` |
+| macOS Intel | `.dmg` |
+| Windows x64 | `.msi`, `.exe` |
+| Linux x64 | `.deb`, `.rpm`, `.AppImage` |
+
+Open the app — the setup wizard walks you through connecting a model provider and creating your first profile. No terminal needed.
+
+> [!TIP]
+> Every push to `main` also uploads per-platform builds as CI artifacts (kept 7 days) if you want the latest unreleased build.
+
+### CLI
+
+```bash
+npm i -g clawmaster
+clawmaster doctor            # verify your environment
+clawmaster serve             # start the web console
+```
+
+Open `http://127.0.0.1:3001` in your browser and enter the token printed in the terminal.
+
+```bash
+clawmaster serve --daemon    # run in background
+clawmaster stop              # stop the service
+```
+
+<details>
+<summary>From source</summary>
+
+```bash
+git clone https://github.com/openmaster-ai/clawmaster.git
+cd clawmaster
+npm install
+npm run dev:web              # web console + backend
+npm run tauri:dev            # desktop app
+```
+
+Requires Node.js 20+. Tauri desktop builds also need Rust — see [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites/).
+
+</details>
+
+### After Launch
+
+1. Pick an existing OpenClaw profile or create a new one.
+2. Connect at least one model provider and set a default model.
+3. Add channels, plugins, skills, or MCP servers as needed.
+4. Enable gateway or observability when you need runtime inspection.
+
 ## Why ClawMaster
 
 Most OpenClaw tooling stops at configuration.
@@ -108,72 +163,6 @@ You still get provider management, observability, memory tooling, sessions, plug
 - **More guided onboarding and usage** — clearer paths for people who do not want to learn OpenClaw from raw config first.
 - **Outcome-oriented workflows** — more guided routes for common scenarios instead of configuration surfaces alone.
 - **Learning layers around the product** — including future class- or playbook-style guidance for practical use cases.
-
-## Quick Start
-
-<details>
-<summary>Option 1: Desktop installer</summary>
-
-Download the latest installer from [GitHub Releases](https://github.com/openmaster-ai/clawmaster/releases).
-
-| Platform | Format |
-|---|---|
-| Linux x64 | `.deb`, `.rpm`, `.AppImage` |
-| macOS Intel | `.dmg` |
-| macOS Apple Silicon | `.dmg` |
-| Windows x64 | `.msi`, `.exe` |
-
-> [!NOTE]
-> CI also uploads per-platform artifacts for every push to `main` (7-day retention) if you need an unreleased build.
-
-</details>
-
-<details>
-<summary>Option 2: Run from source</summary>
-
-```bash
-git clone https://github.com/openmaster-ai/clawmaster.git
-cd clawmaster
-npm install
-npm run dev:web     # web app + backend
-npm run tauri:dev   # desktop app
-```
-
-Requirements: Node.js 20+. For Tauri desktop builds, also Rust — see [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites/).
-
-</details>
-
-<details>
-<summary>Option 3: Service CLI</summary>
-
-```bash
-npm i -g clawmaster
-clawmaster doctor
-clawmaster serve --daemon
-clawmaster status
-```
-
-Default service URL: `http://127.0.0.1:3001`. `clawmaster serve` prints a service token — enter it in the browser UI when prompted.
-
-Common flags:
-
-```bash
-clawmaster serve --host 127.0.0.1 --port 3001 --daemon
-clawmaster serve --host 127.0.0.1 --port 3001 --token your-own-token
-clawmaster stop
-clawmaster doctor
-```
-
-</details>
-
-## First Run
-
-1. Launch ClawMaster.
-2. Choose an existing OpenClaw profile or create a new one.
-3. Connect at least one model provider and set a default model.
-4. Enable gateway or observability if you need runtime inspection.
-5. Add channels, plugins, skills, or MCP servers as needed.
-6. Use ClawMaster as the home base for turning OpenClaw into a real digital assistant workflow.
 
 ## Roadmap
 

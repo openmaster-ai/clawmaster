@@ -49,6 +49,61 @@
   <a href="./README.md">English</a> &nbsp;·&nbsp; 中文 &nbsp;·&nbsp; <a href="./README_JP.md">日本語</a>
 </p>
 
+## 快速开始
+
+### 桌面应用（推荐）
+
+从 [GitHub Releases](https://github.com/openmaster-ai/clawmaster/releases) 下载对应平台安装包：
+
+| 平台 | 格式 |
+|---|---|
+| macOS Apple Silicon | `.dmg` |
+| macOS Intel | `.dmg` |
+| Windows x64 | `.msi`、`.exe` |
+| Linux x64 | `.deb`、`.rpm`、`.AppImage` |
+
+打开应用后，安装向导会引导你连接模型供应商并创建第一个 Profile，无需使用终端。
+
+> [!TIP]
+> 每次推送 `main` 分支，CI 也会上传各平台构建产物（保留 7 天），如需获取未正式发布的版本可前往 Actions 下载。
+
+### CLI
+
+```bash
+npm i -g clawmaster
+clawmaster doctor            # 检查环境
+clawmaster serve             # 启动 Web 控制台
+```
+
+在浏览器中打开 `http://127.0.0.1:3001`，输入终端中打印的令牌即可使用。
+
+```bash
+clawmaster serve --daemon    # 后台运行
+clawmaster stop              # 停止服务
+```
+
+<details>
+<summary>从源码运行</summary>
+
+```bash
+git clone https://github.com/openmaster-ai/clawmaster.git
+cd clawmaster
+npm install
+npm run dev:web              # Web 控制台 + 后端
+npm run tauri:dev            # 桌面应用
+```
+
+依赖：Node.js 20+。构建桌面端还需 Rust，参考 [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites/)。
+
+</details>
+
+### 启动后
+
+1. 选择已有的 OpenClaw Profile，或新建一个。
+2. 至少接入一个模型供应商并设置默认模型。
+3. 按需添加频道、插件、技能或 MCP 服务。
+4. 如需运行时观测，启用网关或可观测模块。
+
 ## 为什么是 ClawMaster
 
 大多数 OpenClaw 工具，重点都停留在“把配置配对”。
@@ -108,72 +163,6 @@ ClawMaster 的核心目标，是缩短“安装完成”到“真实产出”之
 - **更清晰的引导式上手与使用** —— 让不想从原始配置学起的用户，也能更快进入可用状态。
 - **结果导向的工作流** —— 不只提供配置面板，而是为常见场景提供更清晰的引导路径。
 - **围绕产品的学习层** —— 包括未来更像课程或 playbook 的实践指导。
-
-## 快速开始
-
-<details>
-<summary>方式一：下载桌面安装包</summary>
-
-从 [GitHub Releases](https://github.com/openmaster-ai/clawmaster/releases) 下载对应平台安装包。
-
-| 平台 | 格式 |
-|---|---|
-| Linux x64 | `.deb`、`.rpm`、`.AppImage` |
-| macOS Intel | `.dmg` |
-| macOS Apple Silicon | `.dmg` |
-| Windows x64 | `.msi`、`.exe` |
-
-> [!NOTE]
-> 每次推送 `main` 分支，CI 也会上传各平台 artifacts（保留 7 天），如需获取未正式发布的构建可前往 Actions 下载。
-
-</details>
-
-<details>
-<summary>方式二：从源码运行</summary>
-
-```bash
-git clone https://github.com/openmaster-ai/clawmaster.git
-cd clawmaster
-npm install
-npm run dev:web     # Web 控制台 + 后端
-npm run tauri:dev   # 桌面应用
-```
-
-依赖：Node.js 20+。构建桌面端还需 Rust，参考 [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites/)。
-
-</details>
-
-<details>
-<summary>方式三：服务 CLI</summary>
-
-```bash
-npm i -g clawmaster
-clawmaster doctor
-clawmaster serve --daemon
-clawmaster status
-```
-
-默认服务地址：`http://127.0.0.1:3001`。`clawmaster serve` 会打印服务令牌，在浏览器 UI 提示时输入即可。
-
-常用参数：
-
-```bash
-clawmaster serve --host 127.0.0.1 --port 3001 --daemon
-clawmaster serve --host 127.0.0.1 --port 3001 --token your-own-token
-clawmaster stop
-clawmaster doctor
-```
-
-</details>
-
-## 首次使用
-
-1. 启动 ClawMaster。
-2. 选择已有的 OpenClaw Profile，或新建一个。
-3. 至少接入一个模型供应商并设置默认模型。
-4. 如需运行时观测，启用网关或可观测模块。
-5. 按需添加频道、插件、技能或 MCP 服务。
-6. 把 ClawMaster 当作你将 OpenClaw 变成“真正可用的数字助理”的起点。
 
 ## 路线图
 
