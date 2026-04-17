@@ -148,24 +148,18 @@ ClawMaster 的核心目标，是缩短“安装完成”到“真实产出”之
 - **插件、技能与 MCP** —— 启用 / 禁用能力，安装精选项目，添加 MCP 服务，导入 MCP 定义。
 - **会话、记忆与可观测** —— 查看会话，管理记忆后端，追踪 Token 用量和费用估算。
 
-## 我们接下来要做什么
-
-- **更清晰的引导式上手与使用** —— 让不想从原始配置学起的用户，也能更快进入可用状态。
-- **结果导向的工作流** —— 不只提供配置面板，而是为常见场景提供更清晰的引导路径。
-- **围绕产品的学习层** —— 包括未来更像课程或 playbook 的实践指导。
-
 ## 路线图
 
-六大核心能力 —— 通过 issue 标签追踪进度：
+六大核心能力 —— 每一项都从基础设施走向日常可用：
 
-| 能力 | 状态 | 覆盖范围 |
-|---|---|---|
-| 能接管 | 可用 | 向导、供应商配置、频道配置、Profile 管理 |
-| 能观测 | 可用 | ClawProbe 集成与运行态查看 |
-| 能省钱 | 进行中 | PowerMem UI、seekdb 相关流程、Token 效率优化 |
-| 能应用 | 规划中 | OCR 与更多面向实际场景的引导式工作流 |
-| 能构建 | 规划中 | 更多偏构建侧的工作流与组合能力 |
-| 能守护 | 规划中 | 更安全的运行、限制与访问控制 |
+| # | 能力 | 状态 | 已有 | 下一步 |
+|---|---|---|---|---|
+| 1 | **能接管** | 可用 | 引导式向导、6+ LLM 供应商并校验 Key、6 种频道（飞书 / 微信 / Discord / Slack / Telegram / WhatsApp）、Profile 切换 | 一键环境迁移（[#1](https://github.com/openmaster-ai/clawmaster/issues/1)）、Windows + WSL2 一等支持 |
+| 2 | **能观测** | 可用 | 基于 ClawProbe 的面板、按会话的费用与 Token 追踪、网关健康监控 | 历史花费分析、异常告警、多 Profile 对比 |
+| 3 | **能省钱** | 进行中 | PowerMem UI + FTS5 本地搜索、记忆工作区管理、自动降级到 markdown grep | 完整 seekdb 向量检索（[#12](https://github.com/openmaster-ai/clawmaster/issues/12)）、LLM Wiki —— 持续积累的知识库（[#49](https://github.com/openmaster-ai/clawmaster/issues/49)） |
+| 4 | **能应用** | 进行中 | PaddleOCR 流水线（上传 → 解析 → 结构化 Markdown）、版面感知提取 | 拍照 → 闪卡自动生成、发票提取模板、更多场景优先的引导式工作流 |
+| 5 | **能构建** | 规划中 | 插件 / 技能安装与开关、MCP 服务管理、技能安全审计 | 可视化智能体编排器、LangChain Deep Agents 集成、对话式智能体构建 |
+| 6 | **能守护** | 规划中 | Skill Guard 安全扫描（维度 / 严重性 / 风险评分）、基础能力门控 | API Key 加密保险箱、按 Profile 的花费上限、团队部署 RBAC |
 
 浏览 [`label:roadmap`](https://github.com/openmaster-ai/clawmaster/issues?q=label%3Aroadmap) 领取任务。开始前请先在对应 issue 留言，避免重复工作。
 

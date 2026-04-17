@@ -148,24 +148,18 @@ You still get provider management, observability, memory tooling, sessions, plug
 - **Plugins, skills, and MCP** — Enable or disable capabilities, install curated items, add MCP servers, import MCP definitions.
 - **Sessions, memory, and observability** — Inspect sessions, manage memory backends, track token usage and estimated spend.
 
-## What We Are Building Next
-
-- **More guided onboarding and usage** — clearer paths for people who do not want to learn OpenClaw from raw config first.
-- **Outcome-oriented workflows** — more guided routes for common scenarios instead of configuration surfaces alone.
-- **Learning layers around the product** — including future class- or playbook-style guidance for practical use cases.
-
 ## Roadmap
 
-Six capabilities — tracked as labeled issues:
+Six core capabilities — each moves from infrastructure toward real daily use:
 
-| Capability | Status | What it covers |
-|---|---|---|
-| Setup | Available | Wizard, provider setup, channel setup, profile management |
-| Observe | Available | ClawProbe integration and runtime inspection views |
-| Save | In progress | PowerMem UI, seekdb-related flows, token-efficiency work |
-| Apply | Planned | OCR and more guided applied workflows |
-| Build | Planned | More builder-oriented workflows and composition tools |
-| Guard | Planned | Safer operations, limits, and access controls |
+| # | Capability | Status | What's here | What's next |
+|---|---|---|---|---|
+| 1 | **Setup** | Available | Guided wizard, 6+ LLM providers with key validation, 6 channel types (Feishu / WeChat / Discord / Slack / Telegram / WhatsApp), profile switching | One-click environment migration ([#1](https://github.com/openmaster-ai/clawmaster/issues/1)), Windows + WSL2 first-class support |
+| 2 | **Observe** | Available | ClawProbe-backed dashboard, per-session cost and token tracking, gateway health monitoring | Historical spend analytics, anomaly alerts, multi-profile comparison |
+| 3 | **Save** | In progress | PowerMem UI with FTS5 local search, memory workspace management, graceful fallback to markdown grep | Full seekdb vector retrieval ([#12](https://github.com/openmaster-ai/clawmaster/issues/12)), LLM Wiki — persistent knowledge base that compounds over time ([#49](https://github.com/openmaster-ai/clawmaster/issues/49)) |
+| 4 | **Apply** | In progress | PaddleOCR pipeline (upload → parse → structured markdown), layout-aware extraction | Photo → flashcard automation, invoice extraction templates, more scenario-first guided workflows |
+| 5 | **Build** | Planned | Plugin/skill install and toggle, MCP server management, skill security auditing | Visual agent composer for skill chaining, LangChain Deep Agents integration, conversational agent builder |
+| 6 | **Guard** | Planned | Skill Guard security scanning (dimension/severity/risk scoring), basic capability gating | API key vault (encrypted at rest), per-profile spend caps, RBAC for team deployments |
 
 Browse [`label:roadmap`](https://github.com/openmaster-ai/clawmaster/issues?q=label%3Aroadmap) to pick up an item. Leave a comment before starting so work does not overlap.
 
