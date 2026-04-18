@@ -1785,6 +1785,7 @@ export default {
   "cron.schedulePreviewEvery": "每隔 {{value}} 运行",
   "cron.schedulePreviewAt": "将在 {{value}} 运行一次",
   "cron.schedulePreviewFieldCount": "Cron 表达式需要 5 个以空格分隔的字段。",
+  "cron.schedulePreviewInvalidCron": "分钟和小时字段必须落在标准 cron 的取值范围内。",
   "cron.schedulePreviewInvalidInterval": "请输入类似 15m、1h、1d 这样的间隔。",
   "cron.schedulePreviewInvalidAt": "请输入有效的 ISO 日期时间。",
   "cron.schedulePreviewInvalidTimezone": "时区 {{value}} 无效。请输入有效的 IANA 时区名称。",

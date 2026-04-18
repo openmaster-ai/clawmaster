@@ -1785,6 +1785,7 @@ export default {
   "cron.schedulePreviewEvery": "{{value}} ごとに実行",
   "cron.schedulePreviewAt": "{{value}} に 1 回実行",
   "cron.schedulePreviewFieldCount": "Cron 式は空白区切りの 5 項目です。",
+  "cron.schedulePreviewInvalidCron": "分と時の項目は標準的な cron の範囲内で指定してください。",
   "cron.schedulePreviewInvalidInterval": "15m、1h、1d のような期間を指定してください。",
   "cron.schedulePreviewInvalidAt": "有効な ISO 日時を指定してください。",
   "cron.schedulePreviewInvalidTimezone": "タイムゾーン {{value}} は無効です。有効な IANA タイムゾーン名を指定してください。",

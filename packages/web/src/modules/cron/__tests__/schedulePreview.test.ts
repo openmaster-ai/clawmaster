@@ -62,6 +62,22 @@ describe('schedulePreview', () => {
     expect(preview.tone).toBe('warning')
   })
 
+  it('warns when cron minute or hour fields are out of range', () => {
+    const preview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        cron: '60 24 * * *',
+      },
+      t,
+    )
+
+    expect(preview).toEqual({
+      summary: 'Runs using cron expression 60 24 * * *',
+      detail: 'Minute and hour fields must stay within standard cron ranges.',
+      tone: 'warning',
+    })
+  })
+
   it('describes interval schedules and validates the syntax', () => {
     const validPreview = buildSchedulePreview(
       {
@@ -121,6 +137,23 @@ describe('schedulePreview', () => {
     expect(preview).toEqual({
       summary: 'Runs once at 2026-05-01 09:00:00',
       detail: 'Timezone Asia/Shanghaii is invalid. Use a valid IANA timezone name.',
+      tone: 'warning',
+    })
+  })
+
+  it('rejects impossible one-shot calendar dates instead of normalizing them', () => {
+    const preview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: '2026-02-29T09:00:00',
+      },
+      t,
+    )
+
+    expect(preview).toEqual({
+      summary: 'Runs once at 2026-02-29T09:00:00',
+      detail: 'Use a valid ISO date and time.',
       tone: 'warning',
     })
   })

@@ -1785,6 +1785,7 @@ export default {
   "cron.schedulePreviewEvery": "Runs every {{value}}",
   "cron.schedulePreviewAt": "Runs once at {{value}}",
   "cron.schedulePreviewFieldCount": "Cron expressions use five space-separated fields.",
+  "cron.schedulePreviewInvalidCron": "Minute and hour fields must stay within standard cron ranges.",
   "cron.schedulePreviewInvalidInterval": "Use a duration like 15m, 1h, or 1d.",
   "cron.schedulePreviewInvalidAt": "Use a valid ISO date and time.",
   "cron.schedulePreviewInvalidTimezone": "Timezone {{value}} is invalid. Use a valid IANA timezone name.",

@@ -11,6 +11,12 @@ function isFixedNumber(value: string) {
   return /^\d+$/.test(value)
 }
 
+function isInRange(value: string, min: number, max: number) {
+  if (!isFixedNumber(value)) return false
+  const numeric = Number(value)
+  return numeric >= min && numeric <= max
+}
+
 function padTime(value: string) {
   return value.padStart(2, '0')
 }
@@ -111,8 +117,21 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
     }
 
     const [minute, hour, dayOfMonth, month, dayOfWeek] = parts
+    const minuteValid = isInRange(minute, 0, 59)
+    const hourValid = isInRange(hour, 0, 23)
 
-    if (isFixedNumber(minute) && isFixedNumber(hour) && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    if (
+      (isFixedNumber(minute) && !minuteValid) ||
+      (isFixedNumber(hour) && !hourValid)
+    ) {
+      return {
+        summary: t('cron.schedulePreviewCronFallback', { value: expression }),
+        detail: t('cron.schedulePreviewInvalidCron'),
+        tone: 'warning',
+      }
+    }
+
+    if (minuteValid && hourValid && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
       return {
         summary: t('cron.schedulePreviewDailyAt', { time: formatClock(hour, minute) }),
         detail: timezone,
@@ -120,7 +139,7 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       }
     }
 
-    if (isFixedNumber(minute) && isFixedNumber(hour) && dayOfMonth === '*' && month === '*' && dayOfWeek === '1-5') {
+    if (minuteValid && hourValid && dayOfMonth === '*' && month === '*' && dayOfWeek === '1-5') {
       return {
         summary: t('cron.schedulePreviewWeekdaysAt', { time: formatClock(hour, minute) }),
         detail: timezone,
@@ -128,7 +147,7 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       }
     }
 
-    if (isFixedNumber(minute) && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    if (minuteValid && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
       return {
         summary: t('cron.schedulePreviewHourlyAt', { minute: padTime(minute) }),
         detail: timezone,
@@ -136,7 +155,7 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       }
     }
 
-    if (isFixedNumber(minute) && isFixedNumber(hour) && dayOfMonth === '1' && month === '*' && dayOfWeek === '*') {
+    if (minuteValid && hourValid && dayOfMonth === '1' && month === '*' && dayOfWeek === '*') {
       return {
         summary: t('cron.schedulePreviewMonthlyAt', { time: formatClock(hour, minute) }),
         detail: timezone,
@@ -180,9 +199,11 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
 
   const parsed = new Date(runAt)
   const timezone = draft.tz.trim()
+  const naiveDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/
+  const hasNaiveDateTime = naiveDateTimePattern.test(runAt)
   const naiveDateTime = !hasExplicitOffset(runAt) ? parseNaiveDateTime(runAt) : null
 
-  if (!naiveDateTime && Number.isNaN(parsed.getTime())) {
+  if ((hasNaiveDateTime && !naiveDateTime) || (!naiveDateTime && Number.isNaN(parsed.getTime()))) {
     return {
       summary: t('cron.schedulePreviewAt', { value: runAt }),
       detail: t('cron.schedulePreviewInvalidAt'),

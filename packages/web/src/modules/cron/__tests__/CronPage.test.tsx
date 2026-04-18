@@ -296,6 +296,20 @@ describe('CronPage', () => {
     expect(screen.getByText('Timezone: Asia/Shanghai')).toBeInTheDocument()
   })
 
+  it('warns for out-of-range cron shortcut values', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Cron expression'), {
+      target: { value: '60 24 * * *' },
+    })
+
+    expect(screen.getByText('Runs using cron expression 60 24 * * *')).toBeInTheDocument()
+    expect(screen.getByText('Minute and hour fields must stay within standard cron ranges.')).toBeInTheDocument()
+  })
+
   it('applies schedule presets inside the editor', async () => {
     renderPage()
 
@@ -347,6 +361,21 @@ describe('CronPage', () => {
 
     expect(screen.getByText('Runs once at 2026-05-01 09:00:00')).toBeInTheDocument()
     expect(screen.getByText('Timezone Asia/Shanghaii is invalid. Use a valid IANA timezone name.')).toBeInTheDocument()
+  })
+
+  it('warns for impossible one-shot dates instead of normalizing them', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Schedule type'), { target: { value: 'at' } })
+    fireEvent.change(screen.getByLabelText('Run at'), {
+      target: { value: '2026-02-29T09:00:00' },
+    })
+
+    expect(screen.getByText('Runs once at 2026-02-29T09:00:00')).toBeInTheDocument()
+    expect(screen.getByText('Use a valid ISO date and time.')).toBeInTheDocument()
   })
 
   it('truncates multi-line run-now output in the success banner', async () => {
