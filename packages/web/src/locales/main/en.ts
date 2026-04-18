@@ -1754,7 +1754,7 @@ export default {
   "cron.durationMs": "{{value}} ms",
   "cron.createTitle": "Create Cron Job",
   "cron.editTitle": "Edit Cron Job",
-  "cron.editorDescription": "This MVP editor covers the core OpenClaw cron fields. Preview helpers land in a follow-up PR.",
+  "cron.editorDescription": "Configure the core OpenClaw cron fields. Schedule preview helpers land in a follow-up.",
   "cron.name": "Name",
   "cron.namePlaceholder": "Morning report",
   "cron.description": "Description",

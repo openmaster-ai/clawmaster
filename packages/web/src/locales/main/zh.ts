@@ -1754,7 +1754,7 @@ export default {
   "cron.durationMs": "{{value}} 毫秒",
   "cron.createTitle": "新建定时任务",
   "cron.editTitle": "编辑定时任务",
-  "cron.editorDescription": "这个 MVP 编辑器先覆盖 OpenClaw cron 的核心字段。更友好的调度预览会在后续 PR 补上。",
+  "cron.editorDescription": "配置 OpenClaw cron 的核心字段。更友好的调度预览会在后续 PR 补上。",
   "cron.name": "名称",
   "cron.namePlaceholder": "早间报告",
   "cron.description": "说明",

@@ -248,9 +248,39 @@ describe('cron adapter', () => {
 
     expect(result.success).toBe(true)
     expect(result.data).toMatchObject({
-      healthy: true,
+      healthy: null,
       running: true,
       jobsTotal: 1,
+    })
+  })
+
+  it('returns healthy: null when the payload does not report health explicitly', async () => {
+    await mockExec(JSON.stringify({
+      running: false,
+      jobs: { total: 0, enabled: 0, disabled: 0 },
+    }))
+
+    const result = await getCronStatusResult()
+
+    expect(result.success).toBe(true)
+    expect(result.data).toMatchObject({
+      running: false,
+      healthy: null,
+    })
+  })
+
+  it('returns healthy: false when the payload reports an error state', async () => {
+    await mockExec(JSON.stringify({
+      running: true,
+      status: 'error: store unreadable',
+    }))
+
+    const result = await getCronStatusResult()
+
+    expect(result.success).toBe(true)
+    expect(result.data).toMatchObject({
+      running: true,
+      healthy: false,
     })
   })
 

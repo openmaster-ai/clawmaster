@@ -1754,7 +1754,7 @@ export default {
   "cron.durationMs": "{{value}} ms",
   "cron.createTitle": "Cron ジョブを作成",
   "cron.editTitle": "Cron ジョブを編集",
-  "cron.editorDescription": "この MVP エディタは OpenClaw cron の主要項目を先に扱います。より親切なプレビューは次の PR で追加します。",
+  "cron.editorDescription": "OpenClaw cron の主要項目を設定します。スケジュールのプレビュー補助は次の PR で追加します。",
   "cron.name": "名前",
   "cron.namePlaceholder": "朝レポート",
   "cron.description": "説明",

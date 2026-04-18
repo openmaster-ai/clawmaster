@@ -47,7 +47,19 @@ const EMPTY_DRAFT: CronJobDraft = {
 
 function isGatewayUnavailableError(message?: string | null): boolean {
   const text = message?.toLowerCase() ?? ''
-  return text.includes('gateway closed') || text.includes('gateway target') || text.includes('127.0.0.1:18789')
+  return (
+    text.includes('gateway closed') ||
+    text.includes('gateway target') ||
+    text.includes('gateway unavailable') ||
+    text.includes('connect econnrefused') ||
+    text.includes('fetch failed')
+  )
+}
+
+function truncateForBanner(value: string, limit = 160): string {
+  const firstLine = value.split('\n')[0]?.trim() ?? ''
+  if (firstLine.length <= limit) return firstLine
+  return `${firstLine.slice(0, limit - 1)}…`
 }
 
 function buildDraftFromJob(job: CronJob): CronJobDraft {
@@ -134,7 +146,13 @@ export default function CronPage() {
   const enabledCount = jobs.filter((job) => job.enabled).length
   const disabledCount = jobs.length - enabledCount
   const gatewayReady = gatewayState.data?.running === true
-  const gatewayIssue = !gatewayReady && (isGatewayUnavailableError(jobsState.error) || isGatewayUnavailableError(statusState.error) || gatewayState.data?.running === false)
+  const gatewayResolved = !gatewayState.loading || gatewayState.data !== null
+  const gatewayIssue =
+    gatewayResolved &&
+    !gatewayReady &&
+    (isGatewayUnavailableError(jobsState.error) ||
+      isGatewayUnavailableError(statusState.error) ||
+      gatewayState.data?.running === false)
 
   async function refreshAll() {
     await Promise.all([jobsState.refetch(), statusState.refetch(), gatewayState.refetch()])
@@ -217,7 +235,7 @@ export default function CronPage() {
     }
     setFeedback({
       tone: 'success',
-      message: result.data || t('cron.runSuccess'),
+      message: result.data ? truncateForBanner(result.data) : t('cron.runSuccess'),
     })
     await Promise.all([jobsState.refetch(), statusState.refetch()])
     if (runsJob?.id === job.id) {

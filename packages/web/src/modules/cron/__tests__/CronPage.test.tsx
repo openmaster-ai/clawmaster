@@ -197,4 +197,101 @@ describe('CronPage', () => {
       expect(mockRemoveCronJob).toHaveBeenCalledWith('job-1')
     })
   })
+
+  it('prefills the edit dialog from the selected job and dispatches updateCronJob', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Cron Job' })
+    expect(within(dialog).getByLabelText('Name')).toHaveValue('Morning report')
+    expect(within(dialog).getByLabelText('Cron expression')).toHaveValue('0 8 * * 1-5')
+    expect(within(dialog).getByLabelText('Message')).toHaveValue('Send the daily report')
+
+    fireEvent.change(within(dialog).getByLabelText('Message'), {
+      target: { value: 'Updated prompt' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockUpdateCronJob).toHaveBeenCalledWith(
+        'job-1',
+        expect.objectContaining({ message: 'Updated prompt' }),
+      )
+    })
+  })
+
+  it('sends every-interval schedule fields to createCronJob', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Heartbeat' } })
+    fireEvent.change(screen.getByLabelText('Schedule type'), { target: { value: 'every' } })
+    fireEvent.change(screen.getByLabelText('Interval'), { target: { value: '15m' } })
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Pulse' } })
+
+    const dialog = screen.getByRole('dialog', { name: 'Create Cron Job' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create Job' }))
+
+    await waitFor(() => {
+      expect(mockCreateCronJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scheduleType: 'every',
+          every: '15m',
+          cron: '',
+          at: '',
+          message: 'Pulse',
+        }),
+      )
+    })
+  })
+
+  it('sends one-shot schedule fields to createCronJob', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'One-shot' } })
+    fireEvent.change(screen.getByLabelText('Schedule type'), { target: { value: 'at' } })
+    fireEvent.change(screen.getByLabelText('Run at'), {
+      target: { value: '2026-05-01T09:00:00+08:00' },
+    })
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Fire once' } })
+
+    const dialog = screen.getByRole('dialog', { name: 'Create Cron Job' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create Job' }))
+
+    await waitFor(() => {
+      expect(mockCreateCronJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scheduleType: 'at',
+          at: '2026-05-01T09:00:00+08:00',
+          cron: '',
+          every: '',
+          message: 'Fire once',
+        }),
+      )
+    })
+  })
+
+  it('truncates multi-line run-now output in the success banner', async () => {
+    mockRunCronJob.mockResolvedValueOnce({
+      success: true,
+      data: 'queued run\n{"runId":"run-42","status":"pending"}',
+    })
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Run Now' }))
+
+    const banner = await screen.findByText('queued run')
+    expect(banner).toBeInTheDocument()
+    expect(screen.queryByText(/runId/)).not.toBeInTheDocument()
+  })
 })

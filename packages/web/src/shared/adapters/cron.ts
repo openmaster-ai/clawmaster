@@ -30,7 +30,8 @@ export interface CronJob {
 
 export interface CronStatus {
   running: boolean
-  healthy: boolean
+  /** true = explicitly healthy, false = explicitly unhealthy, null = not reported */
+  healthy: boolean | null
   jobsTotal: number | null
   enabledJobs: number | null
   disabledJobs: number | null
@@ -233,9 +234,18 @@ function normalizeCronStatus(raw: unknown): CronStatus {
   const health = firstString(object.health, object.state, object.status)
   const running =
     firstBoolean(object.running, object.enabled) ?? /\brunning\b|\bok\b|\bhealthy\b|\benabled\b/i.test(health)
-  const healthy =
-    firstBoolean(object.healthy, object.enabled, object.running) ??
-    (running || /\bok\b|\bhealthy\b|\benabled\b/i.test(health))
+
+  const explicitHealthy = firstBoolean(object.healthy)
+  let healthy: boolean | null
+  if (explicitHealthy !== null) {
+    healthy = explicitHealthy
+  } else if (health) {
+    if (/\bok\b|\bhealthy\b/i.test(health)) healthy = true
+    else if (/\berror\b|\bfail/i.test(health)) healthy = false
+    else healthy = null
+  } else {
+    healthy = null
+  }
 
   return {
     running,
