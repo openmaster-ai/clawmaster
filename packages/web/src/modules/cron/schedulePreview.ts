@@ -17,6 +17,10 @@ function isInRange(value: string, min: number, max: number) {
   return numeric >= min && numeric <= max
 }
 
+function isRelativeDuration(value: string) {
+  return /^\+?\d+\s*(ms|s|m|h|d|w)$/i.test(value)
+}
+
 function padTime(value: string) {
   return value.padStart(2, '0')
 }
@@ -109,7 +113,7 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       ? t('cron.schedulePreviewTimezoneValue', { value: timezoneName })
       : t('cron.schedulePreviewTimezoneRuntime')
 
-    if (parts.length !== 5) {
+    if (parts.length !== 5 && parts.length !== 6) {
       return {
         summary: t('cron.schedulePreviewCronFallback', { value: expression }),
         detail: t('cron.schedulePreviewFieldCount'),
@@ -125,11 +129,14 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       }
     }
 
-    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts
+    const [second, minute, hour, dayOfMonth, month, dayOfWeek] =
+      parts.length === 6 ? parts : ['', ...parts]
+    const secondValid = second === '' || isInRange(second, 0, 59)
     const minuteValid = isInRange(minute, 0, 59)
     const hourValid = isInRange(hour, 0, 23)
 
     if (
+      (second && isFixedNumber(second) && !secondValid) ||
       (isFixedNumber(minute) && !minuteValid) ||
       (isFixedNumber(hour) && !hourValid)
     ) {
@@ -140,7 +147,9 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       }
     }
 
-    if (minuteValid && hourValid && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    const supportedShortcutSeconds = second === '' || second === '0'
+
+    if (supportedShortcutSeconds && minuteValid && hourValid && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
       return {
         summary: t('cron.schedulePreviewDailyAt', { time: formatClock(hour, minute) }),
         detail: timezone,
@@ -148,7 +157,7 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       }
     }
 
-    if (minuteValid && hourValid && dayOfMonth === '*' && month === '*' && dayOfWeek === '1-5') {
+    if (supportedShortcutSeconds && minuteValid && hourValid && dayOfMonth === '*' && month === '*' && dayOfWeek === '1-5') {
       return {
         summary: t('cron.schedulePreviewWeekdaysAt', { time: formatClock(hour, minute) }),
         detail: timezone,
@@ -156,7 +165,7 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       }
     }
 
-    if (minuteValid && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    if (supportedShortcutSeconds && minuteValid && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
       return {
         summary: t('cron.schedulePreviewHourlyAt', { minute: padTime(minute) }),
         detail: timezone,
@@ -164,7 +173,7 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       }
     }
 
-    if (minuteValid && hourValid && dayOfMonth === '1' && month === '*' && dayOfWeek === '*') {
+    if (supportedShortcutSeconds && minuteValid && hourValid && dayOfMonth === '1' && month === '*' && dayOfWeek === '*') {
       return {
         summary: t('cron.schedulePreviewMonthlyAt', { time: formatClock(hour, minute) }),
         detail: timezone,
@@ -203,6 +212,14 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       summary: t('cron.scheduleHelperEmpty'),
       detail: t('cron.scheduleHelperHintAt'),
       tone: 'warning',
+    }
+  }
+
+  if (isRelativeDuration(runAt)) {
+    return {
+      summary: t('cron.schedulePreviewAtRelative', { value: runAt.startsWith('+') ? runAt.slice(1) : runAt }),
+      detail: t('cron.schedulePreviewAtRelativeHint'),
+      tone: 'default',
     }
   }
 
@@ -249,11 +266,14 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
     displayValue = runAt
   }
 
+  const offsetlessUtcWarning = !timezone && naiveDateTime && !hasExplicitOffset(runAt)
   return {
     summary: t('cron.schedulePreviewAt', { value: displayValue }),
     detail: timezone
       ? t('cron.schedulePreviewTimezoneValue', { value: timezone })
+      : offsetlessUtcWarning
+        ? t('cron.schedulePreviewAtUtcWarning')
       : t('cron.scheduleHelperHintAt'),
-    tone: 'default',
+    tone: offsetlessUtcWarning ? 'warning' : 'default',
   }
 }

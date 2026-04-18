@@ -64,6 +64,22 @@ describe('schedulePreview', () => {
     })
   })
 
+  it('accepts six-field cron expressions', () => {
+    const preview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        cron: '0 0 8 * * 1-5',
+      },
+      t,
+    )
+
+    expect(preview).toEqual({
+      summary: 'Runs every weekday at 08:00',
+      detail: 'Timezone: runtime default',
+      tone: 'default',
+    })
+  })
+
   it('warns when a cron expression is incomplete', () => {
     const preview = buildSchedulePreview(
       {
@@ -74,7 +90,7 @@ describe('schedulePreview', () => {
     )
 
     expect(preview.summary).toBe('Runs using cron expression 0 8 * *')
-    expect(preview.detail).toBe('Cron expressions use five space-separated fields.')
+    expect(preview.detail).toBe('Cron expressions use five or six space-separated fields.')
     expect(preview.tone).toBe('warning')
   })
 
@@ -156,6 +172,23 @@ describe('schedulePreview', () => {
     })
   })
 
+  it('accepts relative one-shot values', () => {
+    const preview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: '+30m',
+      },
+      t,
+    )
+
+    expect(preview).toEqual({
+      summary: 'Runs once after 30m',
+      detail: 'Relative one-shot values are resolved by OpenClaw when the job is saved.',
+      tone: 'default',
+    })
+  })
+
   it('warns when the selected timezone is invalid', () => {
     const preview = buildSchedulePreview(
       {
@@ -220,8 +253,8 @@ describe('schedulePreview', () => {
 
     expect(preview).toEqual({
       summary: 'Runs once at 2026-05-01 09:00:00',
-      detail: 'Use an ISO timestamp with an offset, or pair a local time with a timezone.',
-      tone: 'default',
+      detail: 'No timezone or offset was provided. OpenClaw saves offset-less ISO timestamps as UTC.',
+      tone: 'warning',
     })
   })
 })

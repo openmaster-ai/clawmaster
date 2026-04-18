@@ -310,6 +310,20 @@ describe('CronPage', () => {
     expect(screen.getByText('Timezone: runtime default')).toBeInTheDocument()
   })
 
+  it('accepts six-field cron expressions in the preview', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Cron expression'), {
+      target: { value: '0 0 8 * * 1-5' },
+    })
+
+    expect(screen.getByText('Runs every weekday at 08:00')).toBeInTheDocument()
+    expect(screen.getByText('Timezone: runtime default')).toBeInTheDocument()
+  })
+
   it('warns for out-of-range cron shortcut values', async () => {
     renderPage()
 
@@ -376,6 +390,21 @@ describe('CronPage', () => {
     expect(screen.getByText('Timezone: Asia/Shanghai')).toBeInTheDocument()
   })
 
+  it('accepts relative one-shot values in the preview', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Schedule type'), { target: { value: 'at' } })
+    fireEvent.change(screen.getByLabelText('Run at'), {
+      target: { value: '+30m' },
+    })
+
+    expect(screen.getByText('Runs once after 30m')).toBeInTheDocument()
+    expect(screen.getByText('Relative one-shot values are resolved by OpenClaw when the job is saved.')).toBeInTheDocument()
+  })
+
   it('warns when the selected timezone is invalid for one-shot previews', async () => {
     renderPage()
 
@@ -421,7 +450,7 @@ describe('CronPage', () => {
     })
 
     expect(screen.getByText('Runs once at 2026-05-01 09:00:00')).toBeInTheDocument()
-    expect(screen.getByText('Use an ISO timestamp with an offset, or pair a local time with a timezone.')).toBeInTheDocument()
+    expect(screen.getByText('No timezone or offset was provided. OpenClaw saves offset-less ISO timestamps as UTC.')).toBeInTheDocument()
   })
 
   it('truncates multi-line run-now output in the success banner', async () => {
