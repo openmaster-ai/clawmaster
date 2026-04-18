@@ -21,9 +21,15 @@ import {
   type CronRun,
 } from '@/shared/adapters/cron'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
+import { buildSchedulePreview, preferredCronTimezone } from './schedulePreview'
 
 type FilterMode = 'all' | 'enabled' | 'disabled'
 type EditorMode = 'create' | 'edit'
+interface SchedulePreset {
+  id: string
+  label: string
+  apply: (draft: CronJobDraft) => CronJobDraft
+}
 
 const EMPTY_DRAFT: CronJobDraft = {
   name: '',
@@ -116,6 +122,88 @@ function runBadgeClass(run: CronRun): string {
   return 'border-border/70 bg-background/70 text-muted-foreground'
 }
 
+function getSchedulePresets(scheduleType: CronJobDraft['scheduleType'], t: TFunction): SchedulePreset[] {
+  if (scheduleType === 'cron') {
+    return [
+      {
+        id: 'weekday-morning',
+        label: t('cron.presetWeekdayMorning'),
+        apply: (draft) => ({
+          ...draft,
+          scheduleType: 'cron',
+          cron: '0 8 * * 1-5',
+          every: '',
+          at: '',
+          tz: preferredCronTimezone(draft.tz),
+        }),
+      },
+      {
+        id: 'daily-morning',
+        label: t('cron.presetDailyMorning'),
+        apply: (draft) => ({
+          ...draft,
+          scheduleType: 'cron',
+          cron: '0 9 * * *',
+          every: '',
+          at: '',
+          tz: preferredCronTimezone(draft.tz),
+        }),
+      },
+      {
+        id: 'hourly',
+        label: t('cron.presetHourly'),
+        apply: (draft) => ({
+          ...draft,
+          scheduleType: 'cron',
+          cron: '0 * * * *',
+          every: '',
+          at: '',
+          tz: preferredCronTimezone(draft.tz),
+        }),
+      },
+      {
+        id: 'month-start',
+        label: t('cron.presetMonthStart'),
+        apply: (draft) => ({
+          ...draft,
+          scheduleType: 'cron',
+          cron: '0 9 1 * *',
+          every: '',
+          at: '',
+          tz: preferredCronTimezone(draft.tz),
+        }),
+      },
+    ]
+  }
+
+  if (scheduleType === 'every') {
+    return [
+      {
+        id: '15m',
+        label: t('cron.presetEvery15m'),
+        apply: (draft) => ({ ...draft, scheduleType: 'every', every: '15m', cron: '', at: '' }),
+      },
+      {
+        id: '1h',
+        label: t('cron.presetEveryHour'),
+        apply: (draft) => ({ ...draft, scheduleType: 'every', every: '1h', cron: '', at: '' }),
+      },
+      {
+        id: '6h',
+        label: t('cron.presetEvery6h'),
+        apply: (draft) => ({ ...draft, scheduleType: 'every', every: '6h', cron: '', at: '' }),
+      },
+      {
+        id: '1d',
+        label: t('cron.presetEveryDay'),
+        apply: (draft) => ({ ...draft, scheduleType: 'every', every: '1d', cron: '', at: '' }),
+      },
+    ]
+  }
+
+  return []
+}
+
 export default function CronPage() {
   const { t } = useTranslation()
   const jobsState = useAdapterCall(getCronJobsResult, { pollInterval: 30_000 })
@@ -153,6 +241,8 @@ export default function CronPage() {
     (isGatewayUnavailableError(jobsState.error) ||
       isGatewayUnavailableError(statusState.error) ||
       gatewayState.data?.running === false)
+  const schedulePreview = buildSchedulePreview(draft, t)
+  const schedulePresets = getSchedulePresets(draft.scheduleType, t)
 
   async function refreshAll() {
     await Promise.all([jobsState.refetch(), statusState.refetch(), gatewayState.refetch()])
@@ -658,6 +748,51 @@ export default function CronPage() {
                   placeholder="Asia/Shanghai"
                 />
               </label>
+            ) : null}
+          </div>
+
+          <div
+            className={`rounded-[1.6rem] border px-4 py-4 ${
+              schedulePreview.tone === 'warning'
+                ? 'border-amber-500/30 bg-amber-500/5'
+                : 'border-border/70 bg-gradient-to-br from-muted/40 via-background to-background'
+            }`}
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                  {t('cron.scheduleHelperTitle')}
+                </p>
+                <p className="text-sm text-muted-foreground">{t('cron.scheduleHelperDescription')}</p>
+              </div>
+
+              <div className="min-w-0 rounded-[1.25rem] border border-border/70 bg-background/80 px-4 py-3 lg:max-w-[18rem]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  {t('cron.schedulePreviewLabel')}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{schedulePreview.summary}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{schedulePreview.detail}</p>
+              </div>
+            </div>
+
+            {schedulePresets.length > 0 ? (
+              <div className="mt-4 border-t border-border/70 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  {t('cron.schedulePresets')}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {schedulePresets.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setDraft((current) => preset.apply(current))}
+                      className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-sm text-foreground transition hover:border-primary/40 hover:text-primary"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ) : null}
           </div>
 

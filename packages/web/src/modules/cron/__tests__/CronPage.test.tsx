@@ -279,6 +279,39 @@ describe('CronPage', () => {
     })
   })
 
+  it('shows a human-readable preview for common cron schedules', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Cron expression'), {
+      target: { value: '0 8 * * 1-5' },
+    })
+    fireEvent.change(screen.getByLabelText('Timezone'), {
+      target: { value: 'Asia/Shanghai' },
+    })
+
+    expect(screen.getByText('Runs every weekday at 08:00')).toBeInTheDocument()
+    expect(screen.getByText('Timezone: Asia/Shanghai')).toBeInTheDocument()
+  })
+
+  it('applies schedule presets inside the editor', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weekdays 08:00' }))
+    expect(screen.getByLabelText('Cron expression')).toHaveValue('0 8 * * 1-5')
+    expect(screen.getByText('Runs every weekday at 08:00')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Schedule type'), { target: { value: 'every' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Every 15m' }))
+    expect(screen.getByLabelText('Interval')).toHaveValue('15m')
+    expect(screen.getByText('Runs every 15m')).toBeInTheDocument()
+  })
+
   it('truncates multi-line run-now output in the success banner', async () => {
     mockRunCronJob.mockResolvedValueOnce({
       success: true,
