@@ -2,7 +2,8 @@ suite: cron-module
 name: Cron 模块
 description: |
   验证 Cron 模块的核心管理流：
-  页面渲染、创建入口、网关依赖提示、运行记录查看、筛选与基本操作。
+  页面渲染、创建入口、网关依赖提示、运行记录查看、筛选、
+  以及调度助手与常用预设的交互。
 
 preconditions:
   - dev server 已启动（{BASE_URL} 可访问）
@@ -62,6 +63,7 @@ cases:
       - 显示名称、说明、调度类型、消息等输入项
       - 默认存在 Cron expression 输入框
       - 显示 session 与 session key 配置项
+      - 显示调度助手区域
 
   - id: cron-04
     name: 运行记录区域
@@ -95,3 +97,30 @@ cases:
     assertions:
       - 显示筛选选项"All jobs"、"Enabled"、"Disabled"
       - 页面显示"X / Y"数量摘要
+
+  - id: cron-06
+    name: 调度助手与常用预设
+    preconditions:
+      - 允许打开新建任务对话框
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/cron"
+      - action: wait
+        duration: 2000ms
+      - action: click
+        target: text("Create Job")
+      - action: wait
+        duration: 500ms
+      - action: screenshot
+        name: cron-schedule-helper
+      - action: click
+        target: text("Weekdays 08:00")
+      - action: wait
+        duration: 300ms
+      - action: screenshot
+        name: cron-schedule-preset-weekday
+    assertions:
+      - 显示"Schedule helper"或"调度助手"
+      - 显示"Presets"或"常用预设"
+      - 点击常用预设后，Cron expression 会被填入
+      - 预览区域会显示类似"Runs every weekday at 08:00"的可读说明
