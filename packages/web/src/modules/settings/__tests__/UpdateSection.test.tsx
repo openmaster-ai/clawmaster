@@ -268,6 +268,16 @@ vi.mock('@/i18n', () => ({
   changeLanguage: vi.fn(),
 }))
 
+vi.mock('@/modules/setup/adapters', () => ({
+  getSetupAdapter: () => ({
+    detectCapabilities: async () => [],
+    installCapabilities: async () => {},
+    onboarding: {},
+    gateway: {},
+    channel: {},
+  }),
+}))
+
 // Import after mocks
 import Settings from '../SettingsPage'
 import { platform } from '@/adapters'

@@ -35,6 +35,7 @@ import {
   getEnabledSkillCount,
 } from '@/shared/capabilitySummary'
 import { buildGatewayUrl } from '@/shared/gatewayUrl'
+import { CapabilitiesBanner } from './CapabilitiesBanner'
 
 export default function Dashboard() {
   const { t } = useTranslation()
@@ -247,8 +248,10 @@ export default function Dashboard() {
         {
           id: 'logs',
           label: t('dashboard.task.cost.step4'),
-          to: '/settings#settings-logs',
-          hint: t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('logs.settingsTitle') }),
+          to: systemInfo?.openclaw.installed ? '/settings#settings-logs' : '/settings#settings-capabilities',
+          hint: systemInfo?.openclaw.installed
+            ? t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('logs.settingsTitle') })
+            : t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('settings.capabilities.title') }),
           status: systemLoading ? 'loading' : systemInfo?.openclaw.installed ? 'ready' : 'attention',
         },
       ],
@@ -268,8 +271,10 @@ export default function Dashboard() {
         {
           id: 'profile',
           label: t('dashboard.task.private.step1'),
-          to: '/settings#settings-profile',
-          hint: t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('settings.profileTitle') }),
+          to: systemInfo?.openclaw.installed ? '/settings#settings-profile' : '/settings#settings-capabilities',
+          hint: systemInfo?.openclaw.installed
+            ? t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('settings.profileTitle') })
+            : t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('settings.capabilities.title') }),
           status: systemLoading ? 'loading' : systemInfo?.openclaw.installed ? 'ready' : 'attention',
         },
         {
@@ -293,8 +298,10 @@ export default function Dashboard() {
         {
           id: 'diagnostics',
           label: t('dashboard.task.private.step4'),
-          to: '/settings#settings-logs',
-          hint: t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('logs.settingsTitle') }),
+          to: systemInfo?.openclaw.installed ? '/settings#settings-logs' : '/settings#settings-capabilities',
+          hint: systemInfo?.openclaw.installed
+            ? t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('logs.settingsTitle') })
+            : t('dashboard.task.gotoSection', { page: t('nav.settings'), section: t('settings.capabilities.title') }),
           status: systemLoading ? 'loading' : systemInfo?.openclaw.installed ? 'ready' : 'attention',
         },
       ],
@@ -400,6 +407,8 @@ export default function Dashboard() {
         </div>
       )}
 
+      <CapabilitiesBanner />
+
       <div className="metric-grid">
         <div className="metric-card">
           <p className="metric-label">Node.js</p>
@@ -413,18 +422,31 @@ export default function Dashboard() {
             {systemLoading ? <LoadingLine widthClass="w-20" /> : `npm ${systemInfo?.npm.installed ? systemInfo.npm.version : '-'}`}
           </p>
         </div>
-        <div className="metric-card">
-          <p className="metric-label">OpenClaw</p>
-          <p className="metric-value">
-            <MetricValue
-              loading={systemLoading}
-              value={systemInfo?.openclaw.installed ? `v${systemInfo.openclaw.version}` : t('common.notInstalled')}
-            />
-          </p>
-          <p className="metric-meta">
-            {systemLoading ? <LoadingLine widthClass="w-full max-w-[14rem]" /> : (systemInfo?.openclaw.configPath || t('common.notSet'))}
-          </p>
-        </div>
+        {!systemLoading && systemInfo && !systemInfo.openclaw.installed ? (
+          <Link to="/settings#settings-capabilities" className="metric-card hover:border-amber-500/50 hover:bg-amber-500/5 transition">
+            <p className="metric-label">OpenClaw</p>
+            <p className="metric-value">
+              <MetricValue loading={false} value={t('common.notInstalled')} />
+            </p>
+            <p className="metric-meta inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+              {t('dashboard.capabilitiesBanner.action')}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </p>
+          </Link>
+        ) : (
+          <div className="metric-card">
+            <p className="metric-label">OpenClaw</p>
+            <p className="metric-value">
+              <MetricValue
+                loading={systemLoading}
+                value={systemInfo?.openclaw.installed ? `v${systemInfo.openclaw.version}` : t('common.notInstalled')}
+              />
+            </p>
+            <p className="metric-meta">
+              {systemLoading ? <LoadingLine widthClass="w-full max-w-[14rem]" /> : (systemInfo?.openclaw.configPath || t('common.notSet'))}
+            </p>
+          </div>
+        )}
         <div className="metric-card">
           <p className="metric-label">{t('dashboard.gatewayStatus')}</p>
           <p className="metric-value">
@@ -445,48 +467,6 @@ export default function Dashboard() {
           <p className="metric-meta">
             {configLoading ? <LoadingLine widthClass="w-24" /> : `${t('config.countUnit', { count: channelCount })} ${t('layout.nav.channels')}`}
           </p>
-        </div>
-      </div>
-
-      <div className="surface-card">
-        <div className="dashboard-section-head">
-          <div className="dashboard-section-copy">
-            <p className="dashboard-section-meta">{t('settings.systemInfo')}</p>
-            <h3 className="section-title">{t('dashboard.systemEnv')}</h3>
-          </div>
-        </div>
-        <div className="grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
-          {systemLoading ? (
-            Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="space-y-2">
-                <LoadingLine widthClass="w-20" />
-                <LoadingLine widthClass="w-32" />
-              </div>
-            ))
-          ) : systemInfo ? (
-            <>
-              <div>
-                <span className="text-muted-foreground">Node.js: </span>
-                <span className={systemInfo.nodejs.installed ? 'text-green-600' : 'text-red-500'}>
-                  {systemInfo.nodejs.installed ? `Node ${systemInfo.nodejs.version}` : t('common.notInstalled')}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">npm: </span>
-                <span className={systemInfo.npm.installed ? 'text-green-600' : 'text-red-500'}>
-                  {systemInfo.npm.installed ? systemInfo.npm.version : t('common.notInstalled')}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">OpenClaw: </span>
-                <span className={systemInfo.openclaw.installed ? 'text-green-600' : 'text-red-500'}>
-                  {systemInfo.openclaw.installed ? `v${systemInfo.openclaw.version}` : t('common.notInstalled')}
-                </span>
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">{t('common.notSet')}</p>
-          )}
         </div>
       </div>
 

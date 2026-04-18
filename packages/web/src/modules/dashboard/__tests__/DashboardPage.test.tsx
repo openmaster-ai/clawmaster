@@ -29,6 +29,16 @@ vi.mock('@/shared/adapters/mcp', () => ({
   getMcpServers: (...args: any[]) => mockGetMcpServers(...args),
 }))
 
+vi.mock('@/modules/setup/adapters', () => ({
+  getSetupAdapter: () => ({
+    detectCapabilities: async () => [],
+    installCapabilities: async () => {},
+    onboarding: {},
+    gateway: {},
+    channel: {},
+  }),
+}))
+
 function renderDashboard() {
   return render(
     <MemoryRouter>
@@ -118,9 +128,8 @@ describe('DashboardPage', () => {
 
     renderDashboard()
 
-    expect(await screen.findByText('系统环境')).toBeInTheDocument()
-    expect(screen.getByText('20.11.1')).toBeInTheDocument()
-    expect(screen.getByText('10.8.1')).toBeInTheDocument()
+    expect(await screen.findByText('20.11.1')).toBeInTheDocument()
+    expect(screen.getByText('npm 10.8.1')).toBeInTheDocument()
     expect(screen.getAllByText('v2026.4.1').length).toBeGreaterThan(0)
     expect(screen.getByText('feishu')).toBeInTheDocument()
     expect(screen.getByText('slack')).toBeInTheDocument()
@@ -224,8 +233,7 @@ describe('DashboardPage', () => {
 
     renderDashboard()
 
-    expect(await screen.findByText('系统环境')).toBeInTheDocument()
-    expect(screen.getByText('20.11.1')).toBeInTheDocument()
+    expect(await screen.findByText('20.11.1')).toBeInTheDocument()
     expect(screen.getAllByLabelText('loading').length).toBeGreaterThan(0)
 
     resolveGateway?.({ running: true, port: 18789 })

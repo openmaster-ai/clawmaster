@@ -16,6 +16,7 @@ import { ActionBanner } from '@/shared/components/ActionBanner'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { InstallTask } from '@/shared/components/InstallTask'
 import { RecentLogsSheet } from '@/shared/components/RecentLogsSheet'
+import { CapabilitiesSection } from './CapabilitiesSection'
 import { isWindowsHostPlatform } from '@/shared/hostPlatform'
 import { CheckCircle2, AlertCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, FileText, Copy, FolderInput, Sparkles, Laptop, MonitorCog, Radio, MessageSquare, Database } from 'lucide-react'
 import type { SystemInfo } from '@/lib/types'
@@ -379,6 +380,8 @@ export default function Settings() {
           </div>
         </div>
       </section>
+
+      <CapabilitiesSection />
 
       {/* 系统 — desktop-only settings */}
       {isTauri() && (

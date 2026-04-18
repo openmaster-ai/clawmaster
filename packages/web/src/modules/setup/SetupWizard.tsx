@@ -36,6 +36,7 @@ import { changeLanguage } from '@/i18n'
 import { buildGatewayUrl } from '@/shared/gatewayUrl'
 import { isWindowsHostPlatform } from '@/shared/hostPlatform'
 import { getSetupAdapter } from './adapters'
+import { useCapabilityManager } from './useCapabilityManager'
 import {
   CAPABILITIES,
   PROVIDERS,
@@ -125,9 +126,6 @@ function ProviderBadge({ providerId }: { providerId: string }) {
 export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const { t, i18n } = useTranslation()
   const [phase, setPhase] = useState<SetupPhase>('detecting')
-  const [capabilities, setCapabilities] = useState<CapabilityStatus[]>([])
-  const [installProgress, setInstallProgress] = useState<Record<CapabilityId, InstallProgress>>({} as any)
-  const [error, setError] = useState<string | null>(null)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
   const [profileMode, setProfileMode] = useState<OpenclawProfileInput['kind']>('default')
   const [profileName, setProfileName] = useState('')
@@ -143,6 +141,13 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   )
 
   const adapter = getSetupAdapter()
+  const {
+    capabilities,
+    installProgress,
+    error,
+    detect: detectCapabilities,
+    install: installCapabilitiesFn,
+  } = useCapabilityManager(adapter)
 
   const loadSystemInfo = useCallback(async () => {
     const result = await platformResults.detectSystem()
@@ -158,24 +163,11 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   // ─── 检测阶段 ───
   const startDetection = useCallback(async () => {
     setPhase('detecting')
-    setError(null)
     const requiredIds = new Set(CAPABILITIES.filter((c) => c.required).map((c) => c.id))
-    const latest = new Map<CapabilityId, CapabilityStatus>()
     let advanced = false
 
     try {
-      const results = await adapter.detectCapabilities((status) => {
-        latest.set(status.id, status)
-        setCapabilities((prev) => {
-          const idx = prev.findIndex((c) => c.id === status.id)
-          if (idx >= 0) {
-            const next = [...prev]
-            next[idx] = status
-            return next
-          }
-          return [...prev, status]
-        })
-
+      const results = await detectCapabilities((_status, latest) => {
         if (advanced) return
         const requiredStatuses = Array.from(requiredIds)
           .map((id) => latest.get(id))
@@ -197,11 +189,10 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       if (!advanced) {
         setPhase(requiredAllInstalled ? 'done' : 'ready')
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+    } catch {
       setPhase('error')
     }
-  }, [adapter])
+  }, [detectCapabilities])
 
   // 首次挂载自动开始检测
   useEffect(() => {
@@ -230,29 +221,13 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
     setPhase('installing')
 
-    // 初始化进度状态
-    const initialProgress: Record<string, InstallProgress> = {}
-    for (const id of missing) {
-      initialProgress[id] = { id, status: 'waiting' }
-    }
-    setInstallProgress(initialProgress as Record<CapabilityId, InstallProgress>)
-
     try {
-      await adapter.installCapabilities(missing, (progress) => {
-        setInstallProgress((prev) => ({ ...prev, [progress.id]: progress }))
-        // 安装完成后更新 capabilities 状态
-        if (progress.status === 'done') {
-          setCapabilities((prev) =>
-            prev.map((c) => (c.id === progress.id ? { ...c, status: 'installed' } : c)),
-          )
-        }
-      })
+      await installCapabilitiesFn(missing)
       setPhase('done')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+    } catch {
       setPhase('error')
     }
-  }, [adapter, capabilities])
+  }, [installCapabilitiesFn, capabilities])
 
   // ─── 配置引导 ───
 
