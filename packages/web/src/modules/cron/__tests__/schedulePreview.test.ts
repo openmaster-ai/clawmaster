@@ -145,7 +145,7 @@ describe('schedulePreview', () => {
 
     expect(preview).toEqual({
       summary: 'Runs using cron expression 60 24 * * *',
-      detail: 'Minute and hour fields must stay within standard cron ranges.',
+      detail: 'One or more cron fields are outside the supported range.',
       tone: 'warning',
     })
   })
@@ -174,7 +174,7 @@ describe('schedulePreview', () => {
     )
 
     for (const preview of [rangePreview, listPreview, stepPreview]) {
-      expect(preview.detail).toBe('Minute and hour fields must stay within standard cron ranges.')
+      expect(preview.detail).toBe('One or more cron fields are outside the supported range.')
       expect(preview.tone).toBe('warning')
     }
   })
@@ -203,7 +203,7 @@ describe('schedulePreview', () => {
     )
 
     for (const preview of [dayPreview, monthPreview, weekdayPreview]) {
-      expect(preview.detail).toBe('Minute and hour fields must stay within standard cron ranges.')
+      expect(preview.detail).toBe('One or more cron fields are outside the supported range.')
       expect(preview.tone).toBe('warning')
     }
   })
@@ -378,6 +378,66 @@ describe('schedulePreview', () => {
     })
     expect(fractionalPreview).toEqual({
       summary: 'Runs once at 2026-02-29T09:00:00.123',
+      detail: 'Use a valid ISO date and time.',
+      tone: 'warning',
+    })
+  })
+
+  it('rejects impossible UTC offsets in one-shot timestamps', () => {
+    const badHourOffsetPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: '2026-05-01T09:00:00+24:00',
+      },
+      t,
+    )
+    const badMinuteOffsetPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: '2026-05-01T09:00:00+08:99',
+      },
+      t,
+    )
+
+    expect(badHourOffsetPreview).toEqual({
+      summary: 'Runs once at 2026-05-01T09:00:00+24:00',
+      detail: 'Use a valid ISO date and time.',
+      tone: 'warning',
+    })
+    expect(badMinuteOffsetPreview).toEqual({
+      summary: 'Runs once at 2026-05-01T09:00:00+08:99',
+      detail: 'Use a valid ISO date and time.',
+      tone: 'warning',
+    })
+  })
+
+  it('rejects non-ISO one-shot timestamps even when the browser can parse them', () => {
+    const rfcPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: 'Fri, 01 May 2026 09:00:00 GMT',
+      },
+      t,
+    )
+    const slashPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: '2026/05/01 09:00',
+      },
+      t,
+    )
+
+    expect(rfcPreview).toEqual({
+      summary: 'Runs once at Fri, 01 May 2026 09:00:00 GMT',
+      detail: 'Use a valid ISO date and time.',
+      tone: 'warning',
+    })
+    expect(slashPreview).toEqual({
+      summary: 'Runs once at 2026/05/01 09:00',
       detail: 'Use a valid ISO date and time.',
       tone: 'warning',
     })

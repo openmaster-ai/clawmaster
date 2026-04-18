@@ -349,7 +349,7 @@ describe('CronPage', () => {
     })
 
     expect(screen.getByText('Runs using cron expression 60 24 * * *')).toBeInTheDocument()
-    expect(screen.getByText('Minute and hour fields must stay within standard cron ranges.')).toBeInTheDocument()
+    expect(screen.getByText('One or more cron fields are outside the supported range.')).toBeInTheDocument()
   })
 
   it('warns for invalid cron ranges, lists, and steps', async () => {
@@ -363,7 +363,7 @@ describe('CronPage', () => {
     })
 
     expect(screen.getByText('Runs using cron expression */70 * * * *')).toBeInTheDocument()
-    expect(screen.getByText('Minute and hour fields must stay within standard cron ranges.')).toBeInTheDocument()
+    expect(screen.getByText('One or more cron fields are outside the supported range.')).toBeInTheDocument()
   })
 
   it('warns when day, month, or weekday cron fields are invalid', async () => {
@@ -377,7 +377,7 @@ describe('CronPage', () => {
     })
 
     expect(screen.getByText('Runs using cron expression 0 8 32 * *')).toBeInTheDocument()
-    expect(screen.getByText('Minute and hour fields must stay within standard cron ranges.')).toBeInTheDocument()
+    expect(screen.getByText('One or more cron fields are outside the supported range.')).toBeInTheDocument()
   })
 
   it('warns when a cron timezone is invalid', async () => {
@@ -510,6 +510,36 @@ describe('CronPage', () => {
     })
 
     expect(screen.getByText('Runs once at 2026-02-29T09:00:00+08:00')).toBeInTheDocument()
+    expect(screen.getByText('Use a valid ISO date and time.')).toBeInTheDocument()
+  })
+
+  it('warns for impossible UTC offsets in one-shot previews', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Schedule type'), { target: { value: 'at' } })
+    fireEvent.change(screen.getByLabelText('Run at'), {
+      target: { value: '2026-05-01T09:00:00+24:00' },
+    })
+
+    expect(screen.getByText('Runs once at 2026-05-01T09:00:00+24:00')).toBeInTheDocument()
+    expect(screen.getByText('Use a valid ISO date and time.')).toBeInTheDocument()
+  })
+
+  it('warns for non-ISO one-shot timestamps that the browser can parse', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Schedule type'), { target: { value: 'at' } })
+    fireEvent.change(screen.getByLabelText('Run at'), {
+      target: { value: 'Fri, 01 May 2026 09:00:00 GMT' },
+    })
+
+    expect(screen.getByText('Runs once at Fri, 01 May 2026 09:00:00 GMT')).toBeInTheDocument()
     expect(screen.getByText('Use a valid ISO date and time.')).toBeInTheDocument()
   })
 

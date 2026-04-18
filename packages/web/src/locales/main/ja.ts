@@ -1788,7 +1788,7 @@ export default {
   "cron.schedulePreviewAtRelativeHint": "相対指定の単発時刻は、ジョブ保存時に OpenClaw が解決します。",
   "cron.schedulePreviewAtUtcWarning": "タイムゾーンやオフセットがありません。オフセットなしの ISO 時刻は OpenClaw で UTC として保存されます。",
   "cron.schedulePreviewFieldCount": "Cron 式は空白区切りの 5 項目または 6 項目です。",
-  "cron.schedulePreviewInvalidCron": "分と時の項目は標準的な cron の範囲内で指定してください。",
+  "cron.schedulePreviewInvalidCron": "1 つ以上の cron 項目がサポート範囲外です。",
   "cron.schedulePreviewInvalidInterval": "15m、1h、1d のような期間を指定してください。",
   "cron.schedulePreviewInvalidAt": "有効な ISO 日時を指定してください。",
   "cron.schedulePreviewInvalidTimezone": "タイムゾーン {{value}} は無効です。有効な IANA タイムゾーン名を指定してください。",

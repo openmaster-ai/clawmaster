@@ -1788,7 +1788,7 @@ export default {
   "cron.schedulePreviewAtRelativeHint": "Relative one-shot values are resolved by OpenClaw when the job is saved.",
   "cron.schedulePreviewAtUtcWarning": "No timezone or offset was provided. OpenClaw saves offset-less ISO timestamps as UTC.",
   "cron.schedulePreviewFieldCount": "Cron expressions use five or six space-separated fields.",
-  "cron.schedulePreviewInvalidCron": "Minute and hour fields must stay within standard cron ranges.",
+  "cron.schedulePreviewInvalidCron": "One or more cron fields are outside the supported range.",
   "cron.schedulePreviewInvalidInterval": "Use a duration like 15m, 1h, or 1d.",
   "cron.schedulePreviewInvalidAt": "Use a valid ISO date and time.",
   "cron.schedulePreviewInvalidTimezone": "Timezone {{value}} is invalid. Use a valid IANA timezone name.",

@@ -1788,7 +1788,7 @@ export default {
   "cron.schedulePreviewAtRelativeHint": "相对时间的单次任务会在保存任务时由 OpenClaw 解析。",
   "cron.schedulePreviewAtUtcWarning": "未提供时区或偏移量。没有偏移量的 ISO 时间会被 OpenClaw 按 UTC 保存。",
   "cron.schedulePreviewFieldCount": "Cron 表达式需要 5 个或 6 个以空格分隔的字段。",
-  "cron.schedulePreviewInvalidCron": "分钟和小时字段必须落在标准 cron 的取值范围内。",
+  "cron.schedulePreviewInvalidCron": "一个或多个 cron 字段超出了支持的取值范围。",
   "cron.schedulePreviewInvalidInterval": "请输入类似 15m、1h、1d 这样的间隔。",
   "cron.schedulePreviewInvalidAt": "请输入有效的 ISO 日期时间。",
   "cron.schedulePreviewInvalidTimezone": "时区 {{value}} 无效。请输入有效的 IANA 时区名称。",

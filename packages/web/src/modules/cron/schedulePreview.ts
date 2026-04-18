@@ -81,6 +81,15 @@ function parseIsoDateTimeParts(value: string) {
   if (!match) return null
 
   const [, yearText, monthText, dayText, hourText, minuteText, secondText, fractionalText, zuluText, offsetText] = match
+  if (offsetText) {
+    const [, offsetHourText, offsetMinuteText] = offsetText.match(/^[+-](\d{2}):(\d{2})$/) ?? []
+    const offsetHour = Number(offsetHourText)
+    const offsetMinute = Number(offsetMinuteText)
+    if (!Number.isInteger(offsetHour) || !Number.isInteger(offsetMinute) || offsetHour > 23 || offsetMinute > 59) {
+      return null
+    }
+  }
+
   const year = Number(yearText)
   const month = Number(monthText)
   const day = Number(dayText)
@@ -277,8 +286,10 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
   const parsed = new Date(runAt)
   const timezone = draft.tz.trim()
   const naiveDateTime = !hasExplicitOffset(runAt) ? parseNaiveDateTime(runAt) : null
+  const hasIsoDateTimeShape = looksLikeIsoDateTime(runAt)
+  const parseableNonIsoDateTime = !hasIsoDateTimeShape && !Number.isNaN(parsed.getTime())
 
-  if ((looksLikeIsoDateTime(runAt) && !isoDateTime) || (Number.isNaN(parsed.getTime()) && !isoDateTime)) {
+  if ((hasIsoDateTimeShape && !isoDateTime) || parseableNonIsoDateTime || (Number.isNaN(parsed.getTime()) && !isoDateTime)) {
     return {
       summary: t('cron.schedulePreviewAt', { value: runAt }),
       detail: t('cron.schedulePreviewInvalidAt'),
