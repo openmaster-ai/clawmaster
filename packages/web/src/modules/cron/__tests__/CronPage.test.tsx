@@ -294,6 +294,7 @@ describe('CronPage', () => {
 
     expect(screen.getByText('Runs every weekday at 08:00')).toBeInTheDocument()
     expect(screen.getByText('Timezone: Asia/Shanghai')).toBeInTheDocument()
+    expect(screen.getByText('Runs every weekday at 08:00').closest('[aria-live="polite"]')).toHaveAttribute('aria-live', 'polite')
   })
 
   it('uses runtime-default wording for cron previews without an explicit timezone', async () => {

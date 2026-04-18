@@ -7,6 +7,11 @@ export interface SchedulePreview {
   tone: 'default' | 'warning'
 }
 
+const ISO_DATE_TIME_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?(?:([zZ])|([+-]\d{2}:\d{2}))?$/
+const OFFSET_PATTERN = /^[+-](\d{2}):(\d{2})$/
+const ISO_DATE_TIME_SHAPE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[zZ]|[+-]\d{2}:\d{2})?$/
+
 function isFixedNumber(value: string) {
   return /^\d+$/.test(value)
 }
@@ -75,14 +80,12 @@ function validateTimezone(timeZone: string) {
 }
 
 function parseIsoDateTimeParts(value: string) {
-  const match = value.match(
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?(?:([zZ])|([+-]\d{2}:\d{2}))?$/,
-  )
+  const match = value.match(ISO_DATE_TIME_PATTERN)
   if (!match) return null
 
   const [, yearText, monthText, dayText, hourText, minuteText, secondText, fractionalText, zuluText, offsetText] = match
   if (offsetText) {
-    const [, offsetHourText, offsetMinuteText] = offsetText.match(/^[+-](\d{2}):(\d{2})$/) ?? []
+    const [, offsetHourText, offsetMinuteText] = offsetText.match(OFFSET_PATTERN) ?? []
     const offsetHour = Number(offsetHourText)
     const offsetMinute = Number(offsetMinuteText)
     if (!Number.isInteger(offsetHour) || !Number.isInteger(offsetMinute) || offsetHour > 23 || offsetMinute > 59) {
@@ -118,7 +121,7 @@ function parseIsoDateTimeParts(value: string) {
 }
 
 function looksLikeIsoDateTime(value: string) {
-  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[zZ]|[+-]\d{2}:\d{2})?$/.test(value)
+  return ISO_DATE_TIME_SHAPE_PATTERN.test(value)
 }
 
 function parseNaiveDateTime(value: string) {
@@ -327,13 +330,15 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
   }
 
   const offsetlessUtcWarning = !timezone && naiveDateTime && !hasExplicitOffset(runAt)
+  const detail = timezone
+    ? t('cron.schedulePreviewTimezoneValue', { value: timezone })
+    : offsetlessUtcWarning
+      ? t('cron.schedulePreviewAtUtcWarning')
+      : t('cron.scheduleHelperHintAt')
+
   return {
     summary: t('cron.schedulePreviewAt', { value: displayValue }),
-    detail: timezone
-      ? t('cron.schedulePreviewTimezoneValue', { value: timezone })
-      : offsetlessUtcWarning
-        ? t('cron.schedulePreviewAtUtcWarning')
-      : t('cron.scheduleHelperHintAt'),
+    detail,
     tone: offsetlessUtcWarning ? 'warning' : 'default',
   }
 }

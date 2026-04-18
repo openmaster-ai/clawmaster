@@ -762,7 +762,10 @@ export default function CronPage() {
                 <p className="text-sm text-muted-foreground">{t('cron.scheduleHelperDescription')}</p>
               </div>
 
-              <div className="min-w-0 rounded-[1.25rem] border border-border/70 bg-background/80 px-4 py-3 lg:max-w-[18rem]">
+              <div
+                className="min-w-0 rounded-[1.25rem] border border-border/70 bg-background/80 px-4 py-3 lg:max-w-[18rem]"
+                aria-live="polite"
+              >
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                   {t('cron.schedulePreviewLabel')}
                 </p>
