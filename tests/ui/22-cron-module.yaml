@@ -1,0 +1,97 @@
+suite: cron-module
+name: Cron 模块
+description: |
+  验证 Cron 模块的核心管理流：
+  页面渲染、创建入口、网关依赖提示、运行记录查看、筛选与基本操作。
+
+preconditions:
+  - dev server 已启动（{BASE_URL} 可访问）
+  - 已进入主界面
+  - 本地环境已安装 OpenClaw
+
+viewport: { width: 1440, height: 900 }
+
+cases:
+  - id: cron-01
+    name: 页面基础渲染
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/cron"
+      - action: wait
+        duration: 3000ms
+      - action: screenshot
+        name: cron-page
+    assertions:
+      - 页面标题"Cron Jobs"或"定时任务"
+      - 显示顶部操作按钮"Refresh"
+      - 显示顶部操作按钮"Create Job"或"新建任务"
+      - 显示统计卡片：总任务数、调度器、网关
+      - 显示筛选器
+
+  - id: cron-02
+    name: 网关依赖提示
+    preconditions:
+      - 当网关未启动或 cron 接口不可用时
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/cron"
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: cron-gateway-warning
+    assertions:
+      - 若网关不可用，则出现"gateway"相关警告提示
+      - 页面仍可渲染，不出现白屏
+      - 显示跳转到网关页面的入口
+
+  - id: cron-03
+    name: 新建任务对话框
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/cron"
+      - action: wait
+        duration: 2000ms
+      - action: click
+        target: text("Create Job")
+      - action: wait
+        duration: 500ms
+      - action: screenshot
+        name: cron-create-dialog
+    assertions:
+      - 弹出对话框标题"Create Cron Job"
+      - 显示名称、说明、调度类型、消息等输入项
+      - 默认存在 Cron expression 输入框
+      - 显示 session 与 session key 配置项
+
+  - id: cron-04
+    name: 运行记录区域
+    preconditions:
+      - 存在至少一个 cron job
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/cron"
+      - action: wait
+        duration: 3000ms
+      - action: click
+        target: text("Run History")
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: cron-run-history
+    assertions:
+      - 显示运行记录标题
+      - 记录卡片包含状态、开始时间、结束时间、耗时
+      - 输出区域使用预格式文本展示
+
+  - id: cron-05
+    name: 筛选器可切换
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/cron"
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: cron-filter
+    assertions:
+      - 显示筛选选项"All jobs"、"Enabled"、"Disabled"
+      - 页面显示"X / Y"数量摘要

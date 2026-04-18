@@ -15,7 +15,7 @@ export const NAV_SECTIONS: NavSectionMeta[] = [
     id: 'live',
     labelKey: 'layout.section.live',
     descriptionKey: 'layout.section.liveDesc',
-    paths: ['/', '/gateway', '/observe', '/sessions'],
+    paths: ['/', '/gateway', '/cron', '/observe', '/sessions'],
   },
   {
     id: 'workspace',
@@ -40,6 +40,7 @@ export const NAV_SECTIONS: NavSectionMeta[] = [
 export const PAGE_META: Record<string, PageMeta> = {
   '/': { sectionId: 'live', descriptionKey: 'layout.page.dashboard' },
   '/gateway': { sectionId: 'live', descriptionKey: 'layout.page.gateway' },
+  '/cron': { sectionId: 'live', descriptionKey: 'layout.page.cron' },
   '/observe': { sectionId: 'live', descriptionKey: 'layout.page.observe' },
   '/sessions': { sectionId: 'live', descriptionKey: 'layout.page.sessions' },
   '/channels': { sectionId: 'workspace', descriptionKey: 'layout.page.channels' },

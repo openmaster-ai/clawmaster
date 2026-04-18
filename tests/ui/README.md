@@ -27,7 +27,8 @@
 | `19-cross-module-workflows.yaml` | 6 | 跨模块主流程（onboarding→模型→网关→首聊 / 通道→上下文日志 / 技能插件MCP→OpenClaw WebUI 生效） |
 | `20-command-palette.yaml` | 7 | 共享命令面板（快捷键打开/页面跳转/区块跳转/主题操作/空状态/移动端入口） |
 | `21-ocr-workflow.yaml` | 5 | OCR 主流程（页面引导/保存配置/样例解析/上传解析/OpenClaw WebUI 技能执行） |
-| **合计** | **207** | |
+| `22-cron-module.yaml` | 5 | Cron 模块（页面渲染/网关依赖/创建对话框/运行记录/筛选器） |
+| **合计** | **212** | |
 
 ## 用例格式
 
