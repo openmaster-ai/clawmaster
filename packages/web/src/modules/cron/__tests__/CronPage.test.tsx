@@ -324,6 +324,20 @@ describe('CronPage', () => {
     expect(screen.getByText('Timezone: runtime default')).toBeInTheDocument()
   })
 
+  it('falls back for stepped or list-based cron minute and hour fields', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Cron expression'), {
+      target: { value: '*/15 * * * *' },
+    })
+
+    expect(screen.getByText('Runs using cron expression */15 * * * *')).toBeInTheDocument()
+    expect(screen.getByText('Timezone: runtime default')).toBeInTheDocument()
+  })
+
   it('warns for out-of-range cron shortcut values', async () => {
     renderPage()
 
@@ -349,6 +363,20 @@ describe('CronPage', () => {
     })
 
     expect(screen.getByText('Runs using cron expression */70 * * * *')).toBeInTheDocument()
+    expect(screen.getByText('Minute and hour fields must stay within standard cron ranges.')).toBeInTheDocument()
+  })
+
+  it('warns when day, month, or weekday cron fields are invalid', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Cron expression'), {
+      target: { value: '0 8 32 * *' },
+    })
+
+    expect(screen.getByText('Runs using cron expression 0 8 32 * *')).toBeInTheDocument()
     expect(screen.getByText('Minute and hour fields must stay within standard cron ranges.')).toBeInTheDocument()
   })
 
@@ -467,6 +495,21 @@ describe('CronPage', () => {
     })
 
     expect(screen.getByText('Runs once at 2026-02-29T09:00:00')).toBeInTheDocument()
+    expect(screen.getByText('Use a valid ISO date and time.')).toBeInTheDocument()
+  })
+
+  it('warns for impossible one-shot timestamps with offsets or fractional seconds', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Schedule type'), { target: { value: 'at' } })
+    fireEvent.change(screen.getByLabelText('Run at'), {
+      target: { value: '2026-02-29T09:00:00+08:00' },
+    })
+
+    expect(screen.getByText('Runs once at 2026-02-29T09:00:00+08:00')).toBeInTheDocument()
     expect(screen.getByText('Use a valid ISO date and time.')).toBeInTheDocument()
   })
 

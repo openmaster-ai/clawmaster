@@ -80,6 +80,46 @@ describe('schedulePreview', () => {
     })
   })
 
+  it('falls back to the raw cron expression when minute or hour use steps or lists', () => {
+    const stepPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        cron: '*/15 * * * *',
+      },
+      t,
+    )
+    const listPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        cron: '0,30 * * * *',
+      },
+      t,
+    )
+    const hourStepPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        cron: '0 */2 * * *',
+      },
+      t,
+    )
+
+    expect(stepPreview).toEqual({
+      summary: 'Runs using cron expression */15 * * * *',
+      detail: 'Timezone: runtime default',
+      tone: 'default',
+    })
+    expect(listPreview).toEqual({
+      summary: 'Runs using cron expression 0,30 * * * *',
+      detail: 'Timezone: runtime default',
+      tone: 'default',
+    })
+    expect(hourStepPreview).toEqual({
+      summary: 'Runs using cron expression 0 */2 * * *',
+      detail: 'Timezone: runtime default',
+      tone: 'default',
+    })
+  })
+
   it('warns when a cron expression is incomplete', () => {
     const preview = buildSchedulePreview(
       {
@@ -134,6 +174,35 @@ describe('schedulePreview', () => {
     )
 
     for (const preview of [rangePreview, listPreview, stepPreview]) {
+      expect(preview.detail).toBe('Minute and hour fields must stay within standard cron ranges.')
+      expect(preview.tone).toBe('warning')
+    }
+  })
+
+  it('warns when day, month, or weekday cron fields are out of range', () => {
+    const dayPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        cron: '0 8 32 * *',
+      },
+      t,
+    )
+    const monthPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        cron: '0 8 * 13 *',
+      },
+      t,
+    )
+    const weekdayPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        cron: '0 8 * * 8',
+      },
+      t,
+    )
+
+    for (const preview of [dayPreview, monthPreview, weekdayPreview]) {
       expect(preview.detail).toBe('Minute and hour fields must stay within standard cron ranges.')
       expect(preview.tone).toBe('warning')
     }
@@ -279,6 +348,36 @@ describe('schedulePreview', () => {
 
     expect(preview).toEqual({
       summary: 'Runs once at 2026-02-29T09:00:00',
+      detail: 'Use a valid ISO date and time.',
+      tone: 'warning',
+    })
+  })
+
+  it('rejects impossible one-shot timestamps with offsets or fractional seconds', () => {
+    const offsetPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: '2026-02-29T09:00:00+08:00',
+      },
+      t,
+    )
+    const fractionalPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: '2026-02-29T09:00:00.123',
+      },
+      t,
+    )
+
+    expect(offsetPreview).toEqual({
+      summary: 'Runs once at 2026-02-29T09:00:00+08:00',
+      detail: 'Use a valid ISO date and time.',
+      tone: 'warning',
+    })
+    expect(fractionalPreview).toEqual({
+      summary: 'Runs once at 2026-02-29T09:00:00.123',
       detail: 'Use a valid ISO date and time.',
       tone: 'warning',
     })

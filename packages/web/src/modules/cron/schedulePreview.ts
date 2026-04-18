@@ -74,11 +74,13 @@ function validateTimezone(timeZone: string) {
   }
 }
 
-function parseNaiveDateTime(value: string) {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?$/)
+function parseIsoDateTimeParts(value: string) {
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?(?:([zZ])|([+-]\d{2}:\d{2}))?$/,
+  )
   if (!match) return null
 
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText, fractionalText] = match
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, fractionalText, zuluText, offsetText] = match
   const year = Number(yearText)
   const month = Number(monthText)
   const day = Number(dayText)
@@ -100,7 +102,20 @@ function parseNaiveDateTime(value: string) {
 
   const formattedSecond = secondText ? padTime(String(second)) : '00'
   const fractionalSuffix = secondText ? (fractionalText ?? '') : ''
-  return `${yearText}-${monthText}-${dayText} ${hourText}:${minuteText}:${formattedSecond}${fractionalSuffix}`
+  return {
+    hasOffset: Boolean(zuluText || offsetText),
+    display: `${yearText}-${monthText}-${dayText} ${hourText}:${minuteText}:${formattedSecond}${fractionalSuffix}`,
+  }
+}
+
+function looksLikeIsoDateTime(value: string) {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[zZ]|[+-]\d{2}:\d{2})?$/.test(value)
+}
+
+function parseNaiveDateTime(value: string) {
+  const parsed = parseIsoDateTimeParts(value)
+  if (!parsed || parsed.hasOffset) return null
+  return parsed.display
 }
 
 function formatDateInTimezone(value: Date, timeZone: string) {
@@ -168,8 +183,11 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
     const secondValid = second === '' || isCronFieldValid(second, 0, 59)
     const minuteValid = isCronFieldValid(minute, 0, 59)
     const hourValid = isCronFieldValid(hour, 0, 23)
+    const dayOfMonthValid = isCronFieldValid(dayOfMonth, 1, 31)
+    const monthValid = isCronFieldValid(month, 1, 12)
+    const dayOfWeekValid = isCronFieldValid(dayOfWeek, 0, 7)
 
-    if (!secondValid || !minuteValid || !hourValid) {
+    if (!secondValid || !minuteValid || !hourValid || !dayOfMonthValid || !monthValid || !dayOfWeekValid) {
       return {
         summary: t('cron.schedulePreviewCronFallback', { value: expression }),
         detail: t('cron.schedulePreviewInvalidCron'),
@@ -178,8 +196,10 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
     }
 
     const supportedShortcutSeconds = second === '' || second === '0'
+    const minuteFixed = isFixedNumber(minute)
+    const hourFixed = isFixedNumber(hour)
 
-    if (supportedShortcutSeconds && minuteValid && hourValid && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    if (supportedShortcutSeconds && minuteFixed && hourFixed && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
       return {
         summary: t('cron.schedulePreviewDailyAt', { time: formatClock(hour, minute) }),
         detail: timezone,
@@ -187,7 +207,7 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       }
     }
 
-    if (supportedShortcutSeconds && minuteValid && hourValid && dayOfMonth === '*' && month === '*' && dayOfWeek === '1-5') {
+    if (supportedShortcutSeconds && minuteFixed && hourFixed && dayOfMonth === '*' && month === '*' && dayOfWeek === '1-5') {
       return {
         summary: t('cron.schedulePreviewWeekdaysAt', { time: formatClock(hour, minute) }),
         detail: timezone,
@@ -195,7 +215,7 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       }
     }
 
-    if (supportedShortcutSeconds && minuteValid && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    if (supportedShortcutSeconds && minuteFixed && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
       return {
         summary: t('cron.schedulePreviewHourlyAt', { minute: padTime(minute) }),
         detail: timezone,
@@ -203,7 +223,7 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
       }
     }
 
-    if (supportedShortcutSeconds && minuteValid && hourValid && dayOfMonth === '1' && month === '*' && dayOfWeek === '*') {
+    if (supportedShortcutSeconds && minuteFixed && hourFixed && dayOfMonth === '1' && month === '*' && dayOfWeek === '*') {
       return {
         summary: t('cron.schedulePreviewMonthlyAt', { time: formatClock(hour, minute) }),
         detail: timezone,
@@ -253,13 +273,12 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
     }
   }
 
+  const isoDateTime = parseIsoDateTimeParts(runAt)
   const parsed = new Date(runAt)
   const timezone = draft.tz.trim()
-  const naiveDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/
-  const hasNaiveDateTime = naiveDateTimePattern.test(runAt)
   const naiveDateTime = !hasExplicitOffset(runAt) ? parseNaiveDateTime(runAt) : null
 
-  if ((hasNaiveDateTime && !naiveDateTime) || (!naiveDateTime && Number.isNaN(parsed.getTime()))) {
+  if ((looksLikeIsoDateTime(runAt) && !isoDateTime) || (Number.isNaN(parsed.getTime()) && !isoDateTime)) {
     return {
       summary: t('cron.schedulePreviewAt', { value: runAt }),
       detail: t('cron.schedulePreviewInvalidAt'),
