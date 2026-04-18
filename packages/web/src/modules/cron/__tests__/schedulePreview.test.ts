@@ -110,6 +110,35 @@ describe('schedulePreview', () => {
     })
   })
 
+  it('warns when cron ranges, lists, or steps exceed the supported field range', () => {
+    const rangePreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        cron: '0-61 8 * * *',
+      },
+      t,
+    )
+    const listPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        cron: '5,61 8 * * *',
+      },
+      t,
+    )
+    const stepPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        cron: '*/70 * * * *',
+      },
+      t,
+    )
+
+    for (const preview of [rangePreview, listPreview, stepPreview]) {
+      expect(preview.detail).toBe('Minute and hour fields must stay within standard cron ranges.')
+      expect(preview.tone).toBe('warning')
+    }
+  })
+
   it('warns when a cron timezone is invalid', () => {
     const preview = buildSchedulePreview(
       {
@@ -203,6 +232,37 @@ describe('schedulePreview', () => {
     expect(preview).toEqual({
       summary: 'Runs once at 2026-05-01 09:00:00',
       detail: 'Timezone Asia/Shanghaii is invalid. Use a valid IANA timezone name.',
+      tone: 'warning',
+    })
+  })
+
+  it('treats fractional-second naive one-shot timestamps as local wall-clock values', () => {
+    const timezonePreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: '2026-05-01T09:00:00.123',
+        tz: 'Asia/Shanghai',
+      },
+      t,
+    )
+    const utcPreview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: '2026-05-01T09:00:00.123',
+      },
+      t,
+    )
+
+    expect(timezonePreview).toEqual({
+      summary: 'Runs once at 2026-05-01 09:00:00.123',
+      detail: 'Timezone: Asia/Shanghai',
+      tone: 'default',
+    })
+    expect(utcPreview).toEqual({
+      summary: 'Runs once at 2026-05-01 09:00:00.123',
+      detail: 'No timezone or offset was provided. OpenClaw saves offset-less ISO timestamps as UTC.',
       tone: 'warning',
     })
   })

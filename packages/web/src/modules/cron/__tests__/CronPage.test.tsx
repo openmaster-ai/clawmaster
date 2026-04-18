@@ -338,6 +338,20 @@ describe('CronPage', () => {
     expect(screen.getByText('Minute and hour fields must stay within standard cron ranges.')).toBeInTheDocument()
   })
 
+  it('warns for invalid cron ranges, lists, and steps', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Cron expression'), {
+      target: { value: '*/70 * * * *' },
+    })
+
+    expect(screen.getByText('Runs using cron expression */70 * * * *')).toBeInTheDocument()
+    expect(screen.getByText('Minute and hour fields must stay within standard cron ranges.')).toBeInTheDocument()
+  })
+
   it('warns when a cron timezone is invalid', async () => {
     renderPage()
 
@@ -387,6 +401,24 @@ describe('CronPage', () => {
     })
 
     expect(screen.getByText('Runs once at 2026-05-01 09:00:00')).toBeInTheDocument()
+    expect(screen.getByText('Timezone: Asia/Shanghai')).toBeInTheDocument()
+  })
+
+  it('treats fractional-second naive one-shot timestamps as local wall-clock values', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Schedule type'), { target: { value: 'at' } })
+    fireEvent.change(screen.getByLabelText('Run at'), {
+      target: { value: '2026-05-01T09:00:00.123' },
+    })
+    fireEvent.change(screen.getByLabelText('Timezone'), {
+      target: { value: 'Asia/Shanghai' },
+    })
+
+    expect(screen.getByText('Runs once at 2026-05-01 09:00:00.123')).toBeInTheDocument()
     expect(screen.getByText('Timezone: Asia/Shanghai')).toBeInTheDocument()
   })
 

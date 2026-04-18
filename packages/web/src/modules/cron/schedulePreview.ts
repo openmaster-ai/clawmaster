@@ -11,14 +11,46 @@ function isFixedNumber(value: string) {
   return /^\d+$/.test(value)
 }
 
-function isInRange(value: string, min: number, max: number) {
-  if (!isFixedNumber(value)) return false
-  const numeric = Number(value)
-  return numeric >= min && numeric <= max
-}
-
 function isRelativeDuration(value: string) {
   return /^\+?\d+\s*(ms|s|m|h|d|w)$/i.test(value)
+}
+
+function isCronFieldValid(value: string, min: number, max: number) {
+  const segments = value.split(',')
+  const domainSize = max - min + 1
+
+  return segments.every((segment) => {
+    const trimmed = segment.trim()
+    if (!trimmed) return false
+
+    const stepParts = trimmed.split('/')
+    if (stepParts.length > 2) return false
+
+    const [base, step] = stepParts
+    if (!base) return false
+
+    if (step != null) {
+      if (!isFixedNumber(step)) return false
+      const stepValue = Number(step)
+      if (stepValue < 1 || stepValue > domainSize) return false
+    }
+
+    if (base === '*') return true
+
+    if (base.includes('-')) {
+      const rangeParts = base.split('-')
+      if (rangeParts.length !== 2) return false
+      const [rangeStart, rangeEnd] = rangeParts
+      if (!isFixedNumber(rangeStart) || !isFixedNumber(rangeEnd)) return false
+      const start = Number(rangeStart)
+      const end = Number(rangeEnd)
+      return start >= min && end <= max && start <= end
+    }
+
+    if (!isFixedNumber(base)) return false
+    const numeric = Number(base)
+    return numeric >= min && numeric <= max
+  })
 }
 
 function padTime(value: string) {
@@ -43,10 +75,10 @@ function validateTimezone(timeZone: string) {
 }
 
 function parseNaiveDateTime(value: string) {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/)
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?$/)
   if (!match) return null
 
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText] = match
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, fractionalText] = match
   const year = Number(yearText)
   const month = Number(monthText)
   const day = Number(dayText)
@@ -66,7 +98,9 @@ function parseNaiveDateTime(value: string) {
     return null
   }
 
-  return `${yearText}-${monthText}-${dayText} ${hourText}:${minuteText}:${padTime(String(second))}`
+  const formattedSecond = secondText ? padTime(String(second)) : '00'
+  const fractionalSuffix = secondText ? (fractionalText ?? '') : ''
+  return `${yearText}-${monthText}-${dayText} ${hourText}:${minuteText}:${formattedSecond}${fractionalSuffix}`
 }
 
 function formatDateInTimezone(value: Date, timeZone: string) {
@@ -131,15 +165,11 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
 
     const [second, minute, hour, dayOfMonth, month, dayOfWeek] =
       parts.length === 6 ? parts : ['', ...parts]
-    const secondValid = second === '' || isInRange(second, 0, 59)
-    const minuteValid = isInRange(minute, 0, 59)
-    const hourValid = isInRange(hour, 0, 23)
+    const secondValid = second === '' || isCronFieldValid(second, 0, 59)
+    const minuteValid = isCronFieldValid(minute, 0, 59)
+    const hourValid = isCronFieldValid(hour, 0, 23)
 
-    if (
-      (second && isFixedNumber(second) && !secondValid) ||
-      (isFixedNumber(minute) && !minuteValid) ||
-      (isFixedNumber(hour) && !hourValid)
-    ) {
+    if (!secondValid || !minuteValid || !hourValid) {
       return {
         summary: t('cron.schedulePreviewCronFallback', { value: expression }),
         detail: t('cron.schedulePreviewInvalidCron'),
