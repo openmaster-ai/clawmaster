@@ -13,7 +13,8 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const body = context.payload.pull_request.body ?? '';
+            const pr = context.payload.pull_request;
+            const body = pr.body ?? '';
 
             // "What" section must exist and have meaningful content after the heading
             const whatMatch = body.match(/##\s*What\s*\n([\s\S]*?)(?=\n##|$)/i);
@@ -28,10 +29,37 @@ jobs:
             }
 
             // Warn if the caution reminder line was not removed (means checklist was not read)
-            if (body.includes('does **not** contain: screenshots')) {
+            if (body.includes('does not **commit** screenshots')) {
               core.warning(
                 'The PR template reminder line under [!CAUTION] is still present. ' +
                 'Please confirm and delete it before requesting review.'
+              );
+            }
+
+            // Nudge: if the PR touches UI modules and the body has no embedded images,
+            // suggest adding screenshots. Warning only — never blocks merge.
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            const touchesUi = files.some((f) =>
+              /^packages\/web\/src\/modules\/.+\.tsx$/.test(f.filename)
+            );
+            const bodyWithoutComments = body.replace(/<!--[\s\S]*?-->/g, '');
+            const hasImage =
+              /!\[[^\]]*\]\([^)]+\)/.test(bodyWithoutComments) ||
+              /<img\b[^>]*>/i.test(bodyWithoutComments) ||
+              /https:\/\/(user-images\.githubusercontent\.com|github\.com\/[^\/]+\/[^\/]+\/assets)\//.test(
+                bodyWithoutComments
+              );
+            if (touchesUi && !hasImage) {
+              core.warning(
+                'This PR touches UI modules (packages/web/src/modules/**.tsx) but the ' +
+                'description has no embedded screenshots. Consider adding one under ' +
+                '## Screenshots — drag-drop into the GitHub editor, or paste markdown ' +
+                'from an image host.'
               );
             }
 

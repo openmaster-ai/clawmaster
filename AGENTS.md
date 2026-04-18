@@ -105,7 +105,10 @@ Add the key to **all three** runtime locale files before opening a PR:
 1. **Write a failing unit test first** that reproduces the bug.
 2. Fix the code until the test passes.
 3. Run `npm test` — all tests must be green.
-4. For UI bugs, verify the fix visually with dev-browser before opening a PR.
+4. For UI bugs, verify the fix visually with dev-browser before opening a PR, and
+   paste the resulting screenshots into the PR body's **## Screenshots** section
+   (drag-drop into the GitHub editor, or upload to an image host and paste the
+   markdown) so reviewers can see the fix.
 
 ```bash
 npm test                         # full suite
@@ -131,9 +134,11 @@ rejects PRs with an empty `## What` section.
 - [ ] `npm run build` passes (catches TypeScript errors)
 - [ ] New behavior has unit tests (happy path + at least one error path)
 - [ ] UI changes verified with `dev-browser` against `npm run dev:web`
+- [ ] UI changes include screenshots in the PR body's **## Screenshots** section
+  (drag-drop into the GitHub editor, or paste markdown from an image host)
 - [ ] All i18n keys added to `packages/web/src/locales/main/{zh,en,ja}.ts`
 - [ ] No `console.log` left in production paths
-- [ ] No screenshots, test logs, or generated files committed (`dist/`, `coverage/`)
+- [ ] No screenshots, test logs, or generated files **committed into the repo** (`dist/`, `coverage/`) — embedding screenshots in the PR body is fine and encouraged
 - [ ] PR is a **draft** if not yet ready for review
 
 > [!NOTE]

@@ -10,6 +10,12 @@
 
 <!-- How was it implemented? Note non-obvious design decisions. Skip if self-evident from the diff. -->
 
+## Screenshots
+
+<!-- UI changes: paste screenshots or a short recording here. Drag-drop into
+     the GitHub editor uploads to GitHub's CDN (preferred), or link an image
+     host. Skip this section if there are no user-visible changes. -->
+
 ## Related Issue
 
 <!-- Closes #NNN -->
@@ -42,4 +48,4 @@
 - [ ] All new i18n strings added to `packages/web/src/locales/main/{zh,en,ja}.ts`
 
 > [!CAUTION]
-> This PR does **not** contain: screenshots, screen recordings, test output logs, generated files (`dist/`, `coverage/`), or `console.log` debug calls. Delete this line when confirmed.
+> This PR does not **commit** screenshots, screen recordings, test output logs, generated files (`dist/`, `coverage/`), or `console.log` debug calls into the repo. Embedding screenshots in the PR body above is encouraged for UI changes. Delete this line when confirmed.
