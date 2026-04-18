@@ -107,6 +107,15 @@ export const SKILL_CATALOG: CatalogSkill[] = [
     sourceUrl: 'https://github.com/openmaster-ai/clawmaster',
   },
   {
+    slug: 'models-dev',
+    name: 'models.dev',
+    descriptionKey: 'skills.catalog.modelsDev.desc',
+    category: 'productivity',
+    skillKey: 'models-dev',
+    installSource: 'bundled',
+    sourceUrl: 'https://models.dev',
+  },
+  {
     slug: 'image-generate',
     name: 'Image Generate',
     descriptionKey: 'skills.catalog.imageGenerate.desc',

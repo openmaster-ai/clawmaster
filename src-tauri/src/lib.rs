@@ -4019,6 +4019,57 @@ mod tests {
 
         let _ = fs::remove_dir_all(temp_root);
     }
+
+    #[test]
+    fn install_models_dev_bundled_skill_falls_back_to_repo_skill_in_unbundled_dev_runs() {
+        let _guard = lock_test_env();
+        let previous_skill_root =
+            std::env::var_os("CLAWMASTER_BUNDLED_MODELS_DEV_SKILL_ROOT");
+        let previous_xdg_config_home = std::env::var_os("XDG_CONFIG_HOME");
+        let previous_home = std::env::var_os("HOME");
+        let temp_root = unique_test_dir("models-dev-skill-install");
+        fs::create_dir_all(&temp_root).expect("should create temp root");
+
+        std::env::remove_var("CLAWMASTER_BUNDLED_MODELS_DEV_SKILL_ROOT");
+        std::env::set_var("XDG_CONFIG_HOME", &temp_root);
+        std::env::set_var("HOME", &temp_root);
+
+        let install_result = install_bundled_skill("models-dev".to_string());
+
+        if let Some(value) = previous_skill_root {
+            std::env::set_var("CLAWMASTER_BUNDLED_MODELS_DEV_SKILL_ROOT", value);
+        } else {
+            std::env::remove_var("CLAWMASTER_BUNDLED_MODELS_DEV_SKILL_ROOT");
+        }
+        if let Some(value) = previous_xdg_config_home {
+            std::env::set_var("XDG_CONFIG_HOME", value);
+        } else {
+            std::env::remove_var("XDG_CONFIG_HOME");
+        }
+        if let Some(value) = previous_home {
+            std::env::set_var("HOME", value);
+        } else {
+            std::env::remove_var("HOME");
+        }
+
+        install_result.expect("repo bundled skill fallback should install successfully");
+
+        let installed_skill = temp_root
+            .join(".openclaw")
+            .join("workspace")
+            .join("skills")
+            .join("models-dev")
+            .join("SKILL.md");
+        assert!(installed_skill.exists());
+        assert!(
+            repo_bundled_skill_root("models-dev")
+                .expect("repo bundled skill root should resolve")
+                .join("SKILL.md")
+                .exists()
+        );
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
 }
 
 // Run command with --version-style arg; return stdout if success
@@ -4469,6 +4520,7 @@ fn resolve_plugin_root(plugin_id: String, candidates: Vec<String>) -> Result<Opt
 fn bundled_skill_dir_name(skill_id: &str) -> Option<&'static str> {
     match skill_id.trim().to_ascii_lowercase().as_str() {
         "ernie-image" => Some("ernie-image"),
+        "models-dev" => Some("models-dev"),
         "paddleocr-doc-parsing" => Some("paddleocr-doc-parsing"),
         _ => None,
     }
@@ -4477,6 +4529,7 @@ fn bundled_skill_dir_name(skill_id: &str) -> Option<&'static str> {
 fn bundled_skill_env_key(skill_id: &str) -> Option<&'static str> {
     match skill_id.trim().to_ascii_lowercase().as_str() {
         "ernie-image" => Some("CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT"),
+        "models-dev" => Some("CLAWMASTER_BUNDLED_MODELS_DEV_SKILL_ROOT"),
         "paddleocr-doc-parsing" => Some("CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT"),
         _ => None,
     }
@@ -6324,6 +6377,13 @@ pub fn run() {
                     std::env::set_var(
                         "CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT",
                         ernie_image_skill_root.to_string_lossy().to_string(),
+                    );
+                }
+                let models_dev_skill_root = resource_dir.join("bundled-skills").join("models-dev");
+                if models_dev_skill_root.join("SKILL.md").exists() {
+                    std::env::set_var(
+                        "CLAWMASTER_BUNDLED_MODELS_DEV_SKILL_ROOT",
+                        models_dev_skill_root.to_string_lossy().to_string(),
                     );
                 }
                 let paddleocr_skill_root =

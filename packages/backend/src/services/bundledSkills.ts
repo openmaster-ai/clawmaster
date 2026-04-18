@@ -7,6 +7,10 @@ const BUNDLED_SKILLS = {
     dirName: 'ernie-image',
     envKey: 'CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT',
   },
+  'models-dev': {
+    dirName: 'models-dev',
+    envKey: 'CLAWMASTER_BUNDLED_MODELS_DEV_SKILL_ROOT',
+  },
   'paddleocr-doc-parsing': {
     dirName: 'paddleocr-doc-parsing',
     envKey: 'CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT',

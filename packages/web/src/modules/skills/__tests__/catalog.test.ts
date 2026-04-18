@@ -43,7 +43,7 @@ describe('Skills catalog', () => {
     expect(FEATURED_SKILLS.find((skill) => skill.skillKey === 'find-skills')?.slug).toBe('find-skills-skill')
   })
 
-  it('includes both OCR and image bundled guides in the curated catalog', () => {
+  it('includes bundled skills in the curated catalog', () => {
     expect(SKILL_CATALOG.find((skill) => skill.slug === 'paddleocr-doc-parsing')).toMatchObject({
       slug: 'paddleocr-doc-parsing',
       name: 'PaddleOCR Doc Parsing',
@@ -53,6 +53,12 @@ describe('Skills catalog', () => {
     expect(SKILL_CATALOG.find((skill) => skill.slug === 'ernie-image')).toMatchObject({
       slug: 'ernie-image',
       name: 'ERNIE-Image Guide',
+      category: 'productivity',
+      installSource: 'bundled',
+    })
+    expect(SKILL_CATALOG.find((skill) => skill.slug === 'models-dev')).toMatchObject({
+      slug: 'models-dev',
+      name: 'models.dev',
       category: 'productivity',
       installSource: 'bundled',
     })

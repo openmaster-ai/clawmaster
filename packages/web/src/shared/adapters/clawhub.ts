@@ -8,7 +8,7 @@ import { webFetch, webFetchJson } from '@/shared/adapters/webHttp'
 
 /** Same order as packages/backend/src/skillsCli.ts SKILL_CLI_ROOTS */
 const SKILL_CLI_ROOTS = ['skills', 'clawbot', 'clawhub'] as const
-const BUNDLED_SKILL_SLUGS = new Set(['ernie-image', 'paddleocr-doc-parsing'])
+const BUNDLED_SKILL_SLUGS = new Set(['ernie-image', 'models-dev', 'paddleocr-doc-parsing'])
 const SKILLGUARD_SCAN_SCRIPT = String.raw`
 const fs = require('fs');
 const os = require('os');

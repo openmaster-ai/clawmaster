@@ -446,6 +446,7 @@ export default {
   "skills.catalog.memoryPro.desc": "层级记忆系统：memory → knowledge → skill，自动沉淀知识",
   "skills.catalog.skillnote.desc": "开源技能注册中心，跨平台分发和管理 SKILL.md 文件",
   "skills.catalog.ernieImage.desc": "面向 ERNIE-Image 的专项技能，帮助整理提示词并选择 size、seed、use_pe、steps、guidance scale 等百度绘图参数",
+  "skills.catalog.modelsDev.desc": "通用的 models.dev 查询技能，可缓存价格、上下文上限、能力标记和 provider 对比信息",
   "skills.catalog.imageGenerate.desc": "图像生成工作流技能，把目标整理成提示词和可执行的出图任务",
   "skills.catalog.clawvet.desc": "技能安全审查工具，扫描注入攻击和供应链风险",
   "skills.catalog.ontoskills.desc": "OWL 2 技能编译器，将技能转换为语义 Web 本体并验证",

@@ -47,7 +47,7 @@ type WorkspaceSkillMeta = {
   aliases: Set<string>
 }
 
-const BUNDLED_SKILL_SLUGS = new Set(['ernie-image'])
+const BUNDLED_SKILL_SLUGS = new Set(['ernie-image', 'models-dev', 'paddleocr-doc-parsing'])
 
 function normalizeSkillToken(value: string | undefined): string {
   return (value ?? '').trim().toLowerCase()

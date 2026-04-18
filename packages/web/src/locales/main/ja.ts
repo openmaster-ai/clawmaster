@@ -446,6 +446,7 @@ export default {
   "skills.catalog.memoryPro.desc": "階層記憶システム：memory → knowledge → skill、自動知識蒸留",
   "skills.catalog.skillnote.desc": "オープンソースのスキルレジストリ、SKILL.md ファイルのクロスプラットフォーム配布",
   "skills.catalog.ernieImage.desc": "ERNIE-Image 専用ガイド。プロンプト整理と、size・seed・use_pe・steps・guidance scale などの Baidu 画像引数選びを支援します。",
+  "skills.catalog.modelsDev.desc": "価格、コンテキスト上限、能力フラグ、Provider 比較をキャッシュ付きで引ける汎用 models.dev スキル",
   "skills.catalog.imageGenerate.desc": "目的をプロンプトと実行可能な画像生成タスクに落とし込むワークフロースキル",
   "skills.catalog.clawvet.desc": "スキルセキュリティ検査ツール、インジェクション攻撃とサプライチェーンリスクを検出",
   "skills.catalog.ontoskills.desc": "OWL 2 スキルコンパイラ、スキルをセマンティック Web オントロジーに変換・検証",
