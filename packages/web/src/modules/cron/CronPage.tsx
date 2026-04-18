@@ -21,7 +21,7 @@ import {
   type CronRun,
 } from '@/shared/adapters/cron'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
-import { buildSchedulePreview, preferredCronTimezone } from './schedulePreview'
+import { buildSchedulePreview } from './schedulePreview'
 
 type FilterMode = 'all' | 'enabled' | 'disabled'
 type EditorMode = 'create' | 'edit'
@@ -134,7 +134,6 @@ function getSchedulePresets(scheduleType: CronJobDraft['scheduleType'], t: TFunc
           cron: '0 8 * * 1-5',
           every: '',
           at: '',
-          tz: preferredCronTimezone(draft.tz),
         }),
       },
       {
@@ -146,7 +145,6 @@ function getSchedulePresets(scheduleType: CronJobDraft['scheduleType'], t: TFunc
           cron: '0 9 * * *',
           every: '',
           at: '',
-          tz: preferredCronTimezone(draft.tz),
         }),
       },
       {
@@ -158,7 +156,6 @@ function getSchedulePresets(scheduleType: CronJobDraft['scheduleType'], t: TFunc
           cron: '0 * * * *',
           every: '',
           at: '',
-          tz: preferredCronTimezone(draft.tz),
         }),
       },
       {
@@ -170,7 +167,6 @@ function getSchedulePresets(scheduleType: CronJobDraft['scheduleType'], t: TFunc
           cron: '0 9 1 * *',
           every: '',
           at: '',
-          tz: preferredCronTimezone(draft.tz),
         }),
       },
     ]

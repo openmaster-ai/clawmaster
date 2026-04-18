@@ -304,12 +304,31 @@ describe('CronPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Weekdays 08:00' }))
     expect(screen.getByLabelText('Cron expression')).toHaveValue('0 8 * * 1-5')
+    expect(screen.getByLabelText('Timezone')).toHaveValue('')
     expect(screen.getByText('Runs every weekday at 08:00')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Schedule type'), { target: { value: 'every' } })
     fireEvent.click(screen.getByRole('button', { name: 'Every 15m' }))
     expect(screen.getByLabelText('Interval')).toHaveValue('15m')
     expect(screen.getByText('Runs every 15m')).toBeInTheDocument()
+  })
+
+  it('renders one-shot previews using the selected timezone instead of the browser timezone', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    fireEvent.change(screen.getByLabelText('Schedule type'), { target: { value: 'at' } })
+    fireEvent.change(screen.getByLabelText('Run at'), {
+      target: { value: '2026-05-01T01:00:00Z' },
+    })
+    fireEvent.change(screen.getByLabelText('Timezone'), {
+      target: { value: 'Asia/Shanghai' },
+    })
+
+    expect(screen.getByText('Runs once at 2026-05-01 09:00:00')).toBeInTheDocument()
+    expect(screen.getByText('Timezone: Asia/Shanghai')).toBeInTheDocument()
   })
 
   it('truncates multi-line run-now output in the success banner', async () => {

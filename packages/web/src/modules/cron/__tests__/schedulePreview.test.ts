@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import i18n, { changeLanguage } from '@/i18n'
-import { buildSchedulePreview, preferredCronTimezone } from '../schedulePreview'
+import { buildSchedulePreview } from '../schedulePreview'
 
 const t = i18n.t.bind(i18n)
 
@@ -89,8 +89,38 @@ describe('schedulePreview', () => {
     expect(invalidPreview.detail).toBe('Use a duration like 15m, 1h, or 1d.')
   })
 
-  it('falls back to the local timezone helper when no timezone is set', () => {
-    expect(preferredCronTimezone('Asia/Tokyo')).toBe('Asia/Tokyo')
-    expect(preferredCronTimezone('')).not.toBe('')
+  it('renders one-shot previews in the selected timezone', () => {
+    const preview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: '2026-05-01T01:00:00Z',
+        tz: 'Asia/Shanghai',
+      },
+      t,
+    )
+
+    expect(preview).toEqual({
+      summary: 'Runs once at 2026-05-01 09:00:00',
+      detail: 'Timezone: Asia/Shanghai',
+      tone: 'default',
+    })
+  })
+
+  it('preserves explicit offsets in one-shot previews when no timezone is selected', () => {
+    const preview = buildSchedulePreview(
+      {
+        ...baseDraft(),
+        scheduleType: 'at',
+        at: '2026-05-01T09:00:00+08:00',
+      },
+      t,
+    )
+
+    expect(preview).toEqual({
+      summary: 'Runs once at 2026-05-01T09:00:00+08:00',
+      detail: 'Use an ISO timestamp with an offset, or pair a local time with a timezone.',
+      tone: 'default',
+    })
   })
 })

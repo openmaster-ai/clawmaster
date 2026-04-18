@@ -19,16 +19,35 @@ function formatClock(hour: string, minute: string) {
   return `${padTime(hour)}:${padTime(minute)}`
 }
 
-function resolveLocalTimezone() {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || ''
-  } catch {
-    return ''
-  }
+function hasExplicitOffset(value: string) {
+  return /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(value)
 }
 
-export function preferredCronTimezone(current: string) {
-  return current.trim() || resolveLocalTimezone()
+function formatDateInTimezone(value: Date, timeZone: string) {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+    const parts = Object.fromEntries(
+      formatter
+        .formatToParts(value)
+        .filter((part) => part.type !== 'literal')
+        .map((part) => [part.type, part.value]),
+    )
+    if (!parts.year || !parts.month || !parts.day || !parts.hour || !parts.minute || !parts.second) {
+      return null
+    }
+    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`
+  } catch {
+    return null
+  }
 }
 
 export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): SchedulePreview {
@@ -132,10 +151,14 @@ export function buildSchedulePreview(draft: CronJobDraft, t: TFunction): Schedul
     }
   }
 
+  const timezone = draft.tz.trim()
+  const formatted = timezone ? formatDateInTimezone(parsed, timezone) : null
+  const displayValue = formatted ?? (timezone || hasExplicitOffset(runAt) ? runAt : parsed.toLocaleString())
+
   return {
-    summary: t('cron.schedulePreviewAt', { value: parsed.toLocaleString() }),
-    detail: draft.tz.trim()
-      ? t('cron.schedulePreviewTimezoneValue', { value: draft.tz.trim() })
+    summary: t('cron.schedulePreviewAt', { value: displayValue }),
+    detail: timezone
+      ? t('cron.schedulePreviewTimezoneValue', { value: timezone })
       : t('cron.scheduleHelperHintAt'),
     tone: 'default',
   }
