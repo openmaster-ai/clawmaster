@@ -105,10 +105,8 @@ Add the key to **all three** runtime locale files before opening a PR:
 1. **Write a failing unit test first** that reproduces the bug.
 2. Fix the code until the test passes.
 3. Run `npm test` — all tests must be green.
-4. For UI bugs, verify the fix visually with dev-browser before opening a PR, and
-   paste the resulting screenshots into the PR body's **## Screenshots** section
-   (drag-drop into the GitHub editor, or upload to an image host and paste the
-   markdown) so reviewers can see the fix.
+4. For UI bugs, verify the fix visually with dev-browser before opening a PR
+   (see *Screenshots in the PR body* under **Submitting a PR** below).
 
 ```bash
 npm test                         # full suite
@@ -127,6 +125,14 @@ gh pr create --fill   # opens the PR template
 
 Fill in **## What**, **## Why**, and **## How** — the `pr-description-check` CI job
 rejects PRs with an empty `## What` section.
+
+**Screenshots in the PR body.** Any PR with user-visible changes — bug fixes,
+features, refactors that shift UI, anything under `packages/web/src/modules/` —
+must include screenshots (or a short recording) under **## Screenshots** as
+proof of the change. Drag-drop into the GitHub editor uploads to GitHub's CDN
+(preferred), or paste markdown from an image host. This is separate from the
+"no committed screenshot files" rule — embedding in the PR body is exactly
+where screenshots belong.
 
 **Checklist before marking ready for review:**
 
