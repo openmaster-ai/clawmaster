@@ -15,8 +15,21 @@ const root = resolve(__dirname, '..')
 const cliEntryPath = fileURLToPath(import.meta.url)
 const require = createRequire(import.meta.url)
 const pkg = require(resolve(root, 'package.json'))
-const serviceStateDir = join(os.homedir(), '.clawmaster', 'service')
-const serviceStateFile = join(serviceStateDir, 'service-state.json')
+
+function getCliHomeDir() {
+  const home = String(process.env.HOME ?? '').trim()
+  return home || os.homedir()
+}
+
+export function resolveServiceStatePaths(homeDir = getCliHomeDir()) {
+  const serviceStateDir = join(homeDir, '.clawmaster', 'service')
+  return {
+    serviceStateDir,
+    serviceStateFile: join(serviceStateDir, 'service-state.json'),
+  }
+}
+
+const { serviceStateDir, serviceStateFile } = resolveServiceStatePaths()
 
 function printHelp() {
   console.log(`

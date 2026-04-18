@@ -41,6 +41,15 @@ test('published package ships the backend ESM package marker', () => {
   )
 })
 
+test('resolveServiceStatePaths prefers HOME when provided', () => {
+  const result = cliModule.resolveServiceStatePaths('C:\\temp\\clawmaster-home')
+
+  assert.deepEqual(result, {
+    serviceStateDir: 'C:\\temp\\clawmaster-home\\.clawmaster\\service',
+    serviceStateFile: 'C:\\temp\\clawmaster-home\\.clawmaster\\service\\service-state.json',
+  })
+})
+
 test('resolveServiceUrls maps wildcard hosts to local probe urls', () => {
   assert.deepEqual(cliModule.resolveServiceUrls('0.0.0.0', '3001'), {
     bindHost: '0.0.0.0',
