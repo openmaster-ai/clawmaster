@@ -333,6 +333,7 @@
   "skills.catalog.okSkills.desc": "Curated AI coding agent skills and AGENTS.md playbooks, multi-tool compatible",
   "skills.catalog.memoryPro.desc": "Hierarchical memory system: memory to knowledge to skill, auto-distills knowledge",
   "skills.catalog.skillnote.desc": "Open-source skill registry for distributing and managing SKILL.md files across platforms",
+  "skills.catalog.contentDraft.desc": "Link-to-draft workflow for turning blogs, repos, and videos into XHS or WeChat markdown plus saved image artifacts",
   "skills.catalog.ernieImage.desc": "ERNIE-Image-specific guide for prompt shaping and choosing Baidu image arguments like size, seed, use_pe, steps, and guidance scale",
   "skills.catalog.imageGenerate.desc": "Guided image generation workflow skill for turning goals into prompts and runnable image tasks",
   "skills.catalog.clawvet.desc": "Skill security vetting tool that scans for injection attacks and supply chain risks",

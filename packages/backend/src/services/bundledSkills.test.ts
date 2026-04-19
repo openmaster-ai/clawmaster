@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -7,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { installBundledSkill, isBundledSkillSlug } from './bundledSkills.js'
 
 test('isBundledSkillSlug recognizes bundled skill ids case-insensitively', () => {
+  assert.equal(isBundledSkillSlug('content-draft'), true)
+  assert.equal(isBundledSkillSlug('CONTENT-DRAFT'), true)
   assert.equal(isBundledSkillSlug('ernie-image'), true)
   assert.equal(isBundledSkillSlug('ERNIE-IMAGE'), true)
   assert.equal(isBundledSkillSlug('paddleocr-doc-parsing'), true)
@@ -40,6 +43,41 @@ test('installBundledSkill copies the packaged skill into the active workspace', 
   assert.equal(
     fs.readFileSync(path.join(installDir, 'references', 'args.md'), 'utf8'),
     'size\n',
+  )
+})
+
+test('installBundledSkill copies the bundled Content Draft skill into the active workspace', () => {
+  const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-bundled-skill-src-'))
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-bundled-skill-data-'))
+  fs.mkdirSync(path.join(sourceRoot, 'references'), { recursive: true })
+  fs.mkdirSync(path.join(sourceRoot, 'scripts'), { recursive: true })
+  fs.writeFileSync(path.join(sourceRoot, 'SKILL.md'), '# Content Draft\n', 'utf8')
+  fs.writeFileSync(path.join(sourceRoot, '_meta.json'), '{"slug":"content-draft","version":"0.1.0"}\n', 'utf8')
+  fs.writeFileSync(path.join(sourceRoot, 'references', 'platforms.md'), 'xhs\n', 'utf8')
+  fs.writeFileSync(path.join(sourceRoot, 'scripts', 'save-draft-artifacts.mjs'), 'console.log("save")\n', 'utf8')
+
+  const result = installBundledSkill('content-draft', {
+    dataDir,
+    env: {
+      ...process.env,
+      CLAWMASTER_BUNDLED_CONTENT_DRAFT_SKILL_ROOT: sourceRoot,
+    },
+  })
+
+  const installDir = path.join(dataDir, 'workspace', 'skills', 'content-draft')
+  assert.equal(result.installDir, installDir)
+  assert.equal(fs.readFileSync(path.join(installDir, 'SKILL.md'), 'utf8'), '# Content Draft\n')
+  assert.equal(
+    fs.readFileSync(path.join(installDir, '_meta.json'), 'utf8'),
+    '{"slug":"content-draft","version":"0.1.0"}\n',
+  )
+  assert.equal(
+    fs.readFileSync(path.join(installDir, 'references', 'platforms.md'), 'utf8'),
+    'xhs\n',
+  )
+  assert.equal(
+    fs.readFileSync(path.join(installDir, 'scripts', 'save-draft-artifacts.mjs'), 'utf8'),
+    'console.log("save")\n',
   )
 })
 
@@ -88,4 +126,54 @@ test('bundled PaddleOCR skill explicitly instructs agents to read the skill and 
   assert.match(skillBody, /Do not call `paddleocr-doc-parsing` as if it were a tool name\./)
   assert.match(skillBody, /First use `read` to load this `SKILL\.md`\./)
   assert.match(skillBody, /Then use `exec` to run the bundled Node script with `node`\./)
+})
+
+test('bundled Content Draft helper saves markdown and image artifacts into the standard layout', () => {
+  const scriptPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../../bundled-skills/content-draft/scripts/save-draft-artifacts.mjs',
+  )
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-content-draft-'))
+  const outputRoot = path.join(tempRoot, 'out')
+  const markdownPath = path.join(tempRoot, 'draft.md')
+  const imagePath = path.join(tempRoot, 'cover.png')
+
+  fs.writeFileSync(markdownPath, '# Hello\n', 'utf8')
+  fs.writeFileSync(imagePath, 'png', 'utf8')
+
+  const raw = execFileSync(
+    process.execPath,
+    [
+      scriptPath,
+      '--platform', 'xhs',
+      '--title', 'Hello World',
+      '--run-id', 'demo-run',
+      '--root', outputRoot,
+      '--markdown-file', markdownPath,
+      '--image', imagePath,
+    ],
+    { encoding: 'utf8' },
+  )
+
+  const payload = JSON.parse(raw) as {
+    draftPath: string
+    manifestPath: string
+    imagesDir: string
+    imageFiles: string[]
+    platform: string
+    runId: string
+  }
+
+  assert.equal(payload.platform, 'xhs')
+  assert.equal(payload.runId, 'demo-run')
+  assert.deepEqual(payload.imageFiles, ['cover.png'])
+  assert.equal(fs.readFileSync(payload.draftPath, 'utf8'), '# Hello\n')
+  assert.equal(fs.readFileSync(path.join(payload.imagesDir, 'cover.png'), 'utf8'), 'png')
+
+  const manifest = JSON.parse(fs.readFileSync(payload.manifestPath, 'utf8')) as {
+    platform: string
+    imageFiles: string[]
+  }
+  assert.equal(manifest.platform, 'xhs')
+  assert.deepEqual(manifest.imageFiles, ['cover.png'])
 })

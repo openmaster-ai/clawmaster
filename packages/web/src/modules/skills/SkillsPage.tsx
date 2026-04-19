@@ -46,6 +46,7 @@ import {
 } from './catalog'
 
 const FEATURED_ICON_MAP: Record<string, LucideIcon> = {
+  'content-draft': FileText,
   'self-improving-agent': Brain,
   'find-skills-skill': Compass,
   'openclaw-memory-pro-system': Database,
@@ -53,6 +54,7 @@ const FEATURED_ICON_MAP: Record<string, LucideIcon> = {
 }
 
 const FEATURED_TONES: Record<string, string> = {
+  'content-draft': 'border-rose-500/20 bg-rose-500/5',
   'self-improving-agent': 'border-amber-500/20 bg-amber-500/5',
   'find-skills-skill': 'border-sky-500/20 bg-sky-500/5',
   'openclaw-memory-pro-system': 'border-emerald-500/20 bg-emerald-500/5',

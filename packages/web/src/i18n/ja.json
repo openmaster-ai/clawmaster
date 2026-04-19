@@ -333,6 +333,7 @@
   "skills.catalog.okSkills.desc": "厳選 AI コーディングスキルと AGENTS.md プレイブック、マルチツール対応",
   "skills.catalog.memoryPro.desc": "階層記憶システム：memory → knowledge → skill、自動知識蒸留",
   "skills.catalog.skillnote.desc": "オープンソースのスキルレジストリ、SKILL.md ファイルのクロスプラットフォーム配布",
+  "skills.catalog.contentDraft.desc": "ブログ、リポジトリ、動画のリンクを XHS / WeChat 向け原稿と画像アセットにまとめて保存する下書きワークフロー",
   "skills.catalog.ernieImage.desc": "ERNIE-Image 専用ガイド。プロンプト整理と、size・seed・use_pe・steps・guidance scale などの Baidu 画像引数選びを支援します。",
   "skills.catalog.imageGenerate.desc": "目的をプロンプトと実行可能な画像生成タスクに落とし込むワークフロースキル",
   "skills.catalog.clawvet.desc": "スキルセキュリティ検査ツール、インジェクション攻撃とサプライチェーンリスクを検出",

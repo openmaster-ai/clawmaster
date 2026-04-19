@@ -22,6 +22,11 @@ const bundledPlugins = [
 ]
 const bundledSkills = [
   {
+    id: 'content-draft',
+    sourceRoot: path.join(repoRoot, 'bundled-skills', 'content-draft'),
+    bundledRoot: path.join(resourcesRoot, 'bundled-skills', 'content-draft'),
+  },
+  {
     id: 'ernie-image',
     sourceRoot: path.join(repoRoot, 'bundled-skills', 'ernie-image'),
     bundledRoot: path.join(resourcesRoot, 'bundled-skills', 'ernie-image'),

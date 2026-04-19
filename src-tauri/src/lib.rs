@@ -2218,7 +2218,15 @@ fn parse_json_lenient(raw: &str) -> Option<serde_json::Value> {
 
 fn managed_memory_runtime_data_root(
     profile_selection: &OpenclawProfileSelection,
-) -> (String, String, Option<String>, String, String, String, String) {
+) -> (
+    String,
+    String,
+    Option<String>,
+    String,
+    String,
+    String,
+    String,
+) {
     let host_platform = normalize_local_data_target_platform(std::env::consts::OS).to_string();
     let host_arch = normalize_arch_label(std::env::consts::ARCH);
 
@@ -2320,7 +2328,11 @@ fn normalize_comparable_plugin_path(value: &str) -> String {
         }
     }
     normalized = normalized.replace('\\', "/");
-    let lower_leaf = normalized.rsplit('/').next().unwrap_or("").to_ascii_lowercase();
+    let lower_leaf = normalized
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
     if lower_leaf == "openclaw.plugin.json"
         || lower_leaf == "index.js"
         || lower_leaf == "index.mjs"
@@ -2545,8 +2557,14 @@ fn row_is_table_separator(cells: &[String]) -> bool {
         return true;
     }
     inner.iter().all(|cell| {
-        let trimmed = cell.chars().filter(|ch| !ch.is_whitespace()).collect::<String>();
-        trimmed.is_empty() || trimmed.chars().all(|ch| matches!(ch, '-' | '─' | '═' | '┼' | '+'))
+        let trimmed = cell
+            .chars()
+            .filter(|ch| !ch.is_whitespace())
+            .collect::<String>();
+        trimmed.is_empty()
+            || trimmed
+                .chars()
+                .all(|ch| matches!(ch, '-' | '─' | '═' | '┼' | '+'))
     })
 }
 
@@ -2561,10 +2579,22 @@ fn find_openclaw_plugins_table_layout(
         if cells.len() < 6 {
             continue;
         }
-        let c1 = cells.get(1).map(|value| value.to_ascii_lowercase()).unwrap_or_default();
-        let c2 = cells.get(2).map(|value| value.to_ascii_lowercase()).unwrap_or_default();
-        let c3 = cells.get(3).map(|value| value.to_ascii_lowercase()).unwrap_or_default();
-        let c4 = cells.get(4).map(|value| value.to_ascii_lowercase()).unwrap_or_default();
+        let c1 = cells
+            .get(1)
+            .map(|value| value.to_ascii_lowercase())
+            .unwrap_or_default();
+        let c2 = cells
+            .get(2)
+            .map(|value| value.to_ascii_lowercase())
+            .unwrap_or_default();
+        let c3 = cells
+            .get(3)
+            .map(|value| value.to_ascii_lowercase())
+            .unwrap_or_default();
+        let c4 = cells
+            .get(4)
+            .map(|value| value.to_ascii_lowercase())
+            .unwrap_or_default();
         if c1 != "name" || c2 != "id" {
             continue;
         }
@@ -2638,7 +2668,10 @@ fn parse_openclaw_plugin_rows_plain_text(raw: &str) -> Vec<serde_json::Value> {
             continue;
         }
         let cells = split_pipe_row_preserving_cells(line);
-        if cells.len() <= status_index || cells.len() <= version_index || row_is_table_separator(&cells) {
+        if cells.len() <= status_index
+            || cells.len() <= version_index
+            || row_is_table_separator(&cells)
+        {
             continue;
         }
         if let Some(source_index) = source_index {
@@ -2826,7 +2859,9 @@ fn get_installed_managed_memory_plugin_status() -> InstalledManagedMemoryPluginS
 
 fn is_managed_memory_bridge_plugin_ready(plugin_status: Option<&str>) -> bool {
     matches!(
-        plugin_status.map(|value| value.trim().to_ascii_lowercase()).as_deref(),
+        plugin_status
+            .map(|value| value.trim().to_ascii_lowercase())
+            .as_deref(),
         Some("loaded") | Some("enabled") | Some("active") | Some("ready") | Some("ok")
     )
 }
@@ -2836,7 +2871,9 @@ fn managed_memory_bridge_plugin_issue(
     plugin_status: Option<&str>,
 ) -> Option<String> {
     if !installed {
-        return Some(format!("{MEMORY_BRIDGE_PLUGIN_ID} is not installed in OpenClaw yet."));
+        return Some(format!(
+            "{MEMORY_BRIDGE_PLUGIN_ID} is not installed in OpenClaw yet."
+        ));
     }
     if is_managed_memory_bridge_plugin_ready(plugin_status) {
         return None;
@@ -2888,7 +2925,10 @@ fn normalize_managed_memory_bridge_entry(
         return None;
     }
     Some(ManagedMemoryBridgeEntryPayload {
-        enabled: value.get("enabled").and_then(|item| item.as_bool()).unwrap_or(true),
+        enabled: value
+            .get("enabled")
+            .and_then(|item| item.as_bool())
+            .unwrap_or(true),
         config: ManagedMemoryBridgeConfigPayload {
             data_root,
             engine: config
@@ -2986,7 +3026,10 @@ fn resolve_managed_memory_bridge_runtime_paths(
     if store.runtime_target == "wsl2" {
         return (
             host_plugin_path_string.clone(),
-            host_plugin_path.join("openclaw.plugin.json").to_string_lossy().to_string(),
+            host_plugin_path
+                .join("openclaw.plugin.json")
+                .to_string_lossy()
+                .to_string(),
             windows_path_to_wsl_path(&host_plugin_path_string),
             windows_path_to_wsl_path(&store.data_root),
             host_plugin_path,
@@ -2995,7 +3038,10 @@ fn resolve_managed_memory_bridge_runtime_paths(
 
     (
         host_plugin_path_string.clone(),
-        host_plugin_path.join("openclaw.plugin.json").to_string_lossy().to_string(),
+        host_plugin_path
+            .join("openclaw.plugin.json")
+            .to_string_lossy()
+            .to_string(),
         Some(host_plugin_path_string),
         Some(store.data_root),
         host_plugin_path,
@@ -3020,7 +3066,9 @@ fn write_config_json(config_root: &serde_json::Value) -> Result<(), String> {
 fn get_current_managed_memory_bridge_state(
     config_root: &serde_json::Value,
 ) -> (Option<String>, Option<ManagedMemoryBridgeEntryPayload>) {
-    let plugins = config_root.get("plugins").and_then(|value| value.as_object());
+    let plugins = config_root
+        .get("plugins")
+        .and_then(|value| value.as_object());
     let slots = plugins
         .and_then(|value| value.get("slots"))
         .and_then(|value| value.as_object());
@@ -3053,11 +3101,15 @@ fn set_managed_memory_bridge_config(
         .get_mut("plugins")
         .and_then(|value| value.as_object_mut())
         .expect("plugins object");
-    if !plugins.contains_key("slots") || !plugins.get("slots").is_some_and(|value| value.is_object()) {
+    if !plugins.contains_key("slots")
+        || !plugins.get("slots").is_some_and(|value| value.is_object())
+    {
         plugins.insert("slots".to_string(), serde_json::json!({}));
     }
     if !plugins.contains_key("entries")
-        || !plugins.get("entries").is_some_and(|value| value.is_object())
+        || !plugins
+            .get("entries")
+            .is_some_and(|value| value.is_object())
     {
         plugins.insert("entries".to_string(), serde_json::json!({}));
     }
@@ -3082,8 +3134,13 @@ fn set_managed_memory_bridge_config(
 fn get_managed_memory_bridge_status_payload() -> Result<ManagedMemoryBridgeStatusPayload, String> {
     let store = build_managed_memory_store_context();
     let desired_entry = build_managed_memory_bridge_entry();
-    let (plugin_path, plugin_manifest_path, runtime_plugin_path, runtime_data_root, _host_plugin_path) =
-        resolve_managed_memory_bridge_runtime_paths();
+    let (
+        plugin_path,
+        plugin_manifest_path,
+        runtime_plugin_path,
+        runtime_data_root,
+        _host_plugin_path,
+    ) = resolve_managed_memory_bridge_runtime_paths();
     let plugin_path_exists = PathBuf::from(&plugin_manifest_path).exists();
     let config_root = read_config_json_or_empty();
     let (current_slot_value, current_entry) = get_current_managed_memory_bridge_state(&config_root);
@@ -3095,7 +3152,10 @@ fn get_managed_memory_bridge_status_payload() -> Result<ManagedMemoryBridgeStatu
 
     let mut issues = Vec::new();
     if !plugin_path_exists {
-        issues.push("The managed PowerMem plugin files are missing from the ClawMaster package.".to_string());
+        issues.push(
+            "The managed PowerMem plugin files are missing from the ClawMaster package."
+                .to_string(),
+        );
     }
     if let Some(plugin_issue) = managed_memory_bridge_plugin_issue(
         installed_status.installed,
@@ -3135,7 +3195,8 @@ fn get_managed_memory_bridge_status_payload() -> Result<ManagedMemoryBridgeStatu
         && managed_memory_bridge_entries_match(current_entry.as_ref(), &desired_entry)
     {
         "ready".to_string()
-    } else if current_entry.is_some() || current_slot_value.is_some() || installed_status.installed {
+    } else if current_entry.is_some() || current_slot_value.is_some() || installed_status.installed
+    {
         "drifted".to_string()
     } else {
         "missing".to_string()
@@ -3220,8 +3281,12 @@ fn sync_managed_memory_bridge() -> Result<ManagedMemoryBridgeStatusPayload, Stri
         runtime_data_root,
         _host_plugin_path,
     ) = resolve_managed_memory_bridge_runtime_paths();
-    let runtime_plugin_path = runtime_plugin_path
-        .ok_or_else(|| cmd_err_d("MANAGED_MEMORY_BRIDGE_UNSUPPORTED", "Runtime plugin path is unavailable"))?;
+    let runtime_plugin_path = runtime_plugin_path.ok_or_else(|| {
+        cmd_err_d(
+            "MANAGED_MEMORY_BRIDGE_UNSUPPORTED",
+            "Runtime plugin path is unavailable",
+        )
+    })?;
     if !PathBuf::from(&plugin_manifest_path).exists() {
         return Err(cmd_err("MANAGED_MEMORY_BRIDGE_PLUGIN_MISSING"));
     }
@@ -3414,17 +3479,13 @@ fn reindex_openclaw_memory() -> Result<OpenclawMemoryReindexPayload, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_paddleocr_request_json,
-        parse_http_status_output,
-        get_config_path_candidates_for, get_openclaw_profile_args, get_openclaw_profile_data_dir,
-        install_bundled_skill,
-        local_data_profile_key, managed_memory_windows_wsl_data_root,
-        normalize_clawmaster_runtime_selection, normalize_local_data_target_platform,
-        parse_json_lenient, parse_node_major, parse_wsl_list_verbose,
-        repo_bundled_skill_root, repo_plugin_root, resolve_plugin_root,
-        resolve_config_path_from_candidates, resolve_local_data_status,
-        resolve_selected_wsl_distro_from_list, supports_seekdb_embedded,
-        OpenclawProfileSelection,
+        build_paddleocr_request_json, get_config_path_candidates_for, get_openclaw_profile_args,
+        get_openclaw_profile_data_dir, install_bundled_skill, local_data_profile_key,
+        managed_memory_windows_wsl_data_root, normalize_clawmaster_runtime_selection,
+        normalize_local_data_target_platform, parse_http_status_output, parse_json_lenient,
+        parse_node_major, parse_wsl_list_verbose, repo_bundled_skill_root, repo_plugin_root,
+        resolve_config_path_from_candidates, resolve_local_data_status, resolve_plugin_root,
+        resolve_selected_wsl_distro_from_list, supports_seekdb_embedded, OpenclawProfileSelection,
     };
     use std::fs;
     use std::path::Path;
@@ -3451,8 +3512,6 @@ mod tests {
             std::process::id()
         ))
     }
-
-
 
     #[test]
     fn paddleocr_request_json_keeps_large_base64_payload_in_json_body() {
@@ -3861,7 +3920,10 @@ mod tests {
 
         assert_eq!(payload.mode, "unsupported");
         assert_eq!(payload.reason.as_deref(), Some("command_unavailable"));
-        assert_eq!(payload.detail.as_deref(), Some("error: unknown command 'memory'"));
+        assert_eq!(
+            payload.detail.as_deref(),
+            Some("error: unknown command 'memory'")
+        );
     }
 
     #[test]
@@ -3871,10 +3933,7 @@ mod tests {
             name: Some("team-a".to_string()),
         };
 
-        let root = managed_memory_windows_wsl_data_root(
-            &selection,
-            Path::new(r"C:\Users\alice"),
-        );
+        let root = managed_memory_windows_wsl_data_root(&selection, Path::new(r"C:\Users\alice"));
 
         assert_eq!(root, "/mnt/c/Users/alice/.clawmaster/data/named/team-a");
     }
@@ -3887,8 +3946,8 @@ mod tests {
         let resolved = resolve_plugin_root("openclaw-ernie-image".to_string(), vec![])
             .expect("resolve_plugin_root should succeed");
 
-        let expected = repo_plugin_root("openclaw-ernie-image")
-            .expect("repo plugin root should resolve");
+        let expected =
+            repo_plugin_root("openclaw-ernie-image").expect("repo plugin root should resolve");
         assert_eq!(resolved, Some(expected.to_string_lossy().to_string()));
         assert!(expected.join("openclaw.plugin.json").exists());
     }
@@ -3914,8 +3973,8 @@ mod tests {
         )
         .expect("resolve_plugin_root should succeed");
 
-        let expected = repo_plugin_root("openclaw-ernie-image")
-            .expect("repo plugin root should resolve");
+        let expected =
+            repo_plugin_root("openclaw-ernie-image").expect("repo plugin root should resolve");
         assert_eq!(resolved, Some(expected.to_string_lossy().to_string()));
     }
 
@@ -3959,12 +4018,58 @@ mod tests {
             .join("ernie-image")
             .join("SKILL.md");
         assert!(installed_skill.exists());
-        assert!(
-            repo_bundled_skill_root("ernie-image")
-                .expect("repo bundled skill root should resolve")
-                .join("SKILL.md")
-                .exists()
-        );
+        assert!(repo_bundled_skill_root("ernie-image")
+            .expect("repo bundled skill root should resolve")
+            .join("SKILL.md")
+            .exists());
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn install_content_draft_bundled_skill_falls_back_to_repo_skill_in_unbundled_dev_runs() {
+        let _guard = lock_test_env();
+        let previous_skill_root = std::env::var_os("CLAWMASTER_BUNDLED_CONTENT_DRAFT_SKILL_ROOT");
+        let previous_xdg_config_home = std::env::var_os("XDG_CONFIG_HOME");
+        let previous_home = std::env::var_os("HOME");
+        let temp_root = unique_test_dir("content-draft-skill-install");
+        fs::create_dir_all(&temp_root).expect("should create temp root");
+
+        std::env::remove_var("CLAWMASTER_BUNDLED_CONTENT_DRAFT_SKILL_ROOT");
+        std::env::set_var("XDG_CONFIG_HOME", &temp_root);
+        std::env::set_var("HOME", &temp_root);
+
+        let install_result = install_bundled_skill("content-draft".to_string());
+
+        if let Some(value) = previous_skill_root {
+            std::env::set_var("CLAWMASTER_BUNDLED_CONTENT_DRAFT_SKILL_ROOT", value);
+        } else {
+            std::env::remove_var("CLAWMASTER_BUNDLED_CONTENT_DRAFT_SKILL_ROOT");
+        }
+        if let Some(value) = previous_xdg_config_home {
+            std::env::set_var("XDG_CONFIG_HOME", value);
+        } else {
+            std::env::remove_var("XDG_CONFIG_HOME");
+        }
+        if let Some(value) = previous_home {
+            std::env::set_var("HOME", value);
+        } else {
+            std::env::remove_var("HOME");
+        }
+
+        install_result.expect("repo bundled skill fallback should install successfully");
+
+        let installed_skill = temp_root
+            .join(".openclaw")
+            .join("workspace")
+            .join("skills")
+            .join("content-draft")
+            .join("SKILL.md");
+        assert!(installed_skill.exists());
+        assert!(repo_bundled_skill_root("content-draft")
+            .expect("repo bundled skill root should resolve")
+            .join("SKILL.md")
+            .exists());
 
         let _ = fs::remove_dir_all(temp_root);
     }
@@ -4010,12 +4115,10 @@ mod tests {
             .join("paddleocr-doc-parsing")
             .join("SKILL.md");
         assert!(installed_skill.exists());
-        assert!(
-            repo_bundled_skill_root("paddleocr-doc-parsing")
-                .expect("repo bundled skill root should resolve")
-                .join("SKILL.md")
-                .exists()
-        );
+        assert!(repo_bundled_skill_root("paddleocr-doc-parsing")
+            .expect("repo bundled skill root should resolve")
+            .join("SKILL.md")
+            .exists());
 
         let _ = fs::remove_dir_all(temp_root);
     }
@@ -4429,7 +4532,10 @@ fn plugin_manifest_matches_id(plugin_root: &Path, plugin_id: &str) -> bool {
 }
 
 #[tauri::command]
-fn resolve_plugin_root(plugin_id: String, candidates: Vec<String>) -> Result<Option<String>, String> {
+fn resolve_plugin_root(
+    plugin_id: String,
+    candidates: Vec<String>,
+) -> Result<Option<String>, String> {
     let trimmed_plugin_id = plugin_id.trim();
     let env_key = match trimmed_plugin_id {
         "memory-clawmaster-powermem" => "CLAWMASTER_PACKAGED_MEMORY_PLUGIN_ROOT",
@@ -4468,6 +4574,7 @@ fn resolve_plugin_root(plugin_id: String, candidates: Vec<String>) -> Result<Opt
 
 fn bundled_skill_dir_name(skill_id: &str) -> Option<&'static str> {
     match skill_id.trim().to_ascii_lowercase().as_str() {
+        "content-draft" => Some("content-draft"),
         "ernie-image" => Some("ernie-image"),
         "paddleocr-doc-parsing" => Some("paddleocr-doc-parsing"),
         _ => None,
@@ -4476,6 +4583,7 @@ fn bundled_skill_dir_name(skill_id: &str) -> Option<&'static str> {
 
 fn bundled_skill_env_key(skill_id: &str) -> Option<&'static str> {
     match skill_id.trim().to_ascii_lowercase().as_str() {
+        "content-draft" => Some("CLAWMASTER_BUNDLED_CONTENT_DRAFT_SKILL_ROOT"),
         "ernie-image" => Some("CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT"),
         "paddleocr-doc-parsing" => Some("CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT"),
         _ => None,
@@ -4511,7 +4619,10 @@ fn install_bundled_skill(skill_id: String) -> Result<(), String> {
     if !source_path.join("SKILL.md").exists() {
         return Err(cmd_err_d(
             "SKILL_SOURCE_INVALID",
-            format!("Bundled skill source missing SKILL.md: {}", source_path.display()),
+            format!(
+                "Bundled skill source missing SKILL.md: {}",
+                source_path.display()
+            ),
         ));
     }
 
@@ -5978,9 +6089,10 @@ fn fetch_provider_catalog(payload: FetchProviderCatalogPayload) -> Result<String
     let mut curl_config = String::from("silent\nshow-error\nlocation\nmax-time = 10\n");
     for (key, value) in payload.headers {
         curl_config.push_str("header = ");
-        curl_config.push_str(&serde_json::to_string(&format!("{key}: {value}")).map_err(|e| {
-            cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e)
-        })?);
+        curl_config.push_str(
+            &serde_json::to_string(&format!("{key}: {value}"))
+                .map_err(|e| cmd_err_d("SYSTEM_CMD_CONFIG_ENCODE_FAILED", e))?,
+        );
         curl_config.push('\n');
     }
     curl_config.push_str("write-out = \"\\n__CLAWMASTER_STATUS__:%{http_code}\"\n");
@@ -6071,7 +6183,10 @@ fn build_paddleocr_request_json(
     }
 
     let option_pairs = [
-        ("useDocOrientationClassify", payload.use_doc_orientation_classify),
+        (
+            "useDocOrientationClassify",
+            payload.use_doc_orientation_classify,
+        ),
         ("useDocUnwarping", payload.use_doc_unwarping),
         ("useLayoutDetection", payload.use_layout_detection),
         ("useChartRecognition", payload.use_chart_recognition),
@@ -6110,7 +6225,10 @@ fn parse_http_status_output(raw: &str) -> (String, u16) {
     }
 }
 
-fn paddleocr_request(payload: &PaddleOcrPayload, fallback_file: &str) -> Result<serde_json::Value, String> {
+fn paddleocr_request(
+    payload: &PaddleOcrPayload,
+    fallback_file: &str,
+) -> Result<serde_json::Value, String> {
     let endpoint = paddleocr_endpoint(&payload.endpoint)?;
     let access_token = paddleocr_required_text(&payload.access_token, "PADDLEOCR_TOKEN_REQUIRED")?;
     let body_json = build_paddleocr_request_json(payload, fallback_file, false)?;
@@ -6126,12 +6244,14 @@ fn paddleocr_request(payload: &PaddleOcrPayload, fallback_file: &str) -> Result<
     fs::write(&body_path, body_json.as_bytes())
         .map_err(|e| cmd_err_d("SYSTEM_CMD_TEMPFILE_WRITE_FAILED", e))?;
 
-    let mut curl_config = String::from("silent
+    let mut curl_config = String::from(
+        "silent
 show-error
 location
 max-time = 60
 request = POST
-");
+",
+    );
     for header in [
         format!("Authorization: token {}", access_token),
         "Content-Type: application/json".to_string(),
@@ -6313,21 +6433,34 @@ pub fn run() {
                     );
                 }
                 let ernie_image_plugin_root = resource_dir.join("openclaw-ernie-image");
-                if ernie_image_plugin_root.join("openclaw.plugin.json").exists() {
+                if ernie_image_plugin_root
+                    .join("openclaw.plugin.json")
+                    .exists()
+                {
                     std::env::set_var(
                         "CLAWMASTER_PACKAGED_ERNIE_IMAGE_PLUGIN_ROOT",
                         ernie_image_plugin_root.to_string_lossy().to_string(),
                     );
                 }
-                let ernie_image_skill_root = resource_dir.join("bundled-skills").join("ernie-image");
+                let content_draft_skill_root =
+                    resource_dir.join("bundled-skills").join("content-draft");
+                if content_draft_skill_root.join("SKILL.md").exists() {
+                    std::env::set_var(
+                        "CLAWMASTER_BUNDLED_CONTENT_DRAFT_SKILL_ROOT",
+                        content_draft_skill_root.to_string_lossy().to_string(),
+                    );
+                }
+                let ernie_image_skill_root =
+                    resource_dir.join("bundled-skills").join("ernie-image");
                 if ernie_image_skill_root.join("SKILL.md").exists() {
                     std::env::set_var(
                         "CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT",
                         ernie_image_skill_root.to_string_lossy().to_string(),
                     );
                 }
-                let paddleocr_skill_root =
-                    resource_dir.join("bundled-skills").join("paddleocr-doc-parsing");
+                let paddleocr_skill_root = resource_dir
+                    .join("bundled-skills")
+                    .join("paddleocr-doc-parsing");
                 if paddleocr_skill_root.join("SKILL.md").exists() {
                     std::env::set_var(
                         "CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT",

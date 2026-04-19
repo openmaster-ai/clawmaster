@@ -445,6 +445,7 @@ export default {
   "skills.catalog.okSkills.desc": "精选 AI 编程智能体技能与 AGENTS.md 工作手册，多工具兼容",
   "skills.catalog.memoryPro.desc": "层级记忆系统：memory → knowledge → skill，自动沉淀知识",
   "skills.catalog.skillnote.desc": "开源技能注册中心，跨平台分发和管理 SKILL.md 文件",
+  "skills.catalog.contentDraft.desc": "链接转内容草稿工作流，把博客、仓库和视频整理成小红书或公众号文案，并保存图片素材",
   "skills.catalog.ernieImage.desc": "面向 ERNIE-Image 的专项技能，帮助整理提示词并选择 size、seed、use_pe、steps、guidance scale 等百度绘图参数",
   "skills.catalog.imageGenerate.desc": "图像生成工作流技能，把目标整理成提示词和可执行的出图任务",
   "skills.catalog.clawvet.desc": "技能安全审查工具，扫描注入攻击和供应链风险",

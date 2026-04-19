@@ -3,6 +3,10 @@ import path from 'node:path'
 import { getOpenclawDataDir } from '../paths.js'
 
 const BUNDLED_SKILLS = {
+  'content-draft': {
+    dirName: 'content-draft',
+    envKey: 'CLAWMASTER_BUNDLED_CONTENT_DRAFT_SKILL_ROOT',
+  },
   'ernie-image': {
     dirName: 'ernie-image',
     envKey: 'CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT',

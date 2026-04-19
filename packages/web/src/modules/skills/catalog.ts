@@ -97,6 +97,16 @@ export const SKILL_CATALOG: CatalogSkill[] = [
     sourceUrl: 'https://github.com/luna-prompts/skillnote',
   },
   {
+    slug: 'content-draft',
+    name: 'Content Draft',
+    descriptionKey: 'skills.catalog.contentDraft.desc',
+    category: 'productivity',
+    skillKey: 'content-draft',
+    installSource: 'bundled',
+    featured: true,
+    sourceUrl: 'https://github.com/openmaster-ai/clawmaster/issues/52',
+  },
+  {
     slug: 'ernie-image',
     name: 'ERNIE-Image Guide',
     descriptionKey: 'skills.catalog.ernieImage.desc',
