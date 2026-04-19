@@ -1,0 +1,106 @@
+suite: content-drafts-module
+name: 内容草稿模块
+description: |
+  验证 Content Draft 产物查看页的核心体验：
+  列表加载、平台过滤、变体切换，以及 Markdown / 图片预览。
+
+preconditions:
+  - dev server 已启动（{BASE_URL} 可访问）
+  - 已进入主界面
+  - 已通过 bundled-skills/content-draft/scripts/save-draft-artifacts.mjs 写入至少 2 个内容草稿变体
+  - 至少包含 2 个不同平台的草稿变体（例如微信与小红书）
+
+viewport: { width: 1440, height: 1100 }
+
+cases:
+  - id: content-drafts-01
+    name: 页面头部、指标卡与默认预览
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/content-drafts"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: content-drafts-home
+    assertions:
+      - 页面标题显示"内容草稿"
+      - 副标题说明可直接查看已保存的 Markdown 草稿和生成图片
+      - 顶部显示 3 张指标卡：变体数、平台数、最近保存
+      - 左侧显示草稿库，右侧默认打开最新草稿变体预览
+      - 右侧预览区包含草稿路径、图片数、来源链接、Markdown 草稿、生成图片
+
+  - id: content-drafts-02
+    name: 平台 pill 过滤
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/content-drafts"
+      - action: wait
+        duration: 1200ms
+      - action: click
+        target: text("微信")
+      - action: wait
+        duration: 500ms
+      - action: screenshot
+        name: content-drafts-filter-wechat
+    assertions:
+      - 平台 pill 包含"全部平台"及至少 2 个实际平台
+      - 选中的平台 pill 高亮
+      - 草稿库只保留对应平台的变体卡片
+      - 右侧预览自动切换到过滤后的首个变体
+
+  - id: content-drafts-03
+    name: 按标题或运行 ID 搜索
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/content-drafts"
+      - action: wait
+        duration: 1200ms
+      - action: fill
+        target: input[placeholder*="搜索"]
+        value: "cm-e2e"
+      - action: wait
+        duration: 500ms
+      - action: screenshot
+        name: content-drafts-search
+    assertions:
+      - 搜索框可按标题、运行 ID、平台、slug 或来源链接过滤
+      - 输入关键字后，草稿库仅保留匹配项
+      - 搜索不会破坏右侧当前预览结构
+
+  - id: content-drafts-04
+    name: 切换草稿变体时同步更新 Markdown 与图片
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/content-drafts"
+      - action: wait
+        duration: 1200ms
+      - action: click
+        target: 草稿库中的另一个平台变体
+      - action: wait
+        duration: 1000ms
+      - action: screenshot
+        name: content-drafts-switch-variant
+    assertions:
+      - 点击不同变体后，右侧标题、平台标签和来源链接同步更新
+      - Markdown 文本框内容切换为新变体的草稿内容
+      - 生成图片区块切换为新变体的图片列表
+      - 不显示上一个变体残留的图片或来源链接
+
+  - id: content-drafts-05
+    name: 无匹配结果空状态
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/content-drafts"
+      - action: wait
+        duration: 1000ms
+      - action: fill
+        target: input[placeholder*="搜索"]
+        value: "totally-unmatched-draft-keyword"
+      - action: wait
+        duration: 500ms
+      - action: screenshot
+        name: content-drafts-empty
+    assertions:
+      - 左侧草稿库显示"没有匹配的草稿"
+      - 空状态说明引导用户先运行 Content Draft 技能
+      - 页面不崩溃，搜索框仍可继续输入或清空
