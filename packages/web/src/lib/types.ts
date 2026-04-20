@@ -284,6 +284,10 @@ export interface ContentDraftImageFile {
   bytes: number[]
 }
 
+export interface ContentDraftDeleteResult {
+  removedPath: string
+}
+
 /** `openclaw memory status --json` (backend may still set exitCode !== 0) */
 export interface OpenclawMemoryStatusPayload {
   exitCode: number

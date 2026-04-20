@@ -39,6 +39,10 @@ export interface ContentDraftImageFile {
   bytes: number[]
 }
 
+export interface ContentDraftDeleteResult {
+  removedPath: string
+}
+
 type ContentDraftManifest = Partial<{
   runId: string
   platform: string
@@ -69,9 +73,23 @@ function buildDefaultContentDraftRoot(): string {
   return pathModule.join(os.homedir(), '.openclaw', 'workspace', 'content-drafts')
 }
 
+function envConfiguredContentDraftRoots(): string[] {
+  const pathModule = runtimePathModule()
+  const workspaceDir = process.env.OPENCLAW_WORKSPACE_DIR?.trim()
+  const dataDir = process.env.OPENCLAW_DATA_DIR?.trim()
+  const configPath = process.env.OPENCLAW_CONFIG_PATH?.trim()
+
+  return [
+    ...(workspaceDir ? [pathModule.join(resolveRuntimePathSync(workspaceDir), 'content-drafts')] : []),
+    ...(dataDir ? [pathModule.join(resolveRuntimePathSync(dataDir), 'workspace', 'content-drafts')] : []),
+    ...(configPath ? [pathModule.join(pathModule.dirname(resolveRuntimePathSync(configPath)), 'workspace', 'content-drafts')] : []),
+  ]
+}
+
 export function getContentDraftRootPaths(): string[] {
   const pathModule = runtimePathModule()
   const roots = [
+    ...envConfiguredContentDraftRoots(),
     pathModule.join(getOpenclawDataDir(), 'workspace', 'content-drafts'),
     buildDefaultContentDraftRoot(),
   ]
@@ -252,4 +270,47 @@ export function readContentDraftImageFile(pathInput: string): ContentDraftImageF
     mimeType: inferMimeType(resolved),
     bytes: [...content],
   }
+}
+
+export function deleteContentDraftVariant(pathInput: string): ContentDraftDeleteResult {
+  const manifestPath = resolveAllowedContentDraftPath(pathInput)
+  const pathModule = runtimePathModule()
+  const platformDir = pathModule.dirname(manifestPath)
+  const runDir = pathModule.dirname(platformDir)
+  const runtimeSelection = getClawmasterRuntimeSelection()
+
+  if (pathModule.basename(manifestPath) !== 'manifest.json') {
+    throw new Error(`Expected a content draft manifest path, got: ${manifestPath}`)
+  }
+  if (!getContentDraftRootPaths().some((rootPath) => isWithinRoot(rootPath, platformDir))) {
+    throw new Error(`Path is outside content draft roots: ${platformDir}`)
+  }
+
+  if (process.platform === 'win32' && shouldUseWslRuntime(runtimeSelection)) {
+    const distro = requireSelectedWslDistroSync(runtimeSelection)
+    const removeResult = execWslCommandSync(
+      distro,
+      'bash',
+      ['-lc', `rm -rf ${shellEscapePosixArg(platformDir)}`],
+    )
+    if (removeResult.code !== 0) {
+      throw new Error(removeResult.stderr.trim() || removeResult.stdout.trim() || 'Failed to delete content draft variant')
+    }
+
+    const pruneRunResult = execWslCommandSync(
+      distro,
+      'bash',
+      ['-lc', `[ -d ${shellEscapePosixArg(runDir)} ] && rmdir ${shellEscapePosixArg(runDir)} 2>/dev/null || true`],
+    )
+    if (pruneRunResult.code !== 0) {
+      throw new Error(pruneRunResult.stderr.trim() || pruneRunResult.stdout.trim() || 'Failed to prune empty content draft run directory')
+    }
+  } else {
+    fs.rmSync(platformDir, { recursive: true, force: true })
+    if (fs.existsSync(runDir) && fs.statSync(runDir).isDirectory() && fs.readdirSync(runDir).length === 0) {
+      fs.rmSync(runDir, { recursive: true, force: true })
+    }
+  }
+
+  return { removedPath: platformDir }
 }

@@ -136,6 +136,22 @@ function collectImagePaths(args) {
   return files
 }
 
+function allocateUniqueImageFileName(imagesDir, sourcePath, usedNames) {
+  const parsed = path.parse(path.basename(sourcePath))
+  const baseName = parsed.name || 'image'
+  const extension = parsed.ext || ''
+  let candidate = `${baseName}${extension}`
+  let index = 2
+
+  while (usedNames.has(candidate) || fs.existsSync(path.join(imagesDir, candidate))) {
+    candidate = `${baseName}-${index}${extension}`
+    index += 1
+  }
+
+  usedNames.add(candidate)
+  return candidate
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2))
   const platform = String(args.platform || '').trim().toLowerCase()
@@ -158,8 +174,9 @@ function main() {
   fs.writeFileSync(draftPath, markdown.endsWith('\n') ? markdown : `${markdown}\n`, 'utf8')
 
   const imageFiles = []
+  const usedImageFileNames = new Set()
   for (const sourcePath of collectImagePaths(args)) {
-    const fileName = path.basename(sourcePath)
+    const fileName = allocateUniqueImageFileName(imagesDir, sourcePath, usedImageFileNames)
     fs.copyFileSync(sourcePath, path.join(imagesDir, fileName))
     imageFiles.push(fileName)
   }

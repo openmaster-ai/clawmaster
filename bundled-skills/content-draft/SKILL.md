@@ -1,6 +1,6 @@
 ---
 name: content-draft
-description: Multi-platform content draft workflow for turning a source URL into platform-ready markdown and image artifacts. Use when the user wants to turn a blog post, website, GitHub repo, or YouTube video into a Xiaohongshu or WeChat draft with recalled preferences, structured extraction, and saved output files. This skill is guidance plus a bundled Node helper: read this file, use memory_recall and the relevant MCPs for extraction, then use the save-draft-artifacts script to persist the finished draft and images into the standard content-drafts output directory.
+description: Primary repo-owned workflow for turning an article URL or source file into WeChat or Xiaohongshu draft markdown plus saved illustration artifacts. Use this when the user wants OpenClaw itself to deep dive a source and generate a draft with illustrations, especially for prompts like "generate a wechat post with illustrations". Prefer this instead of `baoyu-article-illustrator`, `baoyu-post-to-wechat`, or `baoyu-image-gen` when the goal is draft generation rather than publishing.
 metadata:
   openclaw:
     requires:
@@ -12,28 +12,34 @@ metadata:
 
 Use this skill when the user wants a source link converted into a polished draft for a target platform, with output saved as reusable artifacts instead of only replying inline.
 
-## Critical Rule
+## Critical Rules
 
-This skill is guidance plus one persistence helper.
+This skill is the default repo-owned workflow for URL to draft generation.
 
 - Do not call `content-draft` like a tool name.
 - First read this `SKILL.md`.
+- For URL or local-file analysis, use the bundled Node extractor in this skill. Do not delegate this workflow to `baoyu-*` skills or any Bun-based helper.
+- When the user asks for a WeChat or XHS draft with illustrations, prefer this skill over `baoyu-article-illustrator` and `baoyu-post-to-wechat`.
+- For illustrations, prefer the repo-owned `ernie-image` skill when it is available. Otherwise use the runtime's built-in image generation capability. Do not route illustration work through `baoyu-*` skills for this workflow.
 - Use `memory_recall` before drafting when tone, audience, or visual style preferences matter.
-- Use the relevant MCP path for extraction instead of inventing a scraper.
-- When the draft is ready, run the bundled Node script to save the markdown and generated images.
+- This skill generates drafts and saved artifacts. Do not publish anything unless the user explicitly asks for publishing.
 
 ## Default Workflow
 
 1. Confirm the source and target platform.
-   Start with `xhs` or `wechat` for V1.
-2. Extract the source material.
-   Use a fetch-style markdown path for generic pages and a DeepWiki summary path for GitHub repos.
+   Start with `xhs` or `wechat`.
+2. Extract the source material with the bundled Node script.
+   This keeps URL analysis inside the repo-owned `content-draft` skill instead of drifting into external skill stacks.
 3. Recall stable user preferences.
    Ask `memory_recall` for tone, structure, visual style, and past corrections.
 4. Produce one platform draft at a time.
    Save concise, publish-ready markdown, not raw notes.
-5. Save artifacts with the bundled script.
+5. Generate the illustration set with `ernie-image` when available, or the runtime's built-in image generation capability otherwise.
+   Follow the platform image counts in `references/platforms.md`.
+6. Save the markdown and generated images with the bundled script.
    Standard output layout is documented in `references/output-contract.md`.
+7. Build the final chat response from the saved draft and saved images.
+   Return the helper output so the user gets the full draft body plus embedded images in the same reply.
 
 ## Platform Scope
 
@@ -46,14 +52,38 @@ Read `references/platforms.md` when you need the detailed formatting rules.
 
 ## Extraction Guidance
 
-- Generic URL or blog post:
-  Use the configured fetch-style MCP or equivalent markdown extraction path.
-- GitHub repo:
-  Use DeepWiki for a structured repo summary before adapting it.
-- YouTube:
-  Use a transcript-first extraction path.
+When the user provides a generic article URL, docs page, or local source file, use this bundled Node extractor first:
 
-Do not write custom scraping code inside the conversation unless the user explicitly asks for that engineering work.
+```bash
+node ${SKILL_DIR}/scripts/fetch-url-markdown.mjs "https://example.com/post" --output /tmp/source.md
+```
+
+Useful options:
+
+- `--json`
+  Print structured metadata plus the extracted markdown.
+- `--output <file>`
+  Save the extracted markdown for later drafting steps.
+- `--max-chars <n>`
+  Cap very long sources before handing them to the model.
+
+Supported inputs:
+
+- `https://...` and `http://...`
+- `file:///abs/path/to/file.html`
+- local file paths such as `/tmp/source.html` or `notes.md`
+
+For GitHub repos or YouTube inputs, prefer the best runtime-native extraction path that is already available, but keep the rest of the workflow inside this skill. Do not write custom scraping code inside the conversation unless the user explicitly asks for that engineering work.
+
+## Illustration Guidance
+
+- `xhs`
+  Usually prepare 1 cover plus 2-6 supporting cards.
+- `wechat`
+  Usually prepare 1 hero image plus optional inline support visuals.
+- Prefer `ernie-image` for repo-owned illustration generation when it is available in the workspace.
+- Generate images only after the article structure is stable.
+- Save every generated image path so it can be persisted with the bundled save helper.
 
 ## Saving Artifacts
 
@@ -71,6 +101,21 @@ node ${SKILL_DIR}/scripts/save-draft-artifacts.mjs \
 The script prints a JSON summary with the saved paths.
 
 Use `--run-id <id>` when saving multiple platform variants for the same source so they land under the same run directory.
+
+## Building The Final Chat Reply
+
+After saving artifacts, build the final reply markdown from the saved draft plus saved images:
+
+```bash
+node ${SKILL_DIR}/scripts/build-chat-response.mjs \
+  --markdown-file /abs/path/to/draft.md \
+  --images-dir /abs/path/to/images
+```
+
+This helper rewrites local draft image references into OpenClaw-compatible `MEDIA:` blocks in the markdown flow and appends any leftover generated images under a `Generated Images` section.
+
+Return this helper output to the user as the final assistant reply unless the user explicitly asked for a shorter summary instead.
+Do not summarize, paraphrase, or describe the helper output after generating it. Emit the helper output itself as the final assistant message so the draft body and `MEDIA:` images survive intact in chat.
 
 ## Arguments
 
@@ -108,11 +153,15 @@ When the user wants the actual draft:
 
 1. State which extraction path you used.
 2. State which preference memories influenced the result.
-3. Return the final draft content or a concise summary of it.
-4. Save the artifacts with the script and report the saved location.
+3. State which illustration path you used.
+4. Save the artifacts with the bundled script and report the saved location.
+5. Run `build-chat-response.mjs` against the saved draft and saved images.
+6. Return the full final draft body plus the generated images in the same reply.
+7. Only replace the full draft with a concise summary when the user explicitly asks for summary-only output.
 
 When the user only wants planning:
 
 1. Provide the platform choice.
 2. Provide the extraction plan.
-3. Provide the expected artifact layout.
+3. Provide the illustration plan.
+4. Provide the expected artifact layout.

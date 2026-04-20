@@ -4,7 +4,7 @@ import type { ClawModule } from '@/types/module'
 export default {
   id: 'content-drafts',
   nameKey: 'nav.contentDrafts',
-  icon: 'files',
+  icon: 'file-text',
   navOrder: 41,
   route: {
     path: '/content-drafts',

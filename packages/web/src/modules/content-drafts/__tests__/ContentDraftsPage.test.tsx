@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { changeLanguage } from '@/i18n'
 import ContentDraftsPage from '../ContentDraftsPage'
@@ -7,11 +7,13 @@ import ContentDraftsPage from '../ContentDraftsPage'
 const mockGetContentDraftVariantsResult = vi.fn()
 const mockReadContentDraftTextResult = vi.fn()
 const mockReadContentDraftImageResult = vi.fn()
+const mockDeleteContentDraftVariantResult = vi.fn()
 
 vi.mock('@/shared/adapters/contentDrafts', () => ({
   getContentDraftVariantsResult: (...args: any[]) => mockGetContentDraftVariantsResult(...args),
   readContentDraftTextResult: (...args: any[]) => mockReadContentDraftTextResult(...args),
   readContentDraftImageResult: (...args: any[]) => mockReadContentDraftImageResult(...args),
+  deleteContentDraftVariantResult: (...args: any[]) => mockDeleteContentDraftVariantResult(...args),
 }))
 
 describe('ContentDraftsPage', () => {
@@ -62,8 +64,8 @@ describe('ContentDraftsPage', () => {
         path: targetPath,
         content:
           targetPath === '/tmp/content-drafts/run-200/wechat/draft.md'
-            ? '# Weekly digest'
-            : '# XHS recap',
+            ? '# Weekly digest\n\nIntro paragraph.\n\n| Capability | Note |\n|------|------|\n| Streaming | Built in |\n\n![Cover](images/cover.png)'
+            : '# XHS recap\n\n- Card one\n- Card two',
       },
     }))
 
@@ -75,9 +77,51 @@ describe('ContentDraftsPage', () => {
         bytes: [1, 2, 3, 4],
       },
     }))
+
+    mockDeleteContentDraftVariantResult.mockResolvedValue({
+      success: true,
+      data: {
+        removedPath: '/tmp/content-drafts/run-200/wechat',
+      },
+    })
   })
 
-  it('auto-loads the first draft variant and switches preview when another variant is selected', async () => {
+  it('loads draft details only after a row is expanded and switches when another row is expanded', async () => {
+    render(
+      <MemoryRouter>
+        <ContentDraftsPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Content Drafts' })).toBeInTheDocument()
+    expect(screen.getByText('Each row shows draft metadata first. Expand a row to read the rendered draft with inline images, then inspect artifact paths only if needed.')).toBeInTheDocument()
+    expect(mockReadContentDraftTextResult).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Weekly digest/i }))
+    await waitFor(() => {
+      expect(mockReadContentDraftTextResult).toHaveBeenCalledWith('/tmp/content-drafts/run-200/wechat/draft.md')
+    })
+    expect(await screen.findByText('Rendered draft')).toBeInTheDocument()
+    expect(await screen.findByText('Intro paragraph.')).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: 'Cover' })).toBeInTheDocument()
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(await screen.findByRole('columnheader', { name: 'Capability' })).toBeInTheDocument()
+    expect(await screen.findByRole('cell', { name: 'Built in' })).toBeInTheDocument()
+    expect(screen.queryByText('Saved images not referenced in markdown')).not.toBeInTheDocument()
+    expect(mockReadContentDraftImageResult).toHaveBeenCalledWith('/tmp/content-drafts/run-200/wechat/images/cover.png')
+
+    fireEvent.click(screen.getByRole('button', { name: /XHS recap/i }))
+
+    await waitFor(() => {
+      expect(mockReadContentDraftTextResult).toHaveBeenCalledWith('/tmp/content-drafts/run-199/xhs/draft.md')
+    })
+    expect(await screen.findByText('Card one')).toBeInTheDocument()
+    expect(await screen.findByText('Card two')).toBeInTheDocument()
+    expect(mockReadContentDraftImageResult).toHaveBeenCalledWith('/tmp/content-drafts/run-199/xhs/images/card-1.webp')
+    expect(mockReadContentDraftImageResult).toHaveBeenCalledWith('/tmp/content-drafts/run-199/xhs/images/card-2.webp')
+  })
+
+  it('removes a draft variant after delete confirmation', async () => {
     render(
       <MemoryRouter>
         <ContentDraftsPage />
@@ -86,20 +130,21 @@ describe('ContentDraftsPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Content Drafts' })).toBeInTheDocument()
 
-    await waitFor(() => {
-      expect(mockReadContentDraftTextResult).toHaveBeenCalledWith('/tmp/content-drafts/run-200/wechat/draft.md')
-    })
-    expect(await screen.findByDisplayValue('# Weekly digest')).toBeInTheDocument()
-    expect(mockReadContentDraftImageResult).toHaveBeenCalledWith('/tmp/content-drafts/run-200/wechat/images/cover.png')
+    fireEvent.click(screen.getByRole('button', { name: /Weekly digest/i }))
+    expect(await screen.findByRole('button', { name: 'Delete draft' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /XHS recap/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete draft' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete draft' }))
 
     await waitFor(() => {
-      expect(mockReadContentDraftTextResult).toHaveBeenCalledWith('/tmp/content-drafts/run-199/xhs/draft.md')
+      expect(mockDeleteContentDraftVariantResult).toHaveBeenCalledWith('/tmp/content-drafts/run-200/wechat/manifest.json')
     })
-    expect(await screen.findByDisplayValue('# XHS recap')).toBeInTheDocument()
-    expect(mockReadContentDraftImageResult).toHaveBeenCalledWith('/tmp/content-drafts/run-199/xhs/images/card-1.webp')
-    expect(mockReadContentDraftImageResult).toHaveBeenCalledWith('/tmp/content-drafts/run-199/xhs/images/card-2.webp')
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Weekly digest/i })).not.toBeInTheDocument()
+    })
   })
 
   it('renders the empty state when no draft variants are available', async () => {
@@ -116,5 +161,21 @@ describe('ContentDraftsPage', () => {
 
     expect(await screen.findByText('No matching drafts')).toBeInTheDocument()
     expect(screen.getByText('Run the Content Draft skill, then come back here to inspect the saved artifacts.')).toBeInTheDocument()
+  })
+
+  it('surfaces list load failures instead of rendering the empty-library state', async () => {
+    mockGetContentDraftVariantsResult.mockResolvedValueOnce({
+      success: false,
+      error: 'Draft root unavailable',
+    })
+
+    render(
+      <MemoryRouter>
+        <ContentDraftsPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Failed to load drafts: Draft root unavailable')).toBeInTheDocument()
+    expect(screen.queryByText('No matching drafts')).not.toBeInTheDocument()
   })
 })

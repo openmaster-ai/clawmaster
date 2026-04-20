@@ -1,4 +1,5 @@
 import type {
+  ContentDraftDeleteResult,
   ContentDraftImageFile,
   ContentDraftTextFile,
   ContentDraftVariantSummary,
@@ -40,6 +41,20 @@ export async function readContentDraftImageResult(pathInput: string): Promise<Ad
   }
   return fromPromise(() =>
     tauriInvoke<ContentDraftImageFile>('read_content_draft_image_file', {
+      pathInput,
+    }))
+}
+
+export async function deleteContentDraftVariantResult(pathInput: string): Promise<AdapterResult<ContentDraftDeleteResult>> {
+  if (!getIsTauri()) {
+    return webFetchJson<ContentDraftDeleteResult>('/api/content-drafts/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: pathInput }),
+    })
+  }
+  return fromPromise(() =>
+    tauriInvoke<ContentDraftDeleteResult>('delete_content_draft_variant', {
       pathInput,
     }))
 }

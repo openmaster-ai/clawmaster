@@ -1698,6 +1698,12 @@ struct ContentDraftVariantSummaryDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct ContentDraftDeleteResultDto {
+    removed_path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct McpImportCandidateDto {
     id: String,
     format: String,
@@ -1748,9 +1754,83 @@ fn active_content_drafts_root() -> PathBuf {
         .join("content-drafts")
 }
 
+fn workspace_content_drafts_root() -> Option<PathBuf> {
+    let workspace_dir = std::env::var("OPENCLAW_WORKSPACE_DIR").ok()?;
+    let trimmed = workspace_dir.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    #[cfg(target_os = "windows")]
+    if active_wsl_distro().is_some() {
+        return Some(PathBuf::from(join_posix(trimmed, "content-drafts")));
+    }
+
+    Some(PathBuf::from(trimmed).join("content-drafts"))
+}
+
+fn data_dir_content_drafts_root() -> Option<PathBuf> {
+    let data_dir = std::env::var("OPENCLAW_DATA_DIR").ok()?;
+    let trimmed = data_dir.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    #[cfg(target_os = "windows")]
+    if active_wsl_distro().is_some() {
+        return Some(PathBuf::from(join_posix(
+            trimmed,
+            "workspace/content-drafts",
+        )));
+    }
+
+    Some(
+        PathBuf::from(trimmed)
+            .join("workspace")
+            .join("content-drafts"),
+    )
+}
+
+fn config_path_content_drafts_root() -> Option<PathBuf> {
+    let config_path = std::env::var("OPENCLAW_CONFIG_PATH").ok()?;
+    let trimmed = config_path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    #[cfg(target_os = "windows")]
+    if active_wsl_distro().is_some() {
+        return Some(PathBuf::from(join_posix(
+            &dirname_posix(trimmed),
+            "workspace/content-drafts",
+        )));
+    }
+
+    Some(
+        PathBuf::from(trimmed)
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("workspace")
+            .join("content-drafts"),
+    )
+}
+
 fn content_drafts_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
-    for root in [active_content_drafts_root(), default_content_drafts_root()] {
+    let mut candidates = Vec::new();
+    if let Some(workspace_root) = workspace_content_drafts_root() {
+        candidates.push(workspace_root);
+    }
+    if let Some(data_root) = data_dir_content_drafts_root() {
+        candidates.push(data_root);
+    }
+    if let Some(config_root) = config_path_content_drafts_root() {
+        candidates.push(config_root);
+    }
+    candidates.push(active_content_drafts_root());
+    candidates.push(default_content_drafts_root());
+
+    for root in candidates {
         if !roots.iter().any(|existing| existing == &root) {
             roots.push(root);
         }
@@ -4414,6 +4494,79 @@ mod tests {
     }
 
     #[test]
+    fn content_drafts_roots_include_openclaw_workspace_dir_override() {
+        let _guard = lock_test_env();
+        let previous_workspace_dir = std::env::var_os("OPENCLAW_WORKSPACE_DIR");
+        let temp_workspace = unique_test_dir("content-drafts-workspace-root");
+        fs::create_dir_all(&temp_workspace).expect("should create temp workspace");
+
+        std::env::set_var("OPENCLAW_WORKSPACE_DIR", &temp_workspace);
+
+        let roots = super::content_drafts_roots();
+
+        if let Some(value) = previous_workspace_dir {
+            std::env::set_var("OPENCLAW_WORKSPACE_DIR", value);
+        } else {
+            std::env::remove_var("OPENCLAW_WORKSPACE_DIR");
+        }
+
+        assert!(roots
+            .iter()
+            .any(|root| root == &temp_workspace.join("content-drafts")));
+
+        let _ = fs::remove_dir_all(temp_workspace);
+    }
+
+    #[test]
+    fn content_drafts_roots_include_openclaw_data_dir_override() {
+        let _guard = lock_test_env();
+        let previous_data_dir = std::env::var_os("OPENCLAW_DATA_DIR");
+        let temp_data_dir = unique_test_dir("content-drafts-data-root");
+        fs::create_dir_all(&temp_data_dir).expect("should create temp data dir");
+
+        std::env::set_var("OPENCLAW_DATA_DIR", &temp_data_dir);
+
+        let roots = super::content_drafts_roots();
+
+        if let Some(value) = previous_data_dir {
+            std::env::set_var("OPENCLAW_DATA_DIR", value);
+        } else {
+            std::env::remove_var("OPENCLAW_DATA_DIR");
+        }
+
+        assert!(roots
+            .iter()
+            .any(|root| root == &temp_data_dir.join("workspace").join("content-drafts")));
+
+        let _ = fs::remove_dir_all(temp_data_dir);
+    }
+
+    #[test]
+    fn content_drafts_roots_include_openclaw_config_path_override() {
+        let _guard = lock_test_env();
+        let previous_config_path = std::env::var_os("OPENCLAW_CONFIG_PATH");
+        let temp_config_dir = unique_test_dir("content-drafts-config-root");
+        fs::create_dir_all(&temp_config_dir).expect("should create temp config dir");
+        let temp_config_path = temp_config_dir.join("openclaw.json");
+
+        std::env::set_var("OPENCLAW_CONFIG_PATH", &temp_config_path);
+
+        let roots = super::content_drafts_roots();
+
+        if let Some(value) = previous_config_path {
+            std::env::set_var("OPENCLAW_CONFIG_PATH", value);
+        } else {
+            std::env::remove_var("OPENCLAW_CONFIG_PATH");
+        }
+
+        assert!(roots
+            .iter()
+            .any(|root| root == &temp_config_dir.join("workspace").join("content-drafts")));
+
+        let _ = fs::remove_dir_all(temp_config_dir);
+    }
+
+    #[test]
     fn install_paddleocr_bundled_skill_falls_back_to_repo_skill_in_unbundled_dev_runs() {
         let _guard = lock_test_env();
         let previous_skill_root =
@@ -5812,6 +5965,111 @@ fn read_content_draft_image_file(path_input: String) -> Result<RuntimeBinaryFile
 }
 
 #[tauri::command]
+fn delete_content_draft_variant(path_input: String) -> Result<ContentDraftDeleteResultDto, String> {
+    let manifest_path = resolve_allowed_content_draft_path(&path_input)?;
+    if manifest_path.file_name().and_then(|value| value.to_str()) != Some("manifest.json") {
+        return Err(cmd_err_p(
+            "CONTENT_DRAFT_INVALID_MANIFEST_PATH",
+            serde_json::json!({ "path": manifest_path.to_string_lossy() }),
+        ));
+    }
+
+    let platform_dir = manifest_path.parent().ok_or_else(|| {
+        cmd_err_p(
+            "CONTENT_DRAFT_INVALID_MANIFEST_PATH",
+            serde_json::json!({ "path": manifest_path.to_string_lossy() }),
+        )
+    })?;
+    let run_dir = platform_dir.parent().ok_or_else(|| {
+        cmd_err_p(
+            "CONTENT_DRAFT_INVALID_MANIFEST_PATH",
+            serde_json::json!({ "path": manifest_path.to_string_lossy() }),
+        )
+    })?;
+
+    if !content_draft_path_allowed(platform_dir) {
+        return Err(cmd_err_p(
+            "CONTENT_DRAFT_PATH_NOT_ALLOWED",
+            serde_json::json!({ "path": platform_dir.to_string_lossy() }),
+        ));
+    }
+
+    #[cfg(target_os = "windows")]
+    if let Some(distro) = active_wsl_distro() {
+        let remove_output = run_wsl_shell(
+            &distro,
+            &format!(
+                "rm -rf {}",
+                shell_escape_posix_arg(&platform_dir.to_string_lossy())
+            ),
+            None,
+        )?;
+        if remove_output.code != 0 {
+            return Err(cmd_err_d(
+                "CONTENT_DRAFT_DELETE_FAILED",
+                remove_output.stderr.trim(),
+            ));
+        }
+
+        let prune_output = run_wsl_shell(
+            &distro,
+            &format!(
+                "[ -d {run_dir} ] && rmdir {run_dir} 2>/dev/null || true",
+                run_dir = shell_escape_posix_arg(&run_dir.to_string_lossy())
+            ),
+            None,
+        )?;
+        if prune_output.code != 0 {
+            return Err(cmd_err_d(
+                "CONTENT_DRAFT_DELETE_FAILED",
+                prune_output.stderr.trim(),
+            ));
+        }
+
+        return Ok(ContentDraftDeleteResultDto {
+            removed_path: platform_dir.to_string_lossy().to_string(),
+        });
+    }
+
+    fs::remove_dir_all(platform_dir).map_err(|error| {
+        cmd_err_p(
+            "CONTENT_DRAFT_DELETE_FAILED",
+            serde_json::json!({
+                "path": platform_dir.to_string_lossy(),
+                "detail": error.to_string(),
+            }),
+        )
+    })?;
+
+    if run_dir.is_dir() {
+        let mut entries = fs::read_dir(run_dir).map_err(|error| {
+            cmd_err_p(
+                "CONTENT_DRAFT_DELETE_FAILED",
+                serde_json::json!({
+                    "path": run_dir.to_string_lossy(),
+                    "detail": error.to_string(),
+                }),
+            )
+        })?;
+        if entries.next().is_none() {
+            fs::remove_dir(run_dir).map_err(|error| {
+                cmd_err_p(
+                    "CONTENT_DRAFT_DELETE_FAILED",
+                    serde_json::json!({
+                        "path": run_dir.to_string_lossy(),
+                        "detail": error.to_string(),
+                    }),
+                )
+            })?;
+        }
+    }
+
+    Ok(ContentDraftDeleteResultDto {
+        removed_path: platform_dir.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
 fn read_required_runtime_text_file(
     path_input: String,
 ) -> Result<RequiredRuntimeTextFileDto, String> {
@@ -6776,6 +7034,7 @@ pub fn run() {
             list_content_draft_variants,
             read_content_draft_text_file,
             read_content_draft_image_file,
+            delete_content_draft_variant,
             read_runtime_text_file,
             read_required_runtime_text_file,
             write_runtime_text_file,

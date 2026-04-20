@@ -54,6 +54,8 @@ test('installBundledSkill copies the bundled Content Draft skill into the active
   fs.writeFileSync(path.join(sourceRoot, 'SKILL.md'), '# Content Draft\n', 'utf8')
   fs.writeFileSync(path.join(sourceRoot, '_meta.json'), '{"slug":"content-draft","version":"0.1.0"}\n', 'utf8')
   fs.writeFileSync(path.join(sourceRoot, 'references', 'platforms.md'), 'xhs\n', 'utf8')
+  fs.writeFileSync(path.join(sourceRoot, 'scripts', 'build-chat-response.mjs'), 'console.log("reply")\n', 'utf8')
+  fs.writeFileSync(path.join(sourceRoot, 'scripts', 'fetch-url-markdown.mjs'), 'console.log("fetch")\n', 'utf8')
   fs.writeFileSync(path.join(sourceRoot, 'scripts', 'save-draft-artifacts.mjs'), 'console.log("save")\n', 'utf8')
 
   const result = installBundledSkill('content-draft', {
@@ -74,6 +76,14 @@ test('installBundledSkill copies the bundled Content Draft skill into the active
   assert.equal(
     fs.readFileSync(path.join(installDir, 'references', 'platforms.md'), 'utf8'),
     'xhs\n',
+  )
+  assert.equal(
+    fs.readFileSync(path.join(installDir, 'scripts', 'build-chat-response.mjs'), 'utf8'),
+    'console.log("reply")\n',
+  )
+  assert.equal(
+    fs.readFileSync(path.join(installDir, 'scripts', 'fetch-url-markdown.mjs'), 'utf8'),
+    'console.log("fetch")\n',
   )
   assert.equal(
     fs.readFileSync(path.join(installDir, 'scripts', 'save-draft-artifacts.mjs'), 'utf8'),
@@ -128,6 +138,22 @@ test('bundled PaddleOCR skill explicitly instructs agents to read the skill and 
   assert.match(skillBody, /Then use `exec` to run the bundled Node script with `node`\./)
 })
 
+test('bundled Content Draft skill explicitly keeps article drafting on the repo-owned Node workflow', () => {
+  const skillPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../../bundled-skills/content-draft/SKILL.md',
+  )
+  const skillBody = fs.readFileSync(skillPath, 'utf8')
+
+  assert.match(skillBody, /Do not delegate this workflow to `baoyu-\*` skills or any Bun-based helper\./)
+  assert.match(skillBody, /prefer this skill over `baoyu-article-illustrator` and `baoyu-post-to-wechat`/i)
+  assert.match(skillBody, /prefer the repo-owned `ernie-image` skill when it is available/i)
+  assert.match(skillBody, /node \$\{SKILL_DIR\}\/scripts\/fetch-url-markdown\.mjs/)
+  assert.match(skillBody, /node \$\{SKILL_DIR\}\/scripts\/build-chat-response\.mjs/)
+  assert.match(skillBody, /runtime's built-in image generation capability/i)
+  assert.match(skillBody, /Return the full final draft body plus the generated images in the same reply\./)
+})
+
 test('bundled Content Draft helper saves markdown and image artifacts into the standard layout', () => {
   const scriptPath = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -176,4 +202,156 @@ test('bundled Content Draft helper saves markdown and image artifacts into the s
   }
   assert.equal(manifest.platform, 'xhs')
   assert.deepEqual(manifest.imageFiles, ['cover.png'])
+})
+
+test('bundled Content Draft helper preserves images that share the same basename', () => {
+  const scriptPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../../bundled-skills/content-draft/scripts/save-draft-artifacts.mjs',
+  )
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-content-draft-collision-'))
+  const outputRoot = path.join(tempRoot, 'out')
+  const markdownPath = path.join(tempRoot, 'draft.md')
+  const imageDirA = path.join(tempRoot, 'images-a')
+  const imageDirB = path.join(tempRoot, 'images-b')
+  const imagePathA = path.join(imageDirA, 'cover.png')
+  const imagePathB = path.join(imageDirB, 'cover.png')
+
+  fs.mkdirSync(imageDirA, { recursive: true })
+  fs.mkdirSync(imageDirB, { recursive: true })
+  fs.writeFileSync(markdownPath, '# Hello\n', 'utf8')
+  fs.writeFileSync(imagePathA, 'first-image', 'utf8')
+  fs.writeFileSync(imagePathB, 'second-image', 'utf8')
+
+  const raw = execFileSync(
+    process.execPath,
+    [
+      scriptPath,
+      '--platform', 'wechat',
+      '--title', 'Collision Demo',
+      '--run-id', 'collision-run',
+      '--root', outputRoot,
+      '--markdown-file', markdownPath,
+      '--image', imagePathA,
+      '--image', imagePathB,
+    ],
+    { encoding: 'utf8' },
+  )
+
+  const payload = JSON.parse(raw) as {
+    imagesDir: string
+    imageFiles: string[]
+  }
+
+  assert.equal(payload.imageFiles.length, 2)
+  assert.notEqual(payload.imageFiles[0], payload.imageFiles[1])
+  assert.deepEqual(
+    payload.imageFiles.map((fileName) => fs.readFileSync(path.join(payload.imagesDir, fileName), 'utf8')).sort(),
+    ['first-image', 'second-image'],
+  )
+})
+
+test('bundled Content Draft fetch helper extracts local HTML into markdown', () => {
+  const scriptPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../../bundled-skills/content-draft/scripts/fetch-url-markdown.mjs',
+  )
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-content-draft-fetch-'))
+  const htmlPath = path.join(tempRoot, 'article.html')
+  const outputPath = path.join(tempRoot, 'article.md')
+
+  fs.writeFileSync(
+    htmlPath,
+    [
+      '<!doctype html>',
+      '<html>',
+      '<head>',
+      '<title>LangChain Products</title>',
+      '<meta name="description" content="Product concepts overview.">',
+      '</head>',
+      '<body>',
+      '<main>',
+      '<h1>Products</h1>',
+      '<p>Products help teams ship faster.</p>',
+      '<h2>Why it matters</h2>',
+      '<ul><li>Clarity</li><li>Reuse</li></ul>',
+      '<p>Read the <a href="https://docs.langchain.com/">docs</a>.</p>',
+      '</main>',
+      '</body>',
+      '</html>',
+      '',
+    ].join('\n'),
+    'utf8',
+  )
+
+  const raw = execFileSync(
+    process.execPath,
+    [scriptPath, htmlPath, '--json', '--output', outputPath, '--max-chars', '5000'],
+    { encoding: 'utf8' },
+  )
+
+  const payload = JSON.parse(raw) as {
+    format: string
+    title: string
+    markdown: string
+    truncated: boolean
+    outputPath: string
+  }
+
+  assert.equal(payload.format, 'html')
+  assert.equal(payload.title, 'Products')
+  assert.equal(payload.truncated, false)
+  assert.equal(payload.outputPath, outputPath)
+  assert.match(payload.markdown, /^# Products/m)
+  assert.match(payload.markdown, /Source: /)
+  assert.match(payload.markdown, /## Why it matters/)
+  assert.match(payload.markdown, /(?:-|\*) Clarity/)
+  assert.match(payload.markdown, /\[docs\]\(https:\/\/docs\.langchain\.com\/\)/)
+  assert.equal(fs.readFileSync(outputPath, 'utf8'), payload.markdown)
+})
+
+test('bundled Content Draft chat-response helper rewrites local image refs and appends extra images', () => {
+  const scriptPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../../bundled-skills/content-draft/scripts/build-chat-response.mjs',
+  )
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-content-draft-chat-'))
+  const markdownPath = path.join(tempRoot, 'draft.md')
+  const imagesDir = path.join(tempRoot, 'images')
+
+  fs.mkdirSync(imagesDir, { recursive: true })
+  fs.writeFileSync(
+    markdownPath,
+    [
+      '# Weekly digest',
+      '',
+      '![Hero](images/cover.png)',
+      '',
+      'More text.',
+      '',
+    ].join('\n'),
+    'utf8',
+  )
+  fs.writeFileSync(path.join(imagesDir, 'cover.png'), 'png', 'utf8')
+  fs.writeFileSync(path.join(imagesDir, 'extra.webp'), 'webp', 'utf8')
+
+  const raw = execFileSync(
+    process.execPath,
+    [scriptPath, '--markdown-file', markdownPath, '--images-dir', imagesDir, '--json'],
+    { encoding: 'utf8' },
+  )
+
+  const payload = JSON.parse(raw) as {
+    markdown: string
+    embeddedImageCount: number
+    appendedImageCount: number
+    totalImageCount: number
+  }
+
+  assert.equal(payload.embeddedImageCount, 1)
+  assert.equal(payload.appendedImageCount, 1)
+  assert.equal(payload.totalImageCount, 2)
+  assert.match(payload.markdown, /\*Hero\*\n\nMEDIA:.*cover\.png/)
+  assert.match(payload.markdown, /## Generated Images/)
+  assert.match(payload.markdown, /MEDIA:.*extra\.webp/)
 })

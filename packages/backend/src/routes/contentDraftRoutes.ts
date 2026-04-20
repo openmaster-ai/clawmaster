@@ -1,5 +1,6 @@
 import type express from 'express'
 import {
+  deleteContentDraftVariant,
   listContentDraftVariants,
   readContentDraftImageFile,
   readContentDraftTextFile,
@@ -43,6 +44,20 @@ export function registerContentDraftRoutes(app: express.Express): void {
     }
     try {
       res.json(readContentDraftImageFile(targetPath))
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).type('text').send(msg)
+    }
+  })
+
+  app.post('/api/content-drafts/delete', (req, res) => {
+    const targetPath = readPathFromBody(req.body)
+    if (!targetPath) {
+      res.status(400).type('text').send('Body must include a path string')
+      return
+    }
+    try {
+      res.json(deleteContentDraftVariant(targetPath))
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error)
       res.status(500).type('text').send(msg)
