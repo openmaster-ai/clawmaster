@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { useInstallTask } from '@/shared/hooks/useInstallTask'
 import { InstallTask } from '@/shared/components/InstallTask'
+import { BrandMark } from '@/shared/components/BrandMark'
 import {
   getOllamaStatus,
   installOllama,
@@ -436,19 +437,14 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           <section className="setup-hero">
             <div className="setup-hero-grid">
               <div>
-                <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-                    <Shell className="h-8 w-8" />
-                  </div>
+                <div className="setup-brand-lockup">
+                  <BrandMark animated className="setup-brand-mark" imageClassName="setup-brand-mark-image" />
                   <div>
                     <p className="setup-hero-kicker">{stageLabel}</p>
                     <h1 className="setup-hero-title">{t('setup.appName')}</h1>
                   </div>
                 </div>
                 <p className="setup-hero-copy">{t('setup.capabilityReview')}</p>
-                <p className="mt-4 text-sm text-muted-foreground">
-                  {t('setup.stageSummary', { stage: stageLabel })}
-                </p>
                 {isDemo && (
                   <div className="mt-4 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
                     {t('setup.demoMode')}
@@ -457,7 +453,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               </div>
 
               <div className="setup-summary-card">
-                <p className="setup-summary-label">{t('setup.stageSummary', { stage: stageLabel })}</p>
+                <p className="setup-summary-label">{t('setup.capabilityOverview')}</p>
                 <div className="setup-summary-grid">
                   <SummaryMetric label={t('setup.summaryInstalled')} value={String(installedCount)} />
                   <SummaryMetric label={t('setup.summaryPending')} value={String(pendingCount)} />
@@ -579,9 +575,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         </div>
       ) : (
         <>
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-primary shadow-lg">
-            <Shell className="h-9 w-9 text-primary-foreground" />
-          </div>
+          <BrandMark animated className="setup-intro-brand" imageClassName="setup-brand-mark-image" />
           <h1 className="mb-1 text-2xl font-bold">{t('setup.appName')}</h1>
           <p className="mb-6 text-sm text-muted-foreground">{t('setup.appSlogan')}</p>
         </>

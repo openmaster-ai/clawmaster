@@ -4,11 +4,30 @@ import { CheckCircle2, XCircle } from 'lucide-react'
 import type { SystemInfo } from '@/lib/types'
 import { webFetch } from '@/shared/adapters/webHttp'
 import { isTauri as isDesktopTauri } from '@/shared/adapters/platform'
+import { BrandMark } from '@/shared/components/BrandMark'
 
 interface StartupDetectorProps {
   onDetected: (info: SystemInfo) => void
   onNewInstall: () => void
   onError: (error: string) => void
+}
+
+function StartupBrand({
+  appName,
+  modeLabel,
+}: {
+  appName: string
+  modeLabel: string | null
+}) {
+  return (
+    <div className="startup-brand">
+      <BrandMark animated className="startup-brand-mark" imageClassName="startup-brand-mark-image" />
+      <div className="startup-brand-copy">
+        <h1 className="startup-brand-title">{appName}</h1>
+        {modeLabel && <p className="startup-brand-meta">{modeLabel}</p>}
+      </div>
+    </div>
+  )
 }
 
 async function invokeTauri<T>(cmd: string, args?: Record<string, any>): Promise<T> {
@@ -35,6 +54,10 @@ export default function StartupDetector({ onDetected, onNewInstall, onError }: S
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
   const [message, setMessage] = useState('')
   const [isTauriDetected, setIsTauriDetected] = useState<boolean | null>(null)
+  const appName = t('setup.appName')
+  const modeLabel = isTauriDetected === null
+    ? null
+    : `${t('startup.mode')}: ${isTauriDetected ? t('startup.modeDesktop') : t('startup.modeWeb')}`
 
   useEffect(() => {
     const inTauri = isDesktopTauri()
@@ -72,16 +95,8 @@ export default function StartupDetector({ onDetected, onNewInstall, onError }: S
   if (status === 'checking') {
     return (
       <div className="fullscreen-shell">
-        <div className="w-16 h-16 bg-primary rounded-lg flex items-center justify-center text-white text-3xl mb-4 animate-pulse">
-          <img src="/logo.svg" alt="" className="w-8 h-8" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-        </div>
-        <h1 className="text-xl font-bold mb-2">ClawMaster</h1>
+        <StartupBrand appName={appName} modeLabel={modeLabel} />
         <p className="text-muted-foreground">{message}</p>
-        {isTauriDetected !== null && (
-          <p className="text-xs text-muted-foreground mt-2">
-            {t('startup.mode')}: {isTauriDetected ? t('startup.modeDesktop') : t('startup.modeWeb')}
-          </p>
-        )}
       </div>
     )
   }
@@ -89,10 +104,8 @@ export default function StartupDetector({ onDetected, onNewInstall, onError }: S
   if (status === 'detected' && systemInfo) {
     return (
       <div className="fullscreen-shell">
-        <div className="w-16 h-16 bg-primary rounded-lg flex items-center justify-center text-white text-3xl mb-4">
-          <img src="/logo.svg" alt="" className="w-8 h-8" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-        </div>
-        <h1 className="text-xl font-bold mb-2">{t('startup.detected')}</h1>
+        <StartupBrand appName={appName} modeLabel={modeLabel} />
+        <h2 className="text-xl font-bold mb-2">{t('startup.detected')}</h2>
         <p className="text-muted-foreground mb-6">{t('startup.canTakeover')}</p>
 
         <div className="fullscreen-panel">
@@ -142,10 +155,8 @@ export default function StartupDetector({ onDetected, onNewInstall, onError }: S
   if (status === 'not-installed') {
     return (
       <div className="fullscreen-shell">
-        <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center text-3xl mb-4">
-          <img src="/logo.svg" alt="" className="w-8 h-8" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-        </div>
-        <h1 className="text-xl font-bold mb-2">{t('startup.notInstalled')}</h1>
+        <StartupBrand appName={appName} modeLabel={modeLabel} />
+        <h2 className="text-xl font-bold mb-2">{t('startup.notInstalled')}</h2>
         <p className="text-muted-foreground mb-6">{t('startup.canHelp')}</p>
 
         <div className="fullscreen-panel">

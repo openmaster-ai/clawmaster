@@ -730,6 +730,7 @@ export default {
   "setup.installCapability": "{{name}}をインストール",
   "setup.installing": "インストール中...",
   "setup.capabilityReview": "基盤機能を確認し、不足している機能をその場で補完してから次に進みます。",
+  "setup.capabilityOverview": "機能の概要",
   "setup.stageSummary": "現在のステージ: {{stage}}",
   "setup.profileFallbackDesc": "このマシンで別の OpenClaw プロファイルを使う必要がある場合は、先にここで切り替えてからウィザードを続けてください。",
   "setup.runtimeWslHint": "この Windows マシンでは WSL2 ランタイムを利用できます。OpenClaw が WSL2 にのみ入っている場合は、先に設定でランタイムを切り替えてからウィザードを続けてください。",

@@ -1,5 +1,5 @@
-<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
-  <!-- ClawMaster · V3 Command Signal · Ember Amber -->
+<svg viewBox="38 18 36 64" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+  <!-- ClawMaster favicon · tighter crop for browser tabs -->
   <circle cx="68" cy="50" r="5" fill="#F5A623"/>
   <g fill="none" stroke="#F5A623" stroke-linecap="round">
     <path d="M 68 40 A 10 10 0 0 0 68 60" stroke-width="3.5"/>

@@ -730,6 +730,7 @@ export default {
   "setup.installCapability": "安装 {{name}}",
   "setup.installing": "正在安装...",
   "setup.capabilityReview": "先确认基础能力，再在同一处补齐缺失模块，避免来回切页。",
+  "setup.capabilityOverview": "能力概览",
   "setup.stageSummary": "当前阶段：{{stage}}",
   "setup.profileFallbackDesc": "如果这台机器应当接管另一个 OpenClaw 配置档，请先在这里切换，再继续向导。",
   "setup.runtimeWslHint": "这台 Windows 机器可以使用 WSL2 运行时。如果 OpenClaw 仅安装在 WSL2 内，请先前往设置切换运行时，再继续向导。",

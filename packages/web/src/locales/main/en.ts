@@ -730,6 +730,7 @@ export default {
   "setup.installCapability": "Install {{name}}",
   "setup.installing": "Installing...",
   "setup.capabilityReview": "Review the core foundation, then install or configure each missing capability in place.",
+  "setup.capabilityOverview": "Capability overview",
   "setup.stageSummary": "Current stage: {{stage}}",
   "setup.profileFallbackDesc": "If this machine should use a different OpenClaw profile, switch it here before you continue the wizard.",
   "setup.runtimeWslHint": "This Windows machine can use a WSL2 runtime. If OpenClaw is installed only inside WSL2, switch the runtime in Settings before continuing.",

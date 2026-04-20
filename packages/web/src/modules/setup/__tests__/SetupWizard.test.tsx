@@ -135,6 +135,16 @@ describe('SetupWizard', () => {
     releaseOptionalChecks?.()
   })
 
+  it('shows the capability stage only once in the hero summary', async () => {
+    const { container } = render(<SetupWizard onComplete={() => {}} />)
+
+    expect(await screen.findByText('Capability overview')).toBeInTheDocument()
+    const hero = container.querySelector('.setup-hero')
+    expect(hero).not.toBeNull()
+    expect((hero as HTMLElement).querySelector('.setup-hero-kicker')?.textContent).toMatch(/\S/)
+    expect(screen.queryByText(/Current stage:/)).not.toBeInTheDocument()
+  })
+
   it('shows the profile fallback card and saves a named profile', async () => {
     render(<SetupWizard onComplete={() => {}} />)
 
