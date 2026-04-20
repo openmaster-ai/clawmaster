@@ -1,0 +1,69 @@
+name: Setup Rust
+description: Install the stable Rust toolchain with rustup without fetching an extra GitHub action archive
+
+inputs:
+  targets:
+    description: Comma-separated Rust targets to install
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install stable Rust toolchain (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        INPUT_TARGETS: ${{ inputs.targets }}
+      run: |
+        set -euo pipefail
+
+        if ! command -v rustup >/dev/null 2>&1; then
+          curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://sh.rustup.rs \
+            | sh -s -- --default-toolchain none -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+
+        rustup set profile minimal
+        rustup toolchain install stable --no-self-update
+        rustup default stable
+
+        if [ -n "$INPUT_TARGETS" ]; then
+          for target in ${INPUT_TARGETS//,/ }; do
+            rustup target add "$target" --toolchain stable
+          done
+        fi
+
+        rustc --version --verbose
+        cargo --version
+
+    - name: Install stable Rust toolchain (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        INPUT_TARGETS: ${{ inputs.targets }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+
+        if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
+          $installer = Join-Path $env:RUNNER_TEMP 'rustup-init.exe'
+          Invoke-WebRequest 'https://win.rustup.rs/x86_64' -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList '-y', '--default-toolchain', 'none', '--profile', 'minimal' -Wait -NoNewWindow
+          $cargoBin = Join-Path $env:USERPROFILE '.cargo\bin'
+          $cargoBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $env:Path = "$cargoBin;$env:Path"
+        }
+
+        rustup set profile minimal
+        rustup toolchain install stable --no-self-update
+        rustup default stable
+
+        if ($env:INPUT_TARGETS) {
+          $env:INPUT_TARGETS.Split(',', [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object {
+            rustup target add $_ --toolchain stable
+          }
+        }
+
+        rustc --version --verbose
+        cargo --version
