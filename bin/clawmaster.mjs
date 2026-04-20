@@ -3,9 +3,9 @@
 import { createRequire } from 'node:module'
 import { randomBytes } from 'node:crypto'
 import { spawn, execFile as execFileCallback, execFileSync } from 'node:child_process'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, posix as pathPosix, resolve, win32 as pathWin32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { chmodSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import os from 'node:os'
 
@@ -15,8 +15,47 @@ const root = resolve(__dirname, '..')
 const cliEntryPath = fileURLToPath(import.meta.url)
 const require = createRequire(import.meta.url)
 const pkg = require(resolve(root, 'package.json'))
-const serviceStateDir = join(os.homedir(), '.clawmaster', 'service')
-const serviceStateFile = join(serviceStateDir, 'service-state.json')
+
+function getServiceStatePathModule(platform = process.platform) {
+  return platform === 'win32' ? pathWin32 : pathPosix
+}
+
+function normalizeHomePath(homeDir, platform = process.platform) {
+  const normalized = String(homeDir ?? '').trim()
+  if (!normalized) return ''
+  return getServiceStatePathModule(platform).normalize(normalized)
+}
+
+function isNativeAbsoluteHomePath(homeDir, platform = process.platform) {
+  const normalized = String(homeDir ?? '').trim()
+  if (!normalized) return false
+  if (platform !== 'win32') {
+    return normalized.startsWith('/')
+  }
+  return /^[A-Za-z]:[\\/]/.test(normalized) || normalized.startsWith('\\\\') || normalized.startsWith('//')
+}
+
+function resolveEffectiveHomeContext(options = {}) {
+  const platform = options.platform ?? process.platform
+  const homeOverride = String(options.homeDir ?? process.env.HOME ?? '').trim()
+  const fallbackHomeDir = normalizeHomePath(options.fallbackHomeDir ?? os.homedir(), platform)
+  const overrideActive = isNativeAbsoluteHomePath(homeOverride, platform)
+  return {
+    homeDir: overrideActive ? normalizeHomePath(homeOverride, platform) : fallbackHomeDir,
+    overrideActive,
+    platform,
+  }
+}
+
+export function resolveServiceStatePaths(options = {}) {
+  const { homeDir, platform } = resolveEffectiveHomeContext(options)
+  const pathModule = getServiceStatePathModule(platform)
+  const serviceStateDir = pathModule.join(homeDir, '.clawmaster', 'service')
+  return {
+    serviceStateDir,
+    serviceStateFile: pathModule.join(serviceStateDir, 'service-state.json'),
+  }
+}
 
 function printHelp() {
   console.log(`
@@ -147,10 +186,12 @@ function resolveServiceAssets() {
 }
 
 function ensureServiceStateDir() {
+  const { serviceStateDir } = resolveServiceStatePaths()
   mkdirSync(serviceStateDir, { recursive: true })
 }
 
 function readServiceState() {
+  const { serviceStateFile } = resolveServiceStatePaths()
   try {
     return JSON.parse(readFileSync(serviceStateFile, 'utf8'))
   } catch {
@@ -159,6 +200,7 @@ function readServiceState() {
 }
 
 function writeServiceState(state) {
+  const { serviceStateFile } = resolveServiceStatePaths()
   ensureServiceStateDir()
   writeFileSync(serviceStateFile, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
   try {
@@ -178,6 +220,7 @@ function readLogTail(pathToFile, maxChars = 1200) {
 }
 
 function clearServiceState() {
+  const { serviceStateFile } = resolveServiceStatePaths()
   rmSync(serviceStateFile, { force: true })
 }
 
@@ -404,21 +447,37 @@ export function buildServiceSpawnOptions({
   stdoutLog,
   stderrLog,
   workingDir = process.cwd(),
+  platform = process.platform,
+  homeDir = process.env.HOME,
+  fallbackHomeDir = os.homedir(),
 }) {
+  const homeContext = resolveEffectiveHomeContext({
+    platform,
+    homeDir,
+    fallbackHomeDir,
+  })
+  const env = {
+    ...process.env,
+    BACKEND_HOST: host,
+    BACKEND_PORT: port,
+    CLAWMASTER_FRONTEND_DIST: assets.frontendDist,
+    CLAWMASTER_SERVICE_TOKEN: token,
+  }
+  if (homeContext.platform === 'win32' && homeContext.overrideActive) {
+    env.HOME = homeContext.homeDir
+    env.USERPROFILE = homeContext.homeDir
+    env.APPDATA = pathWin32.join(homeContext.homeDir, 'AppData', 'Roaming')
+    env.LOCALAPPDATA = pathWin32.join(homeContext.homeDir, 'AppData', 'Local')
+  }
   return {
     cwd: workingDir,
     stdio: daemon
       ? ['ignore', openSync(stdoutLog, 'a'), openSync(stderrLog, 'a')]
       : 'inherit',
-    env: {
-      ...process.env,
-      BACKEND_HOST: host,
-      BACKEND_PORT: port,
-      CLAWMASTER_FRONTEND_DIST: assets.frontendDist,
-      CLAWMASTER_SERVICE_TOKEN: token,
-    },
+    env,
     detached: daemon,
     shell: false,
+    windowsHide: true,
   }
 }
 
@@ -431,6 +490,7 @@ async function runServe(args) {
   const urls = resolveServiceUrls(host, port)
   const url = urls.url
   const running = await getRunningServiceState({ allowUnreachable: false })
+  const { serviceStateDir } = resolveServiceStatePaths()
   const stdoutLog = join(serviceStateDir, 'service.stdout.log')
   const stderrLog = join(serviceStateDir, 'service.stderr.log')
 
@@ -451,19 +511,34 @@ async function runServe(args) {
   }
 
   ensureServiceStateDir()
-  const child = spawn(
-    process.execPath,
-    [assets.backendEntry],
-    buildServiceSpawnOptions({
-      assets,
-      daemon,
-      host,
-      port,
-      token,
-      stdoutLog,
-      stderrLog,
-    }),
-  )
+  const spawnOptions = buildServiceSpawnOptions({
+    assets,
+    daemon,
+    host,
+    port,
+    token,
+    stdoutLog,
+    stderrLog,
+  })
+  const ownedLogFds = Array.isArray(spawnOptions.stdio)
+    ? spawnOptions.stdio.filter((entry, index) => index > 0 && typeof entry === 'number')
+    : []
+  let child
+  try {
+    child = spawn(
+      process.execPath,
+      [assets.backendEntry],
+      spawnOptions,
+    )
+  } finally {
+    for (const fd of ownedLogFds) {
+      try {
+        closeSync(fd)
+      } catch {
+        // best effort
+      }
+    }
+  }
 
   writeServiceState({
     pid: child.pid,

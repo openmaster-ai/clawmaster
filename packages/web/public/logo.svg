@@ -1,26 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#FF6B35;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#E63946;stop-opacity:1" />
-    </linearGradient>
-  </defs>
-  <!-- Lobster body -->
-  <ellipse cx="50" cy="55" rx="30" ry="25" fill="url(#grad)"/>
-  <!-- Head -->
-  <ellipse cx="50" cy="30" rx="18" ry="15" fill="url(#grad)"/>
-  <!-- Eyes -->
-  <circle cx="43" cy="28" r="4" fill="white"/>
-  <circle cx="57" cy="28" r="4" fill="white"/>
-  <circle cx="43" cy="28" r="2" fill="black"/>
-  <circle cx="57" cy="28" r="2" fill="black"/>
-  <!-- Claws -->
-  <ellipse cx="20" cy="50" rx="12" ry="8" fill="#E63946"/>
-  <ellipse cx="80" cy="50" rx="12" ry="8" fill="#E63946"/>
-  <!-- Antennae -->
-  <path d="M 40 18 Q 35 5 30 10" stroke="#E63946" stroke-width="3" fill="none"/>
-  <path d="M 60 18 Q 65 5 70 10" stroke="#E63946" stroke-width="3" fill="none"/>
-  <!-- Tail segments -->
-  <ellipse cx="50" cy="80" rx="15" ry="8" fill="#FF6B35"/>
-  <ellipse cx="50" cy="90" rx="10" ry="5" fill="#E63946"/>
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+  <!-- ClawMaster · V3 Command Signal · Ember Amber -->
+  <circle cx="68" cy="50" r="5" fill="#F5A623"/>
+  <g fill="none" stroke="#F5A623" stroke-linecap="round">
+    <path d="M 68 40 A 10 10 0 0 0 68 60" stroke-width="3.5"/>
+    <path d="M 68 31 A 19 19 0 0 0 68 69" stroke-width="3"/>
+    <path d="M 68 22 A 28 28 0 0 0 68 78" stroke-width="2.5"/>
+  </g>
+  <g fill="#F5A623">
+    <circle cx="68" cy="22" r="2.5"/>
+    <circle cx="68" cy="78" r="2.5"/>
+  </g>
 </svg>

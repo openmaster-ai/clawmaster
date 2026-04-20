@@ -62,6 +62,48 @@ test('resolveServiceUrls maps wildcard hosts to local probe urls', () => {
   })
 })
 
+test('resolveServiceStatePaths prefers an explicit Windows HOME override', () => {
+  assert.deepEqual(
+    cliModule.resolveServiceStatePaths({
+      platform: 'win32',
+      homeDir: 'C:\\Temp\\clawmaster-home',
+      fallbackHomeDir: 'C:\\Users\\real-user',
+    }),
+    {
+      serviceStateDir: 'C:\\Temp\\clawmaster-home\\.clawmaster\\service',
+      serviceStateFile: 'C:\\Temp\\clawmaster-home\\.clawmaster\\service\\service-state.json',
+    },
+  )
+})
+
+test('resolveServiceStatePaths ignores non-native Windows HOME overrides', () => {
+  assert.deepEqual(
+    cliModule.resolveServiceStatePaths({
+      platform: 'win32',
+      homeDir: '/c/Users/alice',
+      fallbackHomeDir: 'C:\\Users\\alice',
+    }),
+    {
+      serviceStateDir: 'C:\\Users\\alice\\.clawmaster\\service',
+      serviceStateFile: 'C:\\Users\\alice\\.clawmaster\\service\\service-state.json',
+    },
+  )
+})
+
+test('resolveServiceStatePaths accepts Windows UNC HOME overrides written with forward slashes', () => {
+  assert.deepEqual(
+    cliModule.resolveServiceStatePaths({
+      platform: 'win32',
+      homeDir: '//server/share/portable-home',
+      fallbackHomeDir: 'C:\\Users\\alice',
+    }),
+    {
+      serviceStateDir: '\\\\server\\share\\portable-home\\.clawmaster\\service',
+      serviceStateFile: '\\\\server\\share\\portable-home\\.clawmaster\\service\\service-state.json',
+    },
+  )
+})
+
 test('validateServiceState preserves recorded daemons while the pid is still alive', async () => {
   const state = {
     pid: process.pid,
@@ -181,10 +223,31 @@ test('buildServiceSpawnOptions preserves the caller working directory', () => {
   assert.equal(options.env.CLAWMASTER_SERVICE_TOKEN, 'secret-token')
   assert.equal(options.env.BACKEND_HOST, '127.0.0.1')
   assert.equal(options.env.BACKEND_PORT, '3001')
+  assert.equal(options.windowsHide, true)
   closeSync(options.stdio[1])
   closeSync(options.stdio[2])
 
   rmSync(tempHome, { recursive: true, force: true })
+})
+
+test('buildServiceSpawnOptions propagates a Windows HOME override to backend env', () => {
+  const options = cliModule.buildServiceSpawnOptions({
+    assets: { frontendDist: 'C:\\portable-home\\frontend-dist' },
+    daemon: false,
+    host: '127.0.0.1',
+    port: '3001',
+    token: 'secret-token',
+    stdoutLog: 'ignored.stdout.log',
+    stderrLog: 'ignored.stderr.log',
+    platform: 'win32',
+    homeDir: '//server/share/portable-home',
+    fallbackHomeDir: 'C:\\Users\\real-user',
+  })
+
+  assert.equal(options.env.HOME, '\\\\server\\share\\portable-home')
+  assert.equal(options.env.USERPROFILE, '\\\\server\\share\\portable-home')
+  assert.equal(options.env.APPDATA, '\\\\server\\share\\portable-home\\AppData\\Roaming')
+  assert.equal(options.env.LOCALAPPDATA, '\\\\server\\share\\portable-home\\AppData\\Local')
 })
 
 test('status --url does not reuse local daemon token or metadata for a different target', async () => {
