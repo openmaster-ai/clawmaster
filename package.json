@@ -40,6 +40,7 @@
     "test:cli": "node --test bin/*.test.mjs tests/desktop/harness.unit.test.mjs",
     "test:plugins": "npx tsx --test plugins/memory-clawmaster-powermem/*.test.ts",
     "test:desktop": "node --test tests/desktop/smoke.test.mjs",
+    "test:wizard-smoke": "node tests/install/wizard-install-smoke.mjs",
     "test": "npm run test:cli && npm run test:plugins && npm run test --workspace=@openclaw-manager/backend && npm run test --workspace=@openclaw-manager/web"
   },
   "keywords": [

@@ -4,7 +4,7 @@ import { promisify } from 'util'
 import { homedir } from 'os'
 import path from 'path'
 import { getClawmasterRuntimeSelection } from '../clawmasterSettings.js'
-import { execOpenclaw, resolveExecFileCommand, needsShellOnWindows } from '../execOpenclaw.js'
+import { execOpenclaw, resolveExecFileCommand, needsShellOnWindows, clearOpenclawBinCache } from '../execOpenclaw.js'
 import { runClawprobeCommand } from '../execClawprobe.js'
 import { execWslCommand, resolveSelectedWslDistroSync, shouldUseWslRuntime } from '../wslRuntime.js'
 
@@ -122,6 +122,9 @@ export function registerExecRoutes(app: Express): void {
       const { stdout, stderr } = await execFileAsync(resolvedCmd, normalized.args, {
         shell: needsShellOnWindows(normalized.cmd),
       })
+      if (normalized.cmd === 'npm' && normalized.args.some((a) => a === 'openclaw')) {
+        clearOpenclawBinCache()
+      }
       res.json({ ok: true, stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0 })
     } catch (err: any) {
       const message = err instanceof Error ? err.message : String(err)

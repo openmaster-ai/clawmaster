@@ -185,11 +185,15 @@ export interface OnboardingAdapter {
   installPlugin(packageName: string): Promise<void>
 }
 
+export interface InstallOptions {
+  registryUrl?: string
+}
+
 export interface SetupAdapter {
   /** 逐项检测五项能力，通过回调报告每项状态 */
   detectCapabilities(onUpdate: (status: CapabilityStatus) => void): Promise<CapabilityStatus[]>
   /** 安装指定能力列表，通过回调报告进度 */
-  installCapabilities(ids: CapabilityId[], onProgress: (progress: InstallProgress) => void): Promise<void>
+  installCapabilities(ids: CapabilityId[], onProgress: (progress: InstallProgress) => void, options?: InstallOptions): Promise<void>
   /** 配置引导 */
   onboarding: OnboardingAdapter
 }
@@ -505,7 +509,7 @@ export const realSetupAdapter: SetupAdapter = {
     )
   },
 
-  async installCapabilities(ids, onProgress) {
+  async installCapabilities(ids, onProgress, options) {
     // 逐项安装
     const failures: string[] = []
     for (const id of ids) {
@@ -530,14 +534,18 @@ export const realSetupAdapter: SetupAdapter = {
         const totalSteps = cap.installSteps.length
         for (let i = 0; i < totalSteps; i++) {
           const step = cap.installSteps[i]
+          const args = [...step.args]
+          if (options?.registryUrl && step.cmd === 'npm') {
+            args.push('--registry', options.registryUrl)
+          }
           onProgress({
             id,
             status: 'installing',
             progress: Math.round(((i + 0.5) / totalSteps) * 100),
-            log: `${step.cmd} ${step.args.join(' ')}`,
+            log: `${step.cmd} ${args.join(' ')}`,
           })
 
-          await execCommand(step.cmd, step.args)
+          await execCommand(step.cmd, args)
         }
 
         onProgress({ id, status: 'done', progress: 100 })
@@ -628,7 +636,7 @@ export const demoSetupAdapter: SetupAdapter = {
     return results
   },
 
-  async installCapabilities(ids, onProgress) {
+  async installCapabilities(ids, onProgress, _options) {
     for (const id of ids) {
       const cap = CAPABILITIES.find((c) => c.id === id)
       if (!cap) continue

@@ -1,8 +1,10 @@
 suite: setup-wizard
-name: 安装向导 Demo 全流程
+name: 安装向导 Demo 全流程（简化版）
 description: |
-  验证安装向导在 demo 模式下的完整状态流转：
-  检测中 → 就绪（显示缺失能力）→ 安装中（进度条）→ 完成 → 进入主界面
+  验证简化后的安装向导在 demo 模式下的完整状态流转：
+  Step 1: 检测 OpenClaw Engine → 安装（如需要）→ 初始化配置
+  Step 2: 选择 LLM 提供商 → 输入 API Key → 选择模型
+  完成: 圆形揭幕动画 → 进入主界面
 
 preconditions:
   - dev server 已启动（{BASE_URL} 可访问）
@@ -11,111 +13,179 @@ preconditions:
 viewport: { width: 1280, height: 800 }
 
 cases:
-  - id: setup-01
-    name: 检测中状态渲染
+  - id: wizard-01
+    name: Step 1 — 检测中状态渲染
     steps:
       - action: navigate
         url: "{BASE_URL}?demo=install"
       - action: wait
-        duration: 1500ms
+        duration: 500ms
       - action: screenshot
-        name: setup-detecting
+        name: wizard-detecting
     assertions:
-      - 页面显示"龙虾管理大师"标题
-      - 页面显示"OpenClaw 生态的六边形战士"副标题
-      - 页面显示"Demo 模式"标签
-      - 页面显示"正在检测系统能力..."
-      - 能力列表开始出现（核心引擎、记忆管理等），部分状态为"检测中..."
+      - 页面显示"ClawMaster"标题
+      - 页面显示品牌标语
+      - 页面显示语言切换器（中/英/日）
+      - 品牌图标外圈有旋转动画（wizard-brand-ring-spin）
+      - 状态卡片显示"OpenClaw Engine"
+      - 状态卡片显示"正在检测系统能力..."
+      - 无安装按钮（正在检测中）
 
-  - id: setup-02
-    name: 检测完成 → 就绪状态
+  - id: wizard-02
+    name: Step 1 — 检测完成，引擎已安装，自动跳转
     steps:
       - action: wait
         duration: 4000ms
-        reason: demo adapter 每项检测有 400-700ms 延迟，5 项约需 3-4 秒
+        reason: demo adapter 每项检测有 400-700ms 延迟
       - action: screenshot
-        name: setup-ready
+        name: wizard-provider-step
     assertions:
-      - 5 项能力全部显示最终状态
-      - 核心引擎显示"v2026.3.13"（已安装）
-      - 记忆管理显示"v0.2.0"（已安装）
-      - 可观测性显示"未安装"（橙色）
-      - 文档与图像识别显示"未安装"（橙色）
-      - 智能体编排显示"v0.1.4"（已安装）
-      - 核心引擎（required=true）已安装 → 不需要安装按钮
-      - 页面显示"核心引擎已就绪，2 项扩展能力可稍后安装"
-      - '“进入管理大师”按钮可见且可点击（因为 required 全部满足）'
-      - 显示"未安装的能力可在对应功能页面按需安装"提示
+      - 自动跳过安装，进入 Step 2
+      - 页面显示"配置 LLM 提供商"
+      - 步骤指示器显示 OpenClaw（已完成 ✓）+ 模型（当前）
+      - 金牌赞助商区域显示"文心大模型"
+      - 推荐提供商区域显示 OpenAI / Anthropic / DeepSeek / Google / Ollama 等
+      - 显示 API Key 输入框
+      - 显示"跳过剩余步骤"链接
 
-  - id: setup-03
-    name: 直接进入主界面（required 已满足时跳过安装）
+  - id: wizard-03
+    name: Step 1 — 引擎未安装时显示安装界面
+    preconditions:
+      - 需要模拟引擎未安装的场景（或使用未安装 OpenClaw 的环境）
+    steps:
+      - action: observe
+        target: wizard-engine-step
+    assertions:
+      - 状态卡片显示"核心引擎未安装"（橙色图标）
+      - 显示"使用国内 npm 镜像"复选框
+      - 显示"安装核心引擎"主按钮
+
+  - id: wizard-04
+    name: Step 1 — 安装进度条动画
+    preconditions:
+      - 点击了"安装核心引擎"按钮
+    steps:
+      - action: click
+        target: text("安装核心引擎")
+      - action: wait
+        duration: 1000ms
+      - action: screenshot
+        name: wizard-installing
+    assertions:
+      - 品牌图标外圈显示 conic-gradient 进度环
+      - 状态卡片显示进度条（wizard-progress-bar）
+      - 进度条有发光效果（box-shadow）
+      - 状态文字显示当前安装阶段（解析依赖/下载/安装/链接）
+      - 安装按钮消失，无法重复点击
+
+  - id: wizard-05
+    name: Step 2 — 选择提供商并输入 API Key
+    steps:
+      - action: click
+        target: text("OpenAI")
+      - action: screenshot
+        name: wizard-openai-selected
+    assertions:
+      - OpenAI 按钮高亮（wizard-provider-chip-active）
+      - 显示"获取 OpenAI API Key →"链接
+      - API Key 输入框 placeholder 显示"输入 OpenAI API Key"
+      - 显示"验证并继续"按钮（禁用状态，因为未输入）
+
+  - id: wizard-06
+    name: Step 2 — API Key 验证成功后展示模型选择
+    steps:
+      - action: input
+        target: placeholder("输入 OpenAI API Key")
+        value: "sk-test-key"
+      - action: click
+        target: text("验证并继续")
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: wizard-model-picker
+    assertions:
+      - 模型选择卡片以 slide-up 动画出现（wizard-card-appear）
+      - 显示"选择默认模型"标题
+      - 显示 GPT-4.1 / GPT-4.1 Mini / GPT-4o 等单选按钮
+      - GPT-4.1 Mini 默认选中
+      - 显示自定义模型 ID 输入框
+      - 显示"进入管理大师"按钮
+
+  - id: wizard-07
+    name: Step 2 — 自定义模型 ID
+    steps:
+      - action: input
+        target: placeholder("输入模型 ID")
+        value: "gpt-5-preview"
+      - action: screenshot
+        name: wizard-custom-model
+    assertions:
+      - 自定义输入有值后，所有单选按钮取消选中
+      - "进入管理大师"按钮可点击
+
+  - id: wizard-08
+    name: 完成 — 圆形揭幕动画进入主界面
     steps:
       - action: click
         target: text("进入管理大师")
       - action: wait
-        duration: 2000ms
+        duration: 500ms
       - action: screenshot
-        name: setup-enter-direct
-    assertions:
-      - 安装向导消失
-      - 主界面 Layout 渲染（侧边栏 + 内容区）
-      - 侧边栏显示"龙虾管理大师"logo + "ClawMaster"文字
-      - 侧边栏包含至少 10 个导航项（含可观测、记忆）
-      - 可观测/记忆虽未安装，但导航项仍显示（进入后按需安装）
-
-  - id: setup-04
-    name: 可观测页面显示能力引导安装
-    steps:
-      - action: click
-        target: role(link, "可观测")
+        name: wizard-circle-reveal
       - action: wait
-        duration: 2000ms
+        duration: 1000ms
       - action: screenshot
-        name: setup-observe-guard
+        name: wizard-main-app
     assertions:
-      - 页面显示"可观测性尚未启用"
-      - 显示"安装可观测性"按钮
-      - 显示"重新检测"按钮
-      - 不显示费用卡片/图表（被 guard 拦截）
+      - 出现全屏圆形揭幕遮罩（CircleReveal）
+      - clip-path 从 circle(0%) 扩展到 circle(150%)
+      - 动画持续约 700ms
+      - 动画完成后主界面 Layout 渲染
+      - 安装向导完全消失
 
-  - id: setup-05
-    name: 记忆页面显示原生记忆工作区
-    steps:
-      - action: click
-        target: role(link, "记忆")
-      - action: wait
-        duration: 2000ms
-      - action: screenshot
-        name: setup-memory-native
-    assertions:
-      - 页面显示"记忆管理"
-      - 显示原生记忆概览卡片
-      - 显示存储文件列表
-      - 不显示安装引导
-
-  # === Issue #4 修复验证 ===
-
-  - id: setup-06
-    name: 检测使用 useEffect 触发（非 useState 副作用）
+  - id: wizard-09
+    name: 跳过流程
     steps:
       - action: navigate
         url: "{BASE_URL}?demo=install"
       - action: wait
-        duration: 3000ms
+        duration: 5000ms
+      - action: click
+        target: text("跳过剩余步骤")
+      - action: wait
+        duration: 1500ms
       - action: screenshot
-        name: setup-useeffect
+        name: wizard-skip
     assertions:
-      - 安装向导正常渲染并开始检测
-      - 检测通过 useEffect 触发（非 useState 初始化器）
-      - StrictMode 下不会导致 startDetection 被重复调用
+      - 圆形揭幕动画触发
+      - 直接进入主界面
+      - 不调用 testApiKey / setApiKey / setDefaultModel
 
-  - id: setup-07
-    name: 完成页控制台链接使用动态 URL
+  - id: wizard-10
+    name: npm 镜像开关
     preconditions:
-      - 完成安装流程到达结果页
+      - 引擎未安装场景
     steps:
-      - action: observe
-        target: 控制台链接
+      - action: click
+        target: checkbox("使用国内 npm 镜像")
+      - action: screenshot
+        name: wizard-mirror-checked
     assertions:
-      - 控制台链接 href 由 buildGatewayUrl 生成
-      - 链接使用配置中的网关端口（非硬编码 127.0.0.1）
+      - 复选框勾选
+      - 点击安装后，npm install 命令附加 --registry https://registry.npmmirror.com
+
+  - id: wizard-11
+    name: 国际化切换
+    steps:
+      - action: navigate
+        url: "{BASE_URL}?demo=install"
+      - action: wait
+        duration: 5000ms
+      - action: select
+        target: language-switcher
+        value: "ja"
+      - action: screenshot
+        name: wizard-japanese
+    assertions:
+      - 页面显示日文文案"LLMプロバイダーを設定"
+      - 提供商名称保持原文（OpenAI / Anthropic 等）

@@ -1,13 +1,14 @@
 suite: onboarding-config
-name: 安装后配置引导全流程
+name: 安装后配置引导全流程（简化版）
 description: |
-  验证 Setup Wizard 在安装完成后的配置引导步骤：
-  初始化配置 → API Key → 模型选择 → 启动网关 → 添加通道 → 完成
-  包含 Demo 模式和真实 CLI 模式测试。
+  验证简化后的 Setup Wizard 配置引导步骤：
+  Step 1: 检测/安装 OpenClaw Engine → 自动初始化配置
+  Step 2: 选择 LLM 提供商 → 验证 API Key → 选择模型 → 圆形揭幕进入主界面
+  网关/通道/模块启用已从向导中移除，用户可在主界面各功能页按需配置。
 
 preconditions:
   - npm run dev:web 已启动
-  - openclaw 已安装
+  - openclaw 已安装（或使用 ?demo=install 模拟）
 
 viewport: { width: 1280, height: 800 }
 
@@ -17,294 +18,181 @@ viewport: { width: 1280, height: 800 }
 
 cases:
   - id: onboard-01
-    name: 安装完成后显示"开始配置"和"跳过"按钮
+    name: 引擎已安装时自动跳到提供商配置
     steps:
       - action: navigate
         url: "{BASE_URL}?demo=install"
       - action: wait
-        duration: 6000ms
-        reason: 等待 demo 检测 + 安装流程完成进入 done 阶段
+        duration: 5000ms
+        reason: 等待 demo 检测完成 + initConfig 自动执行
       - action: screenshot
-        name: onboard-done-buttons
+        name: onboard-auto-provider
     assertions:
-      - 显示"开始配置"按钮
-      - 显示"跳过，稍后配置"按钮
-      - 不显示旧的"进入管理大师"单按钮
+      - 页面显示"配置 LLM 提供商"标题
+      - 步骤指示器显示 OpenClaw（✓ 已完成）+ 模型（当前）
+      - 显示金牌赞助商区域（文心大模型）
+      - 显示推荐提供商区域（OpenAI/Anthropic/DeepSeek 等）
+      - 默认选中"文心大模型"
 
   - id: onboard-02
-    name: 点击"跳过"直接进入主界面
-    steps:
-      - action: navigate
-        url: "{BASE_URL}?demo=install"
-      - action: wait
-        duration: 6000ms
-      - action: click
-        target: text("跳过，稍后配置")
-      - action: wait
-        duration: 2000ms
-      - action: screenshot
-        name: onboard-skip-to-dashboard
-    assertions:
-      - 安装向导消失
-      - 主界面 Layout 渲染（侧边栏 + 内容区）
-
-  - id: onboard-03
-    name: 步骤 1：初始化配置（自动执行）
-    steps:
-      - action: navigate
-        url: "{BASE_URL}?demo=install"
-      - action: wait
-        duration: 6000ms
-      - action: click
-        target: text("开始配置")
-      - action: wait
-        duration: 1500ms
-      - action: screenshot
-        name: onboard-init-progress
-    assertions:
-      - 显示步骤指示器（5 个步骤圆点）
-      - 第 1 步"初始化"高亮
-      - 短暂显示"正在初始化配置文件..."后自动进入下一步
-
-  - id: onboard-04
-    name: 步骤 2：API Key 配置界面
-    steps:
-      - action: wait
-        duration: 2000ms
-        reason: 等待初始化完成自动跳转到 API Key 步骤
-      - action: screenshot
-        name: onboard-apikey-page
-    assertions:
-      - 显示"配置 LLM 提供商"标题
-      - 显示 3 个提供商按钮（OpenAI、Anthropic、DeepSeek）
-      - OpenAI 默认选中（高亮状态）
-      - 显示 API Key 输入框（placeholder 包含"OpenAI"）
-      - '“下一步”按钮存在但 disabled（Key 为空）'
-      - 显示"跳过剩余步骤"链接
-      - 步骤指示器第 2 步"API Key"高亮，第 1 步显示 ✓
-
-  - id: onboard-05
-    name: 切换提供商更新 placeholder
-    steps:
-      - action: click
-        target: text("Anthropic")
-      - action: screenshot
-        name: onboard-switch-provider
-    assertions:
-      - Anthropic 按钮高亮
-      - OpenAI 按钮不再高亮
-      - 输入框 placeholder 包含"Anthropic"
-
-  - id: onboard-06
-    name: 输入 API Key 后"下一步"可点击
+    name: 选择 OpenAI 并输入 API Key
     steps:
       - action: click
         target: text("OpenAI")
+      - action: screenshot
+        name: onboard-openai-selected
+    assertions:
+      - OpenAI 按钮高亮
+      - 显示"获取 OpenAI API Key →"链接（指向 platform.openai.com）
+      - API Key 输入框 placeholder 显示"Enter OpenAI API Key"
+      - "验证并继续"按钮 disabled（Key 为空）
+
+  - id: onboard-03
+    name: 验证 API Key 并展示模型选择
+    steps:
       - action: fill
         target: input[type="password"]
-        value: "sk-test-demo-key-12345"
-      - action: screenshot
-        name: onboard-apikey-filled
-    assertions:
-      - '“下一步”按钮可点击（不再 disabled）'
-      - 输入框显示密码点（type=password）
-
-  - id: onboard-07
-    name: 步骤 3：模型选择界面
-    steps:
+        value: "sk-demo-test-key"
       - action: click
-        target: text("下一步")
+        target: text("验证并继续")
       - action: wait
-        duration: 1500ms
+        duration: 2000ms
       - action: screenshot
-        name: onboard-model-select
+        name: onboard-model-picker
     assertions:
+      - 模型选择卡片以上滑动画出现
       - 显示"选择默认模型"标题
-      - 列出 OpenAI 模型（GPT-4o、GPT-4o Mini、o3-mini）
-      - GPT-4o 默认选中（radio 按钮）
-      - 每个模型显示名称 + model id
-      - 步骤指示器第 3 步"模型"高亮，前两步显示 ✓
-
-  - id: onboard-08
-    name: 选择不同模型
-    steps:
-      - action: click
-        target: text("GPT-4o Mini")
-      - action: screenshot
-        name: onboard-model-changed
-    assertions:
-      - GPT-4o Mini radio 选中
-      - GPT-4o radio 未选中
-
-  - id: onboard-09
-    name: 步骤 4：网关启动界面
-    steps:
-      - action: click
-        target: text("下一步")
-      - action: wait
-        duration: 500ms
-      - action: screenshot
-        name: onboard-gateway-starting
-    assertions:
-      - 显示"启动网关"标题
-      - 显示"正在启动网关..."动画文字
-      - 步骤指示器第 4 步"网关"高亮
-
-  - id: onboard-10
-    name: 网关启动成功后显示状态
-    steps:
-      - action: wait
-        duration: 3000ms
-        reason: 等待 demo 模拟网关启动 + 轮询
-      - action: screenshot
-        name: onboard-gateway-running
-    assertions:
-      - 显示绿色 ✓ 图标
-      - 显示"网关已启动"文字（绿色）
-      - 显示端口号 18789
-      - '“下一步”按钮可见可点击'
-
-  - id: onboard-11
-    name: 步骤 5：通道配置界面
-    steps:
-      - action: click
-        target: text("下一步")
-      - action: wait
-        duration: 500ms
-      - action: screenshot
-        name: onboard-channel-select
-    assertions:
-      - 显示"添加消息通道"标题
-      - 显示"可选，稍后可在通道页面添加"副文字
-      - 显示 4 个通道按钮（Telegram、Discord、飞书、Slack）
-      - 无通道选中时不显示 token 输入框
-      - 显示"跳过，稍后添加"按钮
-      - 步骤指示器第 5 步"通道"高亮
-
-  - id: onboard-12
-    name: 选择通道后出现 token 输入框
-    steps:
-      - action: click
-        target: text("Telegram")
-      - action: screenshot
-        name: onboard-channel-token
-    assertions:
-      - Telegram 按钮高亮
-      - 显示 token 输入框（placeholder 包含"Bot Token"）
-      - 显示"添加并完成"按钮（disabled，token 为空）
-
-  - id: onboard-13
-    name: 跳过通道 → 配置完成
-    steps:
-      - action: click
-        target: text("跳过通道配置")
-      - action: wait
-        duration: 500ms
-      - action: screenshot
-        name: onboard-done-summary
-    assertions:
-      - 显示绿色 ✓ 大图标
-      - 显示"配置完成！"文字
-      - 汇总卡片显示：提供商 = OpenAI，默认模型 = gpt-4o-mini，网关 = 运行中，通道 = 未配置
+      - 显示 GPT-4.1 / GPT-4.1 Mini / GPT-4o 等单选项
+      - GPT-4.1 Mini 默认选中
+      - 显示自定义模型 ID 输入框
       - 显示"进入管理大师"按钮
-      - 所有步骤指示器圆点显示 ✓
 
-  - id: onboard-14
-    name: 配置完成 → 进入主界面
+  - id: onboard-04
+    name: 选择模型后圆形揭幕进入主界面
     steps:
       - action: click
         target: text("进入管理大师")
       - action: wait
-        duration: 2000ms
+        duration: 500ms
       - action: screenshot
-        name: onboard-final-dashboard
+        name: onboard-circle-reveal
+      - action: wait
+        duration: 1000ms
+      - action: screenshot
+        name: onboard-main-app
     assertions:
-      - 安装向导消失
-      - 主界面 Layout 渲染
+      - 出现全屏圆形揭幕遮罩（clip-path circle 动画）
+      - 动画完成后主界面 Layout 渲染
+      - 安装向导完全消失
 
-# ──────────────────────────────────────────────
-# Part B: 通道填写并完成（不跳过）
-# ──────────────────────────────────────────────
-
-  - id: onboard-15
-    name: 填写通道 token 并完成配置
-    preconditions:
-      - 已进入 onboard_channel 阶段（可通过前面步骤到达）
+  - id: onboard-05
+    name: 跳过配置直接进入主界面
     steps:
       - action: navigate
         url: "{BASE_URL}?demo=install"
       - action: wait
-        duration: 6000ms
+        duration: 5000ms
       - action: click
-        target: text("开始配置")
-      - action: wait
-        duration: 2000ms
-      - action: fill
-        target: input[type="password"]
-        value: "sk-demo-key"
-      - action: click
-        target: text("下一步")
-      - action: wait
-        duration: 1000ms
-      - action: click
-        target: text("下一步")
-      - action: wait
-        duration: 3000ms
-      - action: click
-        target: text("下一步")
-      - action: wait
-        duration: 500ms
-      - action: click
-        target: text("Discord")
-      - action: fill
-        target: input[type="password"]
-        value: "discord-bot-token-demo"
-      - action: click
-        target: text("添加并完成")
+        target: text("跳过剩余步骤")
       - action: wait
         duration: 1500ms
       - action: screenshot
-        name: onboard-with-channel
+        name: onboard-skip-to-dashboard
     assertions:
-      - 汇总卡片显示通道 = Discord
-      - 其他字段正确显示
+      - 圆形揭幕动画触发
+      - 主界面 Layout 渲染
+      - 未调用 testApiKey / setApiKey / setDefaultModel
+
+  - id: onboard-06
+    name: 切换提供商重置 API Key 和模型状态
+    steps:
+      - action: navigate
+        url: "{BASE_URL}?demo=install"
+      - action: wait
+        duration: 5000ms
+      - action: click
+        target: text("OpenAI")
+      - action: fill
+        target: input[type="password"]
+        value: "sk-test"
+      - action: click
+        target: text("验证并继续")
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: onboard-model-shown
+      - action: click
+        target: text("Anthropic")
+      - action: screenshot
+        name: onboard-provider-switched
+    assertions:
+      - 模型选择卡片消失（切换提供商后重置验证状态）
+      - API Key 输入框清空
+      - Anthropic 按钮高亮，OpenAI 恢复普通状态
 
 # ──────────────────────────────────────────────
-# Part C: 真实 CLI 模式配置引导
+# Part B: 国际化
 # ──────────────────────────────────────────────
 
-  - id: onboard-16
-    name: 真实模式：初始化配置文件成功
+  - id: onboard-07
+    name: 中文界面
+    steps:
+      - action: navigate
+        url: "{BASE_URL}?demo=install"
+      - action: wait
+        duration: 5000ms
+      - action: select
+        target: language-switcher
+        value: "zh"
+      - action: screenshot
+        name: onboard-chinese
+    assertions:
+      - 显示"配置 LLM 提供商"
+      - 显示"文心大模型"
+      - 显示"验证并继续"按钮
+      - 显示"跳过剩余步骤"链接
+
+  - id: onboard-08
+    name: npm 镜像开关（引擎未安装时）
+    preconditions:
+      - 需要模拟引擎未安装场景
+    steps:
+      - action: observe
+        target: wizard-engine-step
+    assertions:
+      - 显示"使用国内 npm 镜像 (npmmirror.com) 加速下载"复选框
+      - 默认未勾选
+      - 勾选后安装时 npm install 附加 --registry https://registry.npmmirror.com
+
+# ──────────────────────────────────────────────
+# Part C: 真实 CLI 模式
+# ──────────────────────────────────────────────
+
+  - id: onboard-09
+    name: 真实模式：引擎已安装，直接进入提供商配置
     preconditions:
       - 不使用 ?demo 参数
       - openclaw 已安装
-      - rm -rf ~/.openclaw（清除旧配置以测试初始化）
     steps:
       - action: navigate
         url: "{BASE_URL}"
       - action: wait
-        duration: 6000ms
-      - action: click
-        target: text("开始配置")
-      - action: wait
-        duration: 3000ms
+        duration: 5000ms
       - action: screenshot
-        name: onboard-real-init
+        name: onboard-real-provider
     assertions:
-      - 初始化完成后进入 API Key 配置步骤
-      - ~/.openclaw/openclaw.json 文件已创建
-      - 步骤指示器第 1 步显示 ✓
+      - 自动检测到 OpenClaw → 初始化配置 → 进入提供商配置
+      - 显示"配置 LLM 提供商"
 
-  - id: onboard-17
-    name: 真实模式：API Key 中途跳过
+  - id: onboard-10
+    name: 真实模式：跳过进入主界面
     steps:
       - action: click
         target: text("跳过剩余步骤")
       - action: wait
         duration: 2000ms
       - action: screenshot
-        name: onboard-real-skip-apikey
+        name: onboard-real-skip
     assertions:
-      - 安装向导消失
+      - 圆形揭幕动画
       - 进入主界面 Dashboard
-      - 用户可稍后在配置页面设置 API Key
