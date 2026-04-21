@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 interface CircleRevealProps {
   onComplete: () => void
@@ -7,7 +7,6 @@ interface CircleRevealProps {
 
 export function CircleReveal({ onComplete, duration = 700 }: CircleRevealProps) {
   const [phase, setPhase] = useState<'idle' | 'expanding' | 'done'>('idle')
-  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setPhase('expanding'))
@@ -30,7 +29,6 @@ export function CircleReveal({ onComplete, duration = 700 }: CircleRevealProps) 
 
   return (
     <div
-      ref={ref}
       style={{
         position: 'fixed',
         inset: 0,

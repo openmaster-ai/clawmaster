@@ -19,12 +19,6 @@ export interface InstallProgress {
   error?: string
 }
 
-/** 安装向导总状态 */
-export type SetupPhase =
-  | 'detecting' | 'ready' | 'installing' | 'done' | 'error'
-  | 'onboard_init' | 'onboard_apikey' | 'onboard_model'
-  | 'onboard_gateway' | 'onboard_channel' | 'onboard_done'
-
 /** 能力定义（用户看到的名称和底层安装命令的映射） */
 export interface CapabilityDef {
   id: CapabilityId

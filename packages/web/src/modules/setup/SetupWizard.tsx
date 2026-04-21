@@ -48,8 +48,6 @@ type WizardPhase =
   | 'installing'    // npm install -g openclaw in progress
   | 'install_error' // install failed
   | 'provider'      // pick provider + API key + model (all in one)
-  | 'completing'    // circle reveal animation
-  | 'done'          // handed off to main app
 
 interface SetupWizardProps {
   onComplete: () => void
@@ -248,6 +246,10 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         return
       }
       setCatalogModels(null)
+    }).catch(() => {
+      if (catalogRequestIdRef.current === requestId) {
+        setCatalogModels(null)
+      }
     }).finally(() => {
       if (catalogRequestIdRef.current === requestId) {
         setCatalogLoading(false)
@@ -591,7 +593,7 @@ function EngineStep({
   onInstall,
   onRetry,
 }: {
-  phase: string
+  phase: WizardPhase
   engineStatus: CapabilityStatus | null
   installError: string | null
   simProgress: ReturnType<typeof useSimulatedProgress>
