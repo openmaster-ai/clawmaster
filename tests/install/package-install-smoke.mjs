@@ -18,6 +18,15 @@ function getNpmExecOptions() {
   }
 }
 
+function getBinaryExecOptions(env) {
+  return {
+    encoding: 'utf8',
+    env,
+    shell: process.platform === 'win32',
+    windowsHide: true,
+  }
+}
+
 function resolveInstalledBinary() {
   if (process.env.CLAWMASTER_BINARY?.trim()) {
     return process.env.CLAWMASTER_BINARY.trim()
@@ -41,12 +50,13 @@ function assertSuccess(result, binary, args) {
   )
 }
 
+function runBinary(binary, args, env) {
+  return spawnSync(binary, args, getBinaryExecOptions(env))
+}
+
 async function waitForHealthyStatus(binary, env) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const result = spawnSync(binary, ['status', '--url', smokeUrl, '--token', smokeToken], {
-      encoding: 'utf8',
-      env,
-    })
+    const result = runBinary(binary, ['status', '--url', smokeUrl, '--token', smokeToken], env)
     if (result.status === 0) {
       return result.stdout
     }
@@ -69,20 +79,20 @@ if (process.platform === 'win32') {
 }
 
 try {
-  const versionResult = spawnSync(binary, ['--version'], { encoding: 'utf8', env })
+  const versionResult = runBinary(binary, ['--version'], env)
   assertSuccess(versionResult, binary, ['--version'])
   assert.match(versionResult.stdout, new RegExp(`ClawMaster v${pkg.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
 
-  const helpResult = spawnSync(binary, ['--help'], { encoding: 'utf8', env })
+  const helpResult = runBinary(binary, ['--help'], env)
   assertSuccess(helpResult, binary, ['--help'])
   assert.match(helpResult.stdout, /--silent/)
 
-  const doctorResult = spawnSync(binary, ['doctor'], { encoding: 'utf8', env })
+  const doctorResult = runBinary(binary, ['doctor'], env)
   assertSuccess(doctorResult, binary, ['doctor'])
   assert.doesNotMatch(doctorResult.stdout, /missing build output/i)
 
   const serveArgs = ['serve', '--daemon', '--silent', '--host', '127.0.0.1', '--port', smokePort, '--token', smokeToken]
-  const serveResult = spawnSync(binary, serveArgs, { encoding: 'utf8', env })
+  const serveResult = runBinary(binary, serveArgs, env)
   assertSuccess(serveResult, binary, serveArgs)
   assert.match(serveResult.stdout, new RegExp(`web console:\\s+${smokeUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
   assert.match(serveResult.stdout, new RegExp(`token:\\s+${smokeToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
@@ -91,10 +101,10 @@ try {
   const statusOutput = await waitForHealthyStatus(binary, env)
   assert.match(statusOutput, new RegExp(`ClawMaster service is reachable at ${smokeUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
 
-  const stopResult = spawnSync(binary, ['stop'], { encoding: 'utf8', env })
+  const stopResult = runBinary(binary, ['stop'], env)
   assertSuccess(stopResult, binary, ['stop'])
   assert.match(stopResult.stdout, /Stopped ClawMaster service/)
 } finally {
-  spawnSync(binary, ['stop'], { encoding: 'utf8', env })
+  runBinary(binary, ['stop'], env)
   fs.rmSync(tempHome, { recursive: true, force: true })
 }
