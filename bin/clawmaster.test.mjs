@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { execFile as execFileCallback } from 'node:child_process'
+import { execFile as execFileCallback, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import { closeSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
@@ -30,6 +30,19 @@ async function runCli(args, homeDir) {
       ...process.env,
       HOME: homeDir,
     },
+  })
+}
+
+async function waitForExit(child) {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return {
+      code: child.exitCode,
+      signal: child.signalCode,
+    }
+  }
+  return new Promise((resolve, reject) => {
+    child.once('exit', (code, signal) => resolve({ code, signal }))
+    child.once('error', reject)
   })
 }
 
@@ -495,6 +508,45 @@ test('status reuses the local daemon token and metadata for the recorded service
     await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()))
     })
+    rmSync(tempHome, { recursive: true, force: true })
+  }
+})
+
+test('stop kills a recorded live daemon even if the service probe is unreachable', async () => {
+  const tempHome = createTempHome()
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    detached: process.platform !== 'win32',
+    stdio: 'ignore',
+    windowsHide: true,
+  })
+
+  if (process.platform !== 'win32') {
+    child.unref()
+  }
+
+  writeServiceState(tempHome, {
+    pid: child.pid,
+    url: 'http://127.0.0.1:9',
+    token: 'stale-token',
+    startedAt: '2026-04-11T00:00:00.000Z',
+  })
+
+  try {
+    const { stdout, stderr } = await runCli(['stop'], tempHome)
+    assert.equal(stderr, '')
+    assert.match(stdout, new RegExp(`Stopped ClawMaster service \\(pid ${child.pid}\\)\\.`))
+
+    const exit = await Promise.race([
+      waitForExit(child),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timed out waiting for daemon to stop')), 5000)),
+    ])
+    assert.ok(exit)
+  } finally {
+    try {
+      process.kill(child.pid, 'SIGKILL')
+    } catch {
+      // best effort in case the CLI already stopped it
+    }
     rmSync(tempHome, { recursive: true, force: true })
   }
 })

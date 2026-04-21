@@ -607,7 +607,7 @@ async function runStatus(args) {
 }
 
 async function runStop() {
-  const state = await getRunningServiceState({ allowUnreachable: false })
+  const state = await getRunningServiceState({ allowUnreachable: true })
   if (!state) {
     console.error('No running ClawMaster background service was found.')
     process.exitCode = 1
