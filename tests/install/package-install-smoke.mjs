@@ -67,6 +67,12 @@ async function waitForHealthyStatus(binary, env) {
 
 const binary = resolveInstalledBinary()
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-install-smoke-'))
+const cleanupRmOptions = {
+  recursive: true,
+  force: true,
+  maxRetries: process.platform === 'win32' ? 20 : 0,
+  retryDelay: 200,
+}
 const env = {
   ...process.env,
   HOME: tempHome,
@@ -106,5 +112,5 @@ try {
   assert.match(stopResult.stdout, /Stopped ClawMaster service/)
 } finally {
   runBinary(binary, ['stop'], env)
-  fs.rmSync(tempHome, { recursive: true, force: true })
+  fs.rmSync(tempHome, cleanupRmOptions)
 }
