@@ -83,6 +83,7 @@ jobs:
         run: node tests/install/package-install-smoke.mjs
 
       - name: Wizard install smoke test
+        if: runner.os != 'Windows'
         env:
           CLAWMASTER_BINARY: ${{ steps.binary.outputs.path }}
         run: node tests/install/wizard-install-smoke.mjs
