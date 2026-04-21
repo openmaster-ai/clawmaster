@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { changeLanguage } from '@/i18n'
 import SetupWizard from '../SetupWizard'
 
 const mockDetectCapabilities = vi.fn()
 const mockInstallCapabilities = vi.fn()
+const mockGetProviderModelCatalogResult = vi.fn()
 const mockSetupAdapter = {
   detectCapabilities: (...args: any[]) => mockDetectCapabilities(...args),
   installCapabilities: (...args: any[]) => mockInstallCapabilities(...args),
@@ -23,6 +24,10 @@ const mockSetupAdapter = {
 
 vi.mock('../adapters', () => ({
   getSetupAdapter: () => mockSetupAdapter,
+}))
+
+vi.mock('@/shared/adapters/openclaw', () => ({
+  getProviderModelCatalogResult: (...args: any[]) => mockGetProviderModelCatalogResult(...args),
 }))
 
 vi.mock('@/shared/adapters/ollama', () => ({
@@ -53,6 +58,14 @@ function engineMissing() {
   ]
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 describe('SetupWizard', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
@@ -72,6 +85,11 @@ describe('SetupWizard', () => {
     mockSetupAdapter.onboarding.testApiKey.mockResolvedValue(true)
     mockSetupAdapter.onboarding.setApiKey.mockResolvedValue(undefined)
     mockSetupAdapter.onboarding.setDefaultModel.mockResolvedValue(undefined)
+    mockGetProviderModelCatalogResult.mockResolvedValue({
+      success: false,
+      data: undefined,
+      error: 'catalog unavailable',
+    })
   })
 
   // ──────────────────────────────────────────────────────
@@ -95,11 +113,11 @@ describe('SetupWizard', () => {
       hold?.()
     })
 
-    it('auto-detects engine and advances to provider step when installed', async () => {
+    it('auto-detects engine and advances to provider step without initializing config yet', async () => {
       render(<SetupWizard onComplete={() => {}} />)
 
       expect(await screen.findByText('Configure LLM Provider')).toBeInTheDocument()
-      expect(mockSetupAdapter.onboarding.initConfig).toHaveBeenCalledTimes(1)
+      expect(mockSetupAdapter.onboarding.initConfig).not.toHaveBeenCalled()
     })
 
     it('shows install button and mirror toggle when engine is not installed', async () => {
@@ -209,17 +227,13 @@ describe('SetupWizard', () => {
       expect(await screen.findByText('Configure LLM Provider')).toBeInTheDocument()
     })
 
-    it('proceeds even when initConfig fails (non-fatal)', async () => {
-      mockDetectCapabilities.mockImplementation(async (onUpdate: (status: any) => void) => {
-        const results = engineInstalled()
-        for (const item of results) onUpdate(item)
-        return results
-      })
-      mockSetupAdapter.onboarding.initConfig.mockRejectedValue(new Error('init error'))
-
+    it('reaches the provider step after install without initializing config yet', async () => {
       render(<SetupWizard onComplete={() => {}} />)
 
+      fireEvent.click(await screen.findByRole('button', { name: /Install Core Engine/i }))
+
       expect(await screen.findByText('Configure LLM Provider')).toBeInTheDocument()
+      expect(mockSetupAdapter.onboarding.initConfig).not.toHaveBeenCalled()
     })
   })
 
@@ -317,6 +331,7 @@ describe('SetupWizard', () => {
         expect(mockSetupAdapter.onboarding.testApiKey).toHaveBeenCalledWith('openai', 'sk-test-key', undefined)
       })
       await waitFor(() => {
+        expect(mockSetupAdapter.onboarding.initConfig).toHaveBeenCalledTimes(1)
         expect(mockSetupAdapter.onboarding.setApiKey).toHaveBeenCalledWith('openai', 'sk-test-key', undefined)
       })
 
@@ -352,6 +367,21 @@ describe('SetupWizard', () => {
       expect(await screen.findByText('write failed')).toBeInTheDocument()
     })
 
+    it('still shows the model picker when config initialization fails after validation', async () => {
+      mockSetupAdapter.onboarding.initConfig.mockRejectedValue(new Error('init error'))
+
+      render(<SetupWizard onComplete={() => {}} />)
+
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText('OpenAI'))
+      fireEvent.change(screen.getByPlaceholderText(/Enter OpenAI API Key/i), { target: { value: 'sk-openai' } })
+      fireEvent.click(screen.getByRole('button', { name: /Validate & Continue/i }))
+
+      expect(await screen.findByText('Select Default Model')).toBeInTheDocument()
+      expect(mockSetupAdapter.onboarding.setApiKey).toHaveBeenCalledWith('openai', 'sk-openai', undefined)
+    })
+
     it('passes baseUrl for DeepSeek provider', async () => {
       render(<SetupWizard onComplete={() => {}} />)
 
@@ -368,6 +398,157 @@ describe('SetupWizard', () => {
           'https://api.deepseek.com/v1',
         )
       })
+    })
+
+    it('requires revalidation when the API key changes after validation', async () => {
+      render(<SetupWizard onComplete={() => {}} />)
+
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText('OpenAI'))
+      fireEvent.change(screen.getByPlaceholderText(/Enter OpenAI API Key/i), { target: { value: 'sk-old' } })
+      fireEvent.click(screen.getByRole('button', { name: /Validate & Continue/i }))
+
+      expect(await screen.findByText('Select Default Model')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByPlaceholderText(/Enter OpenAI API Key/i), { target: { value: 'sk-new' } })
+
+      expect(screen.getByRole('button', { name: /Validate & Continue/i })).toBeInTheDocument()
+      expect(screen.queryByText('Select Default Model')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Enter ClawMaster/i })).not.toBeInTheDocument()
+    })
+
+    it('requires revalidation when the base URL changes after validation', async () => {
+      render(<SetupWizard onComplete={() => {}} />)
+
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText(/More providers/i))
+      fireEvent.click(screen.getByText('Custom (OpenAI Compatible)'))
+      fireEvent.change(screen.getByPlaceholderText(/API Base URL/i), { target: { value: 'https://api.example.com/v1' } })
+      fireEvent.change(screen.getByPlaceholderText(/Enter Custom \(OpenAI Compatible\) API Key/i), { target: { value: 'sk-old' } })
+      fireEvent.click(screen.getByRole('button', { name: /Validate & Continue/i }))
+
+      expect(await screen.findByText('Select Default Model')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByPlaceholderText(/API Base URL/i), { target: { value: 'https://api.changed.example/v1' } })
+
+      expect(screen.getByRole('button', { name: /Validate & Continue/i })).toBeInTheDocument()
+      expect(screen.queryByText('Select Default Model')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Enter ClawMaster/i })).not.toBeInTheDocument()
+    })
+
+    it('ignores stale live catalog responses after switching providers', async () => {
+      const staleCatalog = deferred<{
+        success: boolean
+        data: Array<{ id: string; name: string }>
+        error: null
+      }>()
+      mockGetProviderModelCatalogResult.mockImplementationOnce(() => staleCatalog.promise)
+
+      render(<SetupWizard onComplete={() => {}} />)
+
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText('OpenAI'))
+      fireEvent.change(screen.getByPlaceholderText(/Enter OpenAI API Key/i), { target: { value: 'sk-openai' } })
+      fireEvent.click(screen.getByRole('button', { name: /Validate & Continue/i }))
+
+      expect(await screen.findByText('Select Default Model')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByText(/More providers/i))
+      fireEvent.click(screen.getByText('Amazon Bedrock'))
+      fireEvent.change(screen.getByPlaceholderText(/Enter Amazon Bedrock API Key/i), { target: { value: 'aws-key' } })
+      fireEvent.click(screen.getByRole('button', { name: /Validate & Continue/i }))
+
+      expect(await screen.findByText('Select Default Model')).toBeInTheDocument()
+
+      await act(async () => {
+        staleCatalog.resolve({
+          success: true,
+          data: [{ id: 'gpt-5-preview', name: 'GPT-5 Preview' }],
+          error: null,
+        })
+        await staleCatalog.promise
+      })
+
+      expect(screen.getByDisplayValue('anthropic.claude-sonnet-4-6')).toBeInTheDocument()
+      expect(screen.queryByDisplayValue('gpt-5-preview')).not.toBeInTheDocument()
+      expect(screen.queryByText('GPT-5 Preview')).not.toBeInTheDocument()
+    })
+
+    it('clears the provisional model when the live catalog excludes it', async () => {
+      mockGetProviderModelCatalogResult.mockResolvedValue({
+        success: true,
+        data: [{ id: 'gpt-4.1', name: 'GPT-4.1' }],
+        error: null,
+      })
+
+      render(<SetupWizard onComplete={() => {}} />)
+
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText('OpenAI'))
+      fireEvent.change(screen.getByPlaceholderText(/Enter OpenAI API Key/i), { target: { value: 'sk-openai' } })
+      fireEvent.click(screen.getByRole('button', { name: /Validate & Continue/i }))
+
+      const enterButton = await screen.findByRole('button', { name: /Enter ClawMaster/i })
+
+      await waitFor(() => {
+        expect(enterButton).toBeDisabled()
+      })
+
+      expect(screen.getByDisplayValue('gpt-4.1')).not.toBeChecked()
+    })
+
+    it('uses the curated/live intersection when the provider catalog is a superset', async () => {
+      mockGetProviderModelCatalogResult.mockResolvedValue({
+        success: true,
+        data: [
+          { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
+          { id: 'gpt-5-preview', name: 'GPT-5 Preview' },
+        ],
+        error: null,
+      })
+
+      render(<SetupWizard onComplete={() => {}} />)
+
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText('OpenAI'))
+      fireEvent.change(screen.getByPlaceholderText(/Enter OpenAI API Key/i), { target: { value: 'sk-openai' } })
+      fireEvent.click(screen.getByRole('button', { name: /Validate & Continue/i }))
+
+      await screen.findByText('Select Default Model')
+
+      expect(screen.getByDisplayValue('gpt-4.1-mini')).toBeChecked()
+      expect(screen.queryByDisplayValue('gpt-4.1')).not.toBeInTheDocument()
+      expect(screen.queryByDisplayValue('gpt-4o')).not.toBeInTheDocument()
+      expect(screen.queryByDisplayValue('gpt-5-preview')).not.toBeInTheDocument()
+      expect(screen.getByText('Live')).toBeInTheDocument()
+    })
+
+    it('keeps curated model choices when the live catalog is unsafe', async () => {
+      mockGetProviderModelCatalogResult.mockResolvedValue({
+        success: true,
+        data: [{ id: 'text-embedding-3-large', name: 'Text Embedding 3 Large' }],
+        error: null,
+      })
+
+      render(<SetupWizard onComplete={() => {}} />)
+
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText('OpenRouter'))
+      fireEvent.change(screen.getByPlaceholderText(/Enter OpenRouter API Key/i), { target: { value: 'sk-openrouter' } })
+      fireEvent.click(screen.getByRole('button', { name: /Validate & Continue/i }))
+
+      await screen.findByText('Select Default Model')
+
+      expect(screen.getByDisplayValue('anthropic/claude-sonnet-4')).toBeChecked()
+      expect(screen.getByDisplayValue('openai/gpt-4.1-mini')).toBeInTheDocument()
+      expect(screen.queryByDisplayValue('text-embedding-3-large')).not.toBeInTheDocument()
+      expect(screen.queryByText('Live')).not.toBeInTheDocument()
     })
   })
 
@@ -540,9 +721,24 @@ describe('SetupWizard', () => {
         expect(onComplete).toHaveBeenCalled()
       }, { timeout: 2000 })
 
+      expect(mockSetupAdapter.onboarding.initConfig).not.toHaveBeenCalled()
       expect(mockSetupAdapter.onboarding.testApiKey).not.toHaveBeenCalled()
       expect(mockSetupAdapter.onboarding.setApiKey).not.toHaveBeenCalled()
       expect(mockSetupAdapter.onboarding.setDefaultModel).not.toHaveBeenCalled()
+    })
+
+    it('hides skip once provider credentials have been saved', async () => {
+      render(<SetupWizard onComplete={vi.fn()} />)
+
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText('OpenAI'))
+      fireEvent.change(screen.getByPlaceholderText(/Enter OpenAI API Key/i), { target: { value: 'sk-openai' } })
+      fireEvent.click(screen.getByRole('button', { name: /Validate & Continue/i }))
+
+      await screen.findByText('Select Default Model')
+
+      expect(screen.queryByText(/Skip remaining steps/i)).not.toBeInTheDocument()
     })
   })
 
@@ -602,6 +798,40 @@ describe('SetupWizard', () => {
       await waitFor(() => {
         expect(getOllamaStatus).toHaveBeenCalledTimes(1)
       })
+    })
+
+    it('completes onboarding with the first available local Ollama model', async () => {
+      const { getOllamaStatus } = await import('@/shared/adapters/ollama')
+
+      vi.mocked(getOllamaStatus).mockResolvedValue({
+        success: true,
+        data: {
+          installed: true,
+          version: '0.9.0',
+          running: true,
+          models: [{ name: 'qwen2.5:latest', size: 1 }],
+        },
+        error: null,
+      })
+
+      const onComplete = vi.fn()
+      render(<SetupWizard onComplete={onComplete} />)
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText(/Ollama/i))
+      expect(await screen.findByText('qwen2.5:latest')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: /Enter ClawMaster/i }))
+
+      await waitFor(() => {
+        expect(mockSetupAdapter.onboarding.testApiKey).toHaveBeenCalledWith('ollama', 'ollama', 'http://localhost:11434/v1')
+        expect(mockSetupAdapter.onboarding.setApiKey).toHaveBeenCalledWith('ollama', 'ollama', 'http://localhost:11434/v1')
+        expect(mockSetupAdapter.onboarding.setDefaultModel).toHaveBeenCalledWith('ollama/qwen2.5:latest')
+      })
+
+      await waitFor(() => {
+        expect(onComplete).toHaveBeenCalledTimes(1)
+      }, { timeout: 2000 })
     })
   })
 
@@ -664,6 +894,52 @@ describe('SetupWizard', () => {
 
       // Engine is installed in default mock → should advance to provider
       expect(await screen.findByText('Configure LLM Provider')).toBeInTheDocument()
+    })
+
+    it('keeps interrupted installs in recovery mode longer than two polls while the recovery window is still active', async () => {
+      localStorage.setItem('clawmaster-wizard-install', JSON.stringify({
+        phase: 'installing',
+        startedAt: Date.now(),
+      }))
+
+      mockDetectCapabilities.mockImplementation(async (onUpdate: (status: any) => void) => {
+        const results = engineMissing()
+        for (const item of results) onUpdate(item)
+        return results
+      })
+
+      render(<SetupWizard onComplete={() => {}} />)
+
+      await waitFor(() => {
+        expect(mockDetectCapabilities.mock.calls.length).toBeGreaterThanOrEqual(1)
+      })
+
+      expect(screen.queryByRole('button', { name: /Install Core Engine/i })).not.toBeInTheDocument()
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 4500))
+      })
+
+      expect(mockDetectCapabilities.mock.calls.length).toBeGreaterThanOrEqual(3)
+      expect(screen.queryByRole('button', { name: /Install Core Engine/i })).not.toBeInTheDocument()
+    }, 10000)
+
+    it('falls back to a retryable install state once the recovery grace window expires', async () => {
+      localStorage.setItem('clawmaster-wizard-install', JSON.stringify({
+        phase: 'installing',
+        startedAt: Date.now() - 61 * 1000,
+      }))
+
+      mockDetectCapabilities.mockImplementation(async (onUpdate: (status: any) => void) => {
+        const results = engineMissing()
+        for (const item of results) onUpdate(item)
+        return results
+      })
+
+      render(<SetupWizard onComplete={() => {}} />)
+
+      expect(await screen.findByRole('button', { name: /Install Core Engine/i })).toBeInTheDocument()
+      expect(screen.getByText(/Use China npm mirror/i)).toBeInTheDocument()
     })
 
     it('ignores stale localStorage entries older than 10 minutes', async () => {

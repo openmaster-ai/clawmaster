@@ -47,7 +47,6 @@ type WizardPhase =
   | 'not_installed' // needs install
   | 'installing'    // npm install -g openclaw in progress
   | 'install_error' // install failed
-  | 'onboard_init'  // initializing config
   | 'provider'      // pick provider + API key + model (all in one)
   | 'completing'    // circle reveal animation
   | 'done'          // handed off to main app
@@ -60,6 +59,8 @@ interface SetupWizardProps {
 
 const INSTALL_STATE_KEY = 'clawmaster-wizard-install'
 const INSTALL_STALE_MS = 10 * 60 * 1000
+const INSTALL_RECOVERY_POLL_MS = 2000
+const INSTALL_RECOVERY_GRACE_MS = 60 * 1000
 
 type PersistedInstallState = {
   phase: 'installing' | 'installed'
@@ -166,8 +167,15 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const [showReveal, setShowReveal] = useState(false)
   const [useMirror, setUseMirror] = useState(false)
   const [apiKeyVerified, setApiKeyVerified] = useState(false)
+  const [hasSavedProviderKey, setHasSavedProviderKey] = useState(false)
   const [catalogModels, setCatalogModels] = useState<Array<{ id: string; name: string }> | null>(null)
   const [catalogLoading, setCatalogLoading] = useState(false)
+  const [recoveringInstall, setRecoveringInstall] = useState(false)
+  const catalogRequestIdRef = useRef(0)
+  const configInitPromiseRef = useRef<Promise<boolean> | null>(null)
+  const configInitializedRef = useRef(false)
+  const recoveryDetectInFlightRef = useRef(false)
+  const recoveryStartedAtRef = useRef<number | null>(null)
 
   // Provider / model state
   const [onboard, setOnboard] = useState<OnboardingState>(DEFAULT_ONBOARDING_STATE)
@@ -175,9 +183,97 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     (patch: Partial<OnboardingState>) => setOnboard((prev) => ({ ...prev, ...patch })),
     [],
   )
+  const invalidateCatalogRequest = useCallback(() => {
+    catalogRequestIdRef.current += 1
+    setCatalogLoading(false)
+  }, [])
+  const resetValidationState = useCallback(() => {
+    setApiKeyVerified(false)
+    setCatalogModels(null)
+    invalidateCatalogRequest()
+  }, [invalidateCatalogRequest])
+  const updateCredentials = useCallback(
+    (patch: Partial<Pick<OnboardingState, 'apiKey' | 'customBaseUrl'>>) => {
+      resetValidationState()
+      updateOnboard(patch)
+    },
+    [resetValidationState, updateOnboard],
+  )
+  const loadCatalogModels = useCallback((
+    providerId: string,
+    staticModels: Array<{ id: string; name: string }>,
+    apiKey: string,
+    baseUrl?: string,
+  ) => {
+    if (!supportsProviderCatalog(providerId)) {
+      setCatalogModels(null)
+      setCatalogLoading(false)
+      return
+    }
+
+    const requestId = catalogRequestIdRef.current + 1
+    catalogRequestIdRef.current = requestId
+    setCatalogModels(null)
+    setCatalogLoading(true)
+
+    void getProviderModelCatalogResult({
+      providerId,
+      apiKey,
+      baseUrl,
+    }).then((result) => {
+      if (catalogRequestIdRef.current !== requestId) return
+      if (result.success) {
+        const nextCatalogModels = (result.data ?? []).map((m) => ({ id: m.id, name: m.name }))
+        const liveModelsById = new Map(nextCatalogModels.map((model) => [model.id, model]))
+        const trustedCatalogModels = staticModels
+          .filter((model) => liveModelsById.has(model.id))
+          .map((model) => {
+            const liveModel = liveModelsById.get(model.id)
+            return {
+              id: model.id,
+              name: liveModel?.name || model.name,
+            }
+          })
+
+        const effectiveCatalogModels = trustedCatalogModels.length > 0 ? trustedCatalogModels : null
+
+        setCatalogModels(effectiveCatalogModels)
+        if (effectiveCatalogModels) {
+          setOnboard((prev) => {
+            if (prev.customModelId.trim() || !prev.model) return prev
+            const modelStillAvailable = effectiveCatalogModels.some((model) => model.id === prev.model)
+            return modelStillAvailable ? prev : { ...prev, model: '' }
+          })
+        }
+        return
+      }
+      setCatalogModels(null)
+    }).finally(() => {
+      if (catalogRequestIdRef.current === requestId) {
+        setCatalogLoading(false)
+      }
+    })
+  }, [])
 
   const adapter = getSetupAdapter()
   const simProgress = useSimulatedProgress()
+  const ensureConfigInitialized = useCallback(async () => {
+    if (configInitializedRef.current) return true
+
+    if (!configInitPromiseRef.current) {
+      configInitPromiseRef.current = adapter.onboarding.initConfig()
+        .then(() => {
+          configInitializedRef.current = true
+          return true
+        })
+        .catch(() => false)
+        .finally(() => {
+          configInitPromiseRef.current = null
+        })
+    }
+
+    return configInitPromiseRef.current
+  }, [adapter])
 
   // ─── Beforeunload guard during install ───
 
@@ -194,34 +290,83 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
   const detectEngine = useCallback(async () => {
     const saved = loadInstallState()
+    const recoveryStartedAt = saved?.phase === 'installing'
+      ? saved.startedAt
+      : recoveryStartedAtRef.current
+    const recoveringSavedInstall = recoveryStartedAt != null
     if (saved?.phase === 'installed') {
+      recoveryStartedAtRef.current = null
+      setRecoveringInstall(false)
       clearInstallState()
-      setPhase('onboard_init')
+      setPhase('provider')
       return
     }
 
-    setPhase('detecting')
-    setEngineStatus(null)
+    setInstallError(null)
+    if (recoveringSavedInstall) {
+      recoveryStartedAtRef.current = recoveryStartedAt
+      setRecoveringInstall(true)
+      setPhase('installing')
+      setEngineStatus({ id: 'engine', name: 'capability.engine', status: 'checking' })
+    } else {
+      recoveryStartedAtRef.current = null
+      setRecoveringInstall(false)
+      setPhase('detecting')
+      setEngineStatus(null)
+    }
+
+    const recoveryExpired = recoveryStartedAt != null &&
+      Date.now() - recoveryStartedAt >= INSTALL_RECOVERY_GRACE_MS
 
     try {
       const results = await adapter.detectCapabilities((status) => {
         if (status.id === 'engine') {
+          if (recoveringSavedInstall && status.status !== 'installed') {
+            setEngineStatus({ ...status, status: 'checking' })
+            return
+          }
           setEngineStatus(status)
         }
       })
 
       const engine = results.find((r) => r.id === 'engine')
       if (engine?.status === 'installed') {
+        recoveryStartedAtRef.current = null
+        setRecoveringInstall(false)
         clearInstallState()
         setEngineStatus(engine)
-        setPhase('onboard_init')
+        setPhase('provider')
+      } else if (recoveringSavedInstall) {
+        if (recoveryExpired) {
+          recoveryStartedAtRef.current = null
+          setRecoveringInstall(false)
+          clearInstallState()
+          setEngineStatus(engine ?? { id: 'engine', name: 'capability.engine', status: 'not_installed' })
+          setPhase('not_installed')
+        } else {
+          setEngineStatus({ id: 'engine', name: 'capability.engine', status: 'checking' })
+          setPhase('installing')
+        }
       } else {
         setEngineStatus(engine ?? { id: 'engine', name: 'capability.engine', status: 'not_installed' })
         setPhase('not_installed')
       }
     } catch {
-      setEngineStatus({ id: 'engine', name: 'capability.engine', status: 'not_installed' })
-      setPhase('not_installed')
+      if (recoveringSavedInstall) {
+        if (recoveryExpired) {
+          recoveryStartedAtRef.current = null
+          setRecoveringInstall(false)
+          clearInstallState()
+          setEngineStatus({ id: 'engine', name: 'capability.engine', status: 'not_installed' })
+          setPhase('not_installed')
+        } else {
+          setEngineStatus({ id: 'engine', name: 'capability.engine', status: 'checking' })
+          setPhase('installing')
+        }
+      } else {
+        setEngineStatus({ id: 'engine', name: 'capability.engine', status: 'not_installed' })
+        setPhase('not_installed')
+      }
     }
   }, [adapter])
 
@@ -229,9 +374,26 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     detectEngine()
   }, [detectEngine])
 
+  useEffect(() => {
+    if (!recoveringInstall) return
+    const intervalId = window.setInterval(() => {
+      if (recoveryDetectInFlightRef.current) return
+      recoveryDetectInFlightRef.current = true
+      void detectEngine().finally(() => {
+        recoveryDetectInFlightRef.current = false
+      })
+    }, INSTALL_RECOVERY_POLL_MS)
+    return () => {
+      window.clearInterval(intervalId)
+      recoveryDetectInFlightRef.current = false
+    }
+  }, [recoveringInstall, detectEngine])
+
   // ─── Step 1b: Install OpenClaw ───
 
   const startInstall = useCallback(async () => {
+    recoveryStartedAtRef.current = null
+    setRecoveringInstall(false)
     setPhase('installing')
     setInstallError(null)
     simProgress.start()
@@ -247,42 +409,26 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       simProgress.finish()
       saveInstallState({ phase: 'installed', startedAt: Date.now() })
       await new Promise((r) => setTimeout(r, 600))
+      recoveryStartedAtRef.current = null
       clearInstallState()
-      setPhase('onboard_init')
+      setPhase('provider')
     } catch (err) {
       simProgress.reset()
+      recoveryStartedAtRef.current = null
       clearInstallState()
       setInstallError(err instanceof Error ? err.message : String(err))
       setPhase('install_error')
     }
   }, [adapter, simProgress, useMirror])
 
-  // ─── Step 1c: Init config ───
-
-  useEffect(() => {
-    if (phase !== 'onboard_init') return
-    let cancelled = false
-
-    async function init() {
-      try {
-        await adapter.onboarding.initConfig()
-        if (!cancelled) setPhase('provider')
-      } catch {
-        // Non-fatal: proceed to provider setup anyway
-        if (!cancelled) setPhase('provider')
-      }
-    }
-    init()
-    return () => { cancelled = true }
-  }, [phase, adapter])
-
   // ─── Step 2: Set API Key ───
 
   const runSetApiKey = useCallback(async () => {
     const effectiveKey = onboard.provider === 'ollama' ? (onboard.apiKey.trim() || 'ollama') : onboard.apiKey.trim()
-    if (!effectiveKey) return
     const providerCfg = PROVIDERS[onboard.provider]
-    if (providerCfg?.needsBaseUrl && !onboard.customBaseUrl.trim()) {
+    const baseUrl = onboard.customBaseUrl.trim()
+    if (!effectiveKey) return
+    if (providerCfg?.needsBaseUrl && !baseUrl) {
       updateOnboard({ error: t('setup.enterBaseUrl') })
       return
     }
@@ -291,7 +437,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       const valid = await adapter.onboarding.testApiKey(
         onboard.provider,
         effectiveKey,
-        onboard.customBaseUrl.trim() || undefined,
+        baseUrl || undefined,
       )
       if (!valid) {
         updateOnboard({
@@ -300,32 +446,23 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         })
         return
       }
+      await ensureConfigInitialized()
       await adapter.onboarding.setApiKey(
         onboard.provider,
         effectiveKey,
-        onboard.customBaseUrl.trim() || undefined,
+        baseUrl || undefined,
       )
+      setHasSavedProviderKey(true)
       setApiKeyVerified(true)
       updateOnboard({ busy: false, model: providerCfg?.defaultModel ?? '', customModelId: '' })
 
       // Fetch live model catalog in background (non-blocking)
       const runtimeId = providerCfg?.configKeyOverride ?? onboard.provider
-      if (supportsProviderCatalog(runtimeId)) {
-        setCatalogLoading(true)
-        getProviderModelCatalogResult({
-          providerId: runtimeId,
-          apiKey: effectiveKey,
-          baseUrl: onboard.customBaseUrl.trim() || providerCfg?.baseUrl || undefined,
-        }).then((result) => {
-          if (result.success && result.data?.length) {
-            setCatalogModels(result.data.map((m) => ({ id: m.id, name: m.name })))
-          }
-        }).finally(() => setCatalogLoading(false))
-      }
+      loadCatalogModels(runtimeId, providerCfg?.models ?? [], effectiveKey, baseUrl || providerCfg?.baseUrl || undefined)
     } catch (err) {
       updateOnboard({ busy: false, error: err instanceof Error ? err.message : String(err) })
     }
-  }, [adapter, onboard.provider, onboard.apiKey, onboard.customBaseUrl, updateOnboard, t])
+  }, [adapter, ensureConfigInitialized, loadCatalogModels, onboard.provider, onboard.apiKey, onboard.customBaseUrl, updateOnboard, t])
 
   // ─── Step 2b: Set model and finish ───
 
@@ -337,6 +474,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     const fullModelId = `${configKey}/${modelId}`
     updateOnboard({ busy: true, error: null })
     try {
+      await ensureConfigInitialized()
       await adapter.onboarding.setDefaultModel(fullModelId)
       updateOnboard({ busy: false })
       // Trigger reveal animation
@@ -344,7 +482,45 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     } catch (err) {
       updateOnboard({ busy: false, error: err instanceof Error ? err.message : String(err) })
     }
-  }, [adapter, onboard.provider, onboard.model, onboard.customModelId, updateOnboard])
+  }, [adapter, ensureConfigInitialized, onboard.provider, onboard.model, onboard.customModelId, updateOnboard])
+
+  const runSetOllamaAndFinish = useCallback(async (modelId: string) => {
+    const selectedModelId = modelId.trim()
+    if (!selectedModelId) return
+    const baseUrl = onboard.customBaseUrl.trim()
+
+    updateOnboard({ busy: true, error: null })
+    try {
+      const valid = await adapter.onboarding.testApiKey(
+        'ollama',
+        'ollama',
+        baseUrl || undefined,
+      )
+      if (!valid) {
+        updateOnboard({ busy: false, error: t('ollama.notRunning') })
+        return
+      }
+
+      await ensureConfigInitialized()
+      await adapter.onboarding.setApiKey(
+        'ollama',
+        'ollama',
+        baseUrl || undefined,
+      )
+      setHasSavedProviderKey(true)
+      setApiKeyVerified(true)
+      await adapter.onboarding.setDefaultModel(`ollama/${selectedModelId}`)
+      updateOnboard({
+        busy: false,
+        apiKey: 'ollama',
+        model: selectedModelId,
+        customModelId: '',
+      })
+      setShowReveal(true)
+    } catch (err) {
+      updateOnboard({ busy: false, error: err instanceof Error ? err.message : String(err) })
+    }
+  }, [adapter, ensureConfigInitialized, onboard.customBaseUrl, t, updateOnboard])
 
   const handleRevealComplete = useCallback(() => {
     clearInstallState()
@@ -352,7 +528,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   }, [onComplete])
 
   // ─── API key already validated? Show model picker inline ───
-  const apiKeyValidated = apiKeyVerified || (onboard.provider === 'ollama' && Boolean(onboard.apiKey))
+  const apiKeyValidated = apiKeyVerified
 
   const isDemo = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('demo') === 'install'
 
@@ -366,7 +542,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         </div>
 
         {/* ─── Step 1: OpenClaw Detection / Install ─── */}
-        {(phase === 'detecting' || phase === 'not_installed' || phase === 'installing' || phase === 'install_error' || phase === 'onboard_init') && (
+        {(phase === 'detecting' || phase === 'not_installed' || phase === 'installing' || phase === 'install_error') && (
           <EngineStep
             phase={phase}
             engineStatus={engineStatus}
@@ -385,13 +561,16 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           <ProviderModelStep
             onboard={onboard}
             updateOnboard={updateOnboard}
+            onCredentialChange={updateCredentials}
             apiKeyValidated={apiKeyValidated}
+            canSkip={!hasSavedProviderKey}
             catalogModels={catalogModels}
             catalogLoading={catalogLoading}
-            onProviderSwitch={() => { setApiKeyVerified(false); setCatalogModels(null) }}
+            onProviderSwitch={resetValidationState}
             onSubmitApiKey={runSetApiKey}
             onSubmitModel={runSetModelAndFinish}
             onSkip={() => setShowReveal(true)}
+            onSubmitOllama={runSetOllamaAndFinish}
           />
         )}
       </div>
@@ -430,7 +609,7 @@ function EngineStep({
       <div className="wizard-hero">
         <div className="wizard-brand-ring" data-state={phase}>
           <div className="wizard-brand-ring-track" />
-          {(phase === 'detecting' || phase === 'onboard_init') && (
+          {(phase === 'detecting') && (
             <div className="wizard-brand-ring-spin" />
           )}
           {(phase === 'installing') && (
@@ -470,7 +649,6 @@ function EngineStep({
             <p className="wizard-status-label">OpenClaw Engine</p>
             <p className="wizard-status-detail">
               {phase === 'detecting' && t('setup.detecting')}
-              {phase === 'onboard_init' && t('setup.initConfig')}
               {phase === 'not_installed' && t('setup.coreNotInstalled')}
               {phase === 'installing' && t(simProgress.phaseLabel)}
               {phase === 'install_error' && (installError ?? t('setup.unknownError'))}
@@ -525,10 +703,10 @@ function EngineStep({
             </button>
           </>
         )}
-        {(phase === 'detecting' || phase === 'onboard_init') && (
+        {(phase === 'detecting') && (
           <div className="wizard-status-hint">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span>{phase === 'detecting' ? t('setup.detecting') : t('setup.initConfig')}</span>
+            <span>{t('setup.detecting')}</span>
           </div>
         )}
       </div>
@@ -558,23 +736,29 @@ function sortProviderIds(providerIds: string[]) {
 function ProviderModelStep({
   onboard,
   updateOnboard,
+  onCredentialChange,
   apiKeyValidated,
+  canSkip,
   catalogModels,
   catalogLoading,
   onProviderSwitch,
   onSubmitApiKey,
   onSubmitModel,
   onSkip,
+  onSubmitOllama,
 }: {
   onboard: OnboardingState
   updateOnboard: (patch: Partial<OnboardingState>) => void
+  onCredentialChange: (patch: Partial<Pick<OnboardingState, 'apiKey' | 'customBaseUrl'>>) => void
   apiKeyValidated: boolean
+  canSkip: boolean
   catalogModels: Array<{ id: string; name: string }> | null
   catalogLoading: boolean
   onProviderSwitch: () => void
   onSubmitApiKey: () => void
   onSubmitModel: () => void
   onSkip: () => void
+  onSubmitOllama: (modelId: string) => void
 }) {
   const { t, i18n } = useTranslation()
   const [showMore, setShowMore] = useState(false)
@@ -664,10 +848,8 @@ function ProviderModelStep({
         <OllamaSetupPanel
           onboard={onboard}
           updateOnboard={updateOnboard}
-          onSubmit={() => {
-            updateOnboard({ apiKey: 'ollama' })
-            onSubmitApiKey()
-          }}
+          onCredentialChange={onCredentialChange}
+          onSubmit={onSubmitOllama}
         />
       ) : (
         <div className="wizard-card">
@@ -691,7 +873,7 @@ function ProviderModelStep({
               type="url"
               placeholder={t('setup.baseUrlPlaceholder')}
               value={onboard.customBaseUrl}
-              onChange={(e) => updateOnboard({ customBaseUrl: e.target.value })}
+              onChange={(e) => onCredentialChange({ customBaseUrl: e.target.value })}
               className="control-input mb-2"
             />
           )}
@@ -699,7 +881,7 @@ function ProviderModelStep({
             type="password"
             placeholder={t('setup.apiKeyPlaceholder', { provider: providerLabel, credential: credentialLabel })}
             value={onboard.apiKey}
-            onChange={(e) => updateOnboard({ apiKey: e.target.value })}
+            onChange={(e) => onCredentialChange({ apiKey: e.target.value })}
             className="control-input"
           />
           {!apiKeyValidated && (
@@ -775,12 +957,14 @@ function ProviderModelStep({
       )}
 
       {/* Skip */}
-      <button
-        onClick={onSkip}
-        className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-foreground transition"
-      >
-        {t('setup.skipRemaining')}
-      </button>
+      {canSkip && (
+        <button
+          onClick={onSkip}
+          className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-foreground transition"
+        >
+          {t('setup.skipRemaining')}
+        </button>
+      )}
     </div>
   )
 }
@@ -853,11 +1037,13 @@ function ProviderChip({
 function OllamaSetupPanel({
   onboard,
   updateOnboard,
+  onCredentialChange,
   onSubmit,
 }: {
   onboard: OnboardingState
   updateOnboard: (patch: Partial<OnboardingState>) => void
-  onSubmit: () => void
+  onCredentialChange: (patch: Partial<Pick<OnboardingState, 'customBaseUrl'>>) => void
+  onSubmit: (modelId: string) => void
 }) {
   const { t } = useTranslation()
   const [status, setStatus] = useState<OllamaStatus | null>(null)
@@ -874,11 +1060,14 @@ function OllamaSetupPanel({
     if (result.success && result.data) {
       setStatus(result.data)
       if (result.data.running && result.data.models.length > 0) {
-        updateOnboard({ apiKey: 'ollama' })
+        const selectedModel = result.data.models.some((model) => model.name === onboard.model)
+          ? onboard.model
+          : result.data.models[0]?.name ?? ''
+        updateOnboard({ apiKey: 'ollama', model: selectedModel, customModelId: '' })
       }
     }
     setChecking(false)
-  }, [onboard.customBaseUrl, updateOnboard])
+  }, [onboard.customBaseUrl, onboard.model, updateOnboard])
 
   useEffect(() => { checkStatus() }, [checkStatus])
 
@@ -922,8 +1111,13 @@ function OllamaSetupPanel({
   }
 
   function handleProceed() {
-    updateOnboard({ apiKey: 'ollama' })
-    onSubmit()
+    const selectedModel = status?.models.find((model) => model.name === onboard.model)?.name
+      ?? status?.models[0]?.name
+      ?? ''
+    updateOnboard({ apiKey: 'ollama', model: selectedModel, customModelId: '' })
+    if (selectedModel) {
+      onSubmit(selectedModel)
+    }
   }
 
   if (checking) {
@@ -941,7 +1135,7 @@ function OllamaSetupPanel({
         type="url"
         placeholder="http://localhost:11434/v1"
         value={onboard.customBaseUrl}
-        onChange={(e) => updateOnboard({ customBaseUrl: e.target.value })}
+        onChange={(e) => onCredentialChange({ customBaseUrl: e.target.value })}
         className="control-input"
       />
 
