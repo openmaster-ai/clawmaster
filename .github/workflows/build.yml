@@ -306,24 +306,33 @@ jobs:
           GENERATED_BODY="$(node -e "const fs=require('fs'); const body=JSON.parse(fs.readFileSync('generated-release-notes.json','utf8')).body || ''; process.stdout.write(body.trim());")"
 
           cat <<EOF > RELEASE_NOTES.md
-          ## Release Overview
+          ## Install
 
-          This release ships ClawMaster desktop installers built by CI.
+          ### CLI + Web Console (Recommended)
 
-          ## Installers
+          \`\`\`bash
+          npm install -g clawmaster@\${TAG#v}
+          clawmaster
+          \`\`\`
 
-          - Linux: \`.AppImage\`, \`.deb\`, \`.rpm\`
-          - macOS: \`.dmg\`
-          - Windows: \`.msi\`, \`.exe\`
+          Open http://localhost:16223 — the setup wizard guides you through OpenClaw engine detection and LLM provider configuration.
+
+          ### Desktop App (Beta)
+
+          Download the installer for your platform from the Assets section below.
+
+          | Platform | Files |
+          |---|---|
+          | Linux x64 | \`.AppImage\`, \`.deb\`, \`.rpm\` |
+          | macOS Intel | \`.dmg\` |
+          | macOS Apple Silicon | \`.dmg\` |
+          | Windows x64 | \`.msi\`, \`.exe\` |
+
+          > **Note:** Desktop builds are in beta. The CLI + Web Console is the recommended install method.
 
           ## Checksums
 
-          - Verify downloads with \`SHA256SUMS.txt\`
-
-          ## Upgrade Notes
-
-          - Canonical release notes live on GitHub Releases rather than \`CHANGELOG.md\`
-          - Use installers and service packages from the same tag when validating a release
+          Verify downloads with \`SHA256SUMS.txt\` attached to this release.
 
           ## What's Changed
 

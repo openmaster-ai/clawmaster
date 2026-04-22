@@ -43,7 +43,25 @@
 
 ## 快速开始
 
-### 桌面应用（推荐）
+### CLI + Web 控制台（推荐）
+
+```bash
+npm i -g clawmaster
+clawmaster                   # 启动 Web 控制台
+```
+
+打开 http://localhost:16223 —— 安装向导会引导你完成 OpenClaw 引擎检测和 LLM 供应商配置，无需手动编辑配置文件。
+
+```bash
+clawmaster serve --daemon    # 后台运行
+clawmaster stop              # 停止服务
+clawmaster doctor            # 检查环境
+```
+
+> [!NOTE]
+> 当前版本为 **v0.3.0-rc.1**（候选发布）。安装命令：`npm i -g clawmaster@rc`。
+
+### 桌面应用（Beta 测试版）
 
 从 [GitHub Releases](https://github.com/openmaster-ai/clawmaster/releases) 下载对应平台安装包：
 
@@ -54,25 +72,8 @@
 | Windows x64 | `.msi`、`.exe` |
 | Linux x64 | `.deb`、`.rpm`、`.AppImage` |
 
-打开应用后，安装向导会引导你连接模型供应商并创建第一个 Profile，无需使用终端。
-
-> [!TIP]
-> 每次推送 `main` 分支，CI 也会上传各平台构建产物（保留 7 天），如需获取未正式发布的版本可前往 Actions 下载。
-
-### CLI
-
-```bash
-npm i -g clawmaster
-clawmaster doctor            # 检查环境
-clawmaster serve             # 启动 Web 控制台
-```
-
-`clawmaster serve` 会打印绑定地址和令牌，并默认在浏览器中打开 Web 控制台。传入 `--silent` 可跳过横幅和自动打开浏览器。
-
-```bash
-clawmaster serve --daemon    # 后台运行
-clawmaster stop              # 停止服务
-```
+> [!WARNING]
+> 桌面版目前处于 **Beta 测试阶段**。推荐使用 CLI + Web 控制台方式，这是经过最充分测试的安装方式。
 
 <details>
 <summary>从源码运行</summary>
@@ -177,6 +178,7 @@ ClawMaster 采用 [Pride Versioning](https://pridever.org/)（自豪版本号）
 
 ## 📰 动态
 
+- **2026-04-22** 🚀 v0.3.0-rc.1 —— 首个候选发布。两步式安装向导、PaddleOCR 文档解析、文心大模型图像生成、费用可观测、定时任务管理。CLI 为推荐安装方式，桌面版为 Beta。
 - **2026-04-17** ✨ 品牌与定位正式发布 —— ClawMaster 定位为真正走进日常生活的 OpenClaw 伙伴，而非单纯的控制台。全新 Wordmark、Apache 2.0 许可、Pride Versioning。
 
 ## 开发

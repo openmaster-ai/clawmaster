@@ -43,7 +43,25 @@
 
 ## Quick Start
 
-### Desktop App (recommended)
+### CLI + Web Console (recommended)
+
+```bash
+npm i -g clawmaster
+clawmaster                   # start the web console
+```
+
+Open http://localhost:16223 — the setup wizard walks you through OpenClaw engine detection and LLM provider configuration. No config files to edit.
+
+```bash
+clawmaster serve --daemon    # run in background
+clawmaster stop              # stop the service
+clawmaster doctor            # verify your environment
+```
+
+> [!NOTE]
+> The current release is **v0.3.0-rc.1** (release candidate). Install with `npm i -g clawmaster@rc`.
+
+### Desktop App (Beta)
 
 Download the installer for your platform from [GitHub Releases](https://github.com/openmaster-ai/clawmaster/releases):
 
@@ -54,25 +72,8 @@ Download the installer for your platform from [GitHub Releases](https://github.c
 | Windows x64 | `.msi`, `.exe` |
 | Linux x64 | `.deb`, `.rpm`, `.AppImage` |
 
-Open the app — the setup wizard walks you through connecting a model provider and creating your first profile. No terminal needed.
-
-> [!TIP]
-> Every push to `main` also uploads per-platform builds as CI artifacts (kept 7 days) if you want the latest unreleased build.
-
-### CLI
-
-```bash
-npm i -g clawmaster
-clawmaster doctor            # verify your environment
-clawmaster serve             # start the web console
-```
-
-`clawmaster serve` prints the bind address and token, then opens the web console in your default browser. Pass `--silent` to skip the banner and browser launch.
-
-```bash
-clawmaster serve --daemon    # run in background
-clawmaster stop              # stop the service
-```
+> [!WARNING]
+> Desktop builds are in **beta**. The CLI + Web Console is the recommended and most thoroughly tested install method.
 
 <details>
 <summary>From source</summary>
@@ -177,6 +178,7 @@ Pre-release tags (`-rc.N`) are used for release candidates.
 
 ## 📰 News
 
+- **2026-04-22** 🚀 v0.3.0-rc.1 — first release candidate. 2-step setup wizard, PaddleOCR, ERNIE image, cost observability, cron management. CLI is the recommended install method; desktop builds are beta.
 - **2026-04-17** ✨ Brand and positioning launch — ClawMaster is now an OpenClaw companion for real life, not just a control plane. New wordmark, Apache 2.0 license, Pride Versioning.
 
 ## Development
