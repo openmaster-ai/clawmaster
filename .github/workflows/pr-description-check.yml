@@ -14,16 +14,21 @@ jobs:
         with:
           script: |
             const pr = context.payload.pull_request;
-            const body = pr.body ?? '';
+            // Normalize CRLF → LF so regexes don't break on Windows-style line endings
+            const body = (pr.body ?? '').replace(/\r\n/g, '\n');
 
-            // "What" section must exist and have meaningful content after the heading
-            const whatMatch = body.match(/##\s*What\s*\n([\s\S]*?)(?=\n##|$)/i);
-            const whatContent = (whatMatch?.[1] ?? '').replace(/<!--[\s\S]*?-->/g, '').trim();
+            // Split the body into sections on Markdown headings (## or ###).
+            // Each section starts with the heading text on its own line.
+            const sections = body.split(/^#{2,}\s+/m).slice(1);
+            const whatSection = sections.find((s) => /^what\b/i.test(s.trim()));
+            const whatContent = whatSection
+              ? whatSection.replace(/^what[^\n]*\n/i, '').replace(/<!--[\s\S]*?-->/g, '').trim()
+              : '';
 
             if (whatContent.length < 20) {
               core.setFailed(
-                'PR description is missing a What section.\n' +
-                'Please fill in ## What with at least one sentence describing what changed.'
+                'PR description is missing a What section with enough detail.\n' +
+                'Please fill in ## What with at least one sentence (20+ chars) describing what changed.'
               );
               return;
             }
@@ -35,6 +40,8 @@ jobs:
                 'Please confirm and delete it before requesting review.'
               );
             }
+
+            core.info(`## What section detected: ${whatContent.length} chars`);
 
             // Nudge: if the PR touches UI modules and the body has no embedded images,
             // suggest adding screenshots. Warning only — never blocks merge.
