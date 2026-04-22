@@ -180,25 +180,28 @@ jobs:
             exit 1
           fi
 
+          # Use -maxdepth to stay in top-level bundle output dirs (e.g. bundle/msi/,
+          # bundle/deb/). This keeps internal resources (ICU data, npm packages
+          # bundled via .tauri-resources/) out of the release artifacts.
           case "$RUNNER_OS" in
             Linux)
               for root in "${BUNDLE_ROOTS[@]}"; do
-                find "$root" -type f \
-                  \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.sig' -o -name '*.json' \) \
+                find "$root" -maxdepth 3 -type f \
+                  \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.sig' \) \
                   -exec cp '{}' "$ARTIFACT_DIR"/ \;
               done
               ;;
             macOS)
               for root in "${BUNDLE_ROOTS[@]}"; do
-                find "$root" -type f \
-                  \( -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.sig' -o -name '*.json' \) \
+                find "$root" -maxdepth 3 -type f \
+                  \( -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.sig' \) \
                   -exec cp '{}' "$ARTIFACT_DIR"/ \;
               done
               ;;
             Windows)
               for root in "${BUNDLE_ROOTS[@]}"; do
-                find "$root" -type f \
-                  \( -name '*.msi' -o -name '*.exe' -o -name '*.zip' -o -name '*.sig' -o -name '*.json' \) \
+                find "$root" -maxdepth 3 -type f \
+                  \( -name '*.msi' -o -name '*.exe' -o -name '*.zip' -o -name '*.sig' \) \
                   -exec cp '{}' "$ARTIFACT_DIR"/ \;
               done
               ;;
