@@ -70,7 +70,7 @@ Download the installer for your platform from [GitHub Releases](https://github.c
 | macOS Apple Silicon | `.dmg` |
 | macOS Intel | `.dmg` |
 | Windows x64 | `.msi`, `.exe` |
-| Linux x64 | `.deb`, `.rpm`, `.AppImage` |
+| Linux x64 | `.deb`, `.AppImage` |
 
 > [!WARNING]
 > Desktop builds are in **beta**. The CLI + Web Console is the recommended and most thoroughly tested install method.

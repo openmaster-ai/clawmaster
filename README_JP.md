@@ -70,7 +70,7 @@ clawmaster doctor            # 環境を確認
 | macOS Apple Silicon | `.dmg` |
 | macOS Intel | `.dmg` |
 | Windows x64 | `.msi`、`.exe` |
-| Linux x64 | `.deb`、`.rpm`、`.AppImage` |
+| Linux x64 | `.deb`、`.AppImage` |
 
 > [!WARNING]
 > デスクトップ版は現在 **Beta** です。CLI + Web コンソールが最も十分にテストされたインストール方法として推奨されます。

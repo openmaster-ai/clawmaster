@@ -80,10 +80,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             label: Linux x64
             artifact_name: clawmaster-linux-x64
+            bundles: appimage,deb
           - os: macos-15-intel
             target: x86_64-apple-darwin
             label: macOS Intel
@@ -150,7 +151,7 @@ jobs:
           echo "Normalized tauri.conf.json version to $NUMERIC"
 
       - name: Build Tauri desktop bundles
-        run: npx tauri build --target ${{ matrix.target }}
+        run: npx tauri build --target ${{ matrix.target }} ${{ matrix.bundles && format('--bundles {0}', matrix.bundles) || '' }}
 
       - name: Collect workflow bundle files
         shell: bash
@@ -187,7 +188,7 @@ jobs:
             Linux)
               for root in "${BUNDLE_ROOTS[@]}"; do
                 find "$root" -maxdepth 3 -type f \
-                  \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.sig' \) \
+                  \( -name '*.AppImage' -o -name '*.deb' -o -name '*.sig' \) \
                   -exec cp '{}' "$ARTIFACT_DIR"/ \;
               done
               ;;
@@ -337,7 +338,7 @@ jobs:
           # Only installer bundles — exclude internal JSON (ICU data, package
           # manifests, tsconfig) that gets packaged inside Tauri resources.
           find release-bundles -type f \
-            \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \
+            \( -name '*.AppImage' -o -name '*.deb' \
                -o -name '*.dmg' -o -name '*.app.tar.gz' \
                -o -name '*.msi' -o -name '*.exe' \
                -o -name '*.sig' \) \
@@ -395,7 +396,7 @@ jobs:
             printf 'Download the installer for your platform from the Assets section below.\n\n'
             printf '| Platform | Files |\n'
             printf '|---|---|\n'
-            printf '| Linux x64 | `.AppImage`, `.deb`, `.rpm` |\n'
+            printf '| Linux x64 | `.AppImage`, `.deb` |\n'
             printf '| macOS Intel | `.dmg` |\n'
             printf '| macOS Apple Silicon | `.dmg` |\n'
             printf '| Windows x64 | `.msi`, `.exe` |\n\n'
