@@ -76,22 +76,19 @@ main ─────────────────────●── v0
 1. `git checkout -b release/X.Y.Z develop`
 2. Bump version in `package.json` (and `src-tauri/tauri.conf.json` for desktop).
 3. Only bug-fixes, docs, and metadata changes on this branch — no new features.
-4. When stable:
+4. Push and open **two PRs** (both from `release/X.Y.Z`):
+   - PR to `main` — merge when CI is green
+   - PR to `develop` — merge after main is done
+5. After the PR to `main` is merged, tag on main:
    ```bash
-   # merge to main and tag
-   git checkout main && git merge --no-ff release/X.Y.Z
+   git checkout main && git pull
    git tag -a vX.Y.Z -m "Release X.Y.Z"
-   git push origin main --follow-tags
-
-   # merge back to develop
-   git checkout develop && git merge --no-ff release/X.Y.Z
-   git push origin develop
-
-   # clean up
-   git branch -d release/X.Y.Z
-   git push origin --delete release/X.Y.Z
+   git push origin --follow-tags
    ```
-5. The `vX.Y.Z` tag triggers CI to build desktop bundles and create a GitHub release.
+6. Delete the release branch after both PRs are merged.
+7. The `vX.Y.Z` tag triggers CI to build desktop bundles and create a GitHub release.
+
+> **Never merge locally and push** — always merge via GitHub PR so CI gates are enforced.
 
 ### Hotfixes
 
@@ -105,12 +102,14 @@ develop ──●──────●── ...  (hotfix merges here too)
 
 1. `git checkout -b hotfix/X.Y.Z main`
 2. Fix the issue, bump patch version.
-3. Merge to `main` (tag `vX.Y.Z`), then merge to `develop`.
+3. Open a PR to `main`, wait for CI, merge on GitHub.
+4. Tag on main, then open a PR to `develop` and merge.
 
 ### Rules
 
-- **Never push directly to `main` or `develop`** — always go through a PR.
+- **Never push directly to `main` or `develop`** — always go through a GitHub PR so CI gates are enforced. No local `git merge` + `git push` to these branches.
 - **Never merge `main` into `develop`** — always merge release/hotfix branches back.
+- **All merges to `main` must pass CI** before merging — no bypassing branch protection.
 - Feature PRs that accidentally target `main` will be redirected to `develop`.
 - The `develop` branch should always be in a buildable, test-passing state.
 
