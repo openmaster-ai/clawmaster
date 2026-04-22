@@ -138,9 +138,16 @@ jobs:
         shell: bash
         run: |
           RAW=$(node -p "require('./package.json').version")
-          # Strip pre-release suffix (0.3.0-rc.1 → 0.3.0) for MSI compatibility
           NUMERIC="${RAW%%-*}"
-          echo "TAURI_CONFIG={\"version\":\"$NUMERIC\"}" >> "$GITHUB_ENV"
+          # Rewrite tauri.conf.json in-place — MSI rejects semver pre-release suffixes
+          node -e "
+            const fs = require('fs');
+            const p = 'src-tauri/tauri.conf.json';
+            const c = JSON.parse(fs.readFileSync(p, 'utf8'));
+            c.version = '$NUMERIC';
+            fs.writeFileSync(p, JSON.stringify(c, null, 2) + '\n');
+          "
+          echo "Normalized tauri.conf.json version to $NUMERIC"
 
       - name: Build Tauri desktop bundles
         run: npx tauri build --target ${{ matrix.target }}
