@@ -291,6 +291,20 @@ describe('SetupWizard', () => {
       expect(screen.getByText('Groq')).toBeInTheDocument()
     })
 
+    it('keeps the selected hidden provider visible when the tier collapses', async () => {
+      render(<SetupWizard onComplete={() => {}} />)
+
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText(/More providers/i))
+      fireEvent.click(screen.getByRole('button', { name: 'OpenAI' }))
+      fireEvent.click(screen.getByRole('button', { name: /Collapse/i }))
+
+      expect(screen.getByRole('button', { name: 'OpenAI' })).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/Enter OpenAI API Key/i)).toBeInTheDocument()
+      expect(screen.getByText(/More providers/i)).toBeInTheDocument()
+    })
+
     it('switches provider and resets API key state', async () => {
       render(<SetupWizard onComplete={() => {}} />)
 

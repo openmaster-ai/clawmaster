@@ -791,7 +791,9 @@ function ProviderModelStep({
           if (visible.length === 0 && hidden.length === 0) return null
 
           const expanded = expandedTiers[tier.id] === true
-          const rendered = expanded ? [...visible, ...hidden] : visible
+          const pinnedHidden = hidden.filter((providerId) => providerId === onboard.provider)
+          const remainingHidden = hidden.filter((providerId) => providerId !== onboard.provider)
+          const rendered = expanded ? [...visible, ...hidden] : [...visible, ...pinnedHidden]
 
           const selectProvider = (p: string) => {
             onProviderSwitch()
@@ -818,7 +820,7 @@ function ProviderModelStep({
                   />
                 ))}
               </div>
-              {hidden.length > 0 && (
+              {(expanded ? hidden.length : remainingHidden.length) > 0 && (
                 <button
                   onClick={() =>
                     setExpandedTiers((prev) => ({ ...prev, [tier.id]: !expanded }))
@@ -827,7 +829,7 @@ function ProviderModelStep({
                 >
                   {expanded
                     ? t('setup.collapse')
-                    : t(tier.collapsible!.labelKey, { count: hidden.length })}
+                    : t(tier.collapsible!.labelKey, { count: remainingHidden.length })}
                 </button>
               )}
             </div>
