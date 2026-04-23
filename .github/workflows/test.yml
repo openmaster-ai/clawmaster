@@ -390,9 +390,11 @@ jobs:
           await wenxin.waitFor({ timeout: 5000 });
           ok('Gold sponsor provider visible');
 
-          // Step 4: Select OpenAI provider
-          await page.locator('text=OpenAI').click();
-          ok('OpenAI selected');
+          // Step 4: Select a tier-2 featured provider (DeepSeek). Anchored
+          // regex avoids accidentally matching "Custom (OpenAI Compatible)"
+          // in tier 3 when a looser selector like `text=OpenAI` would.
+          await page.locator('text=/^DeepSeek$/').first().click();
+          ok('DeepSeek selected');
 
           // Step 5: API Key input should appear
           const keyInput = page.locator('input[type="password"]');
