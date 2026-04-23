@@ -94,7 +94,8 @@ describe('ContentDraftsPage', () => {
     )
 
     expect(await screen.findByRole('heading', { name: 'Content Drafts' })).toBeInTheDocument()
-    expect(screen.getByText('Each row shows draft metadata first. Expand a row to read the rendered draft with inline images, then inspect artifact paths only if needed.')).toBeInTheDocument()
+    // listHint renders only after variants load; use findBy to wait for async fetch
+    expect(await screen.findByText('Each row shows draft metadata first. Expand a row to read the rendered draft with inline images, then inspect artifact paths only if needed.')).toBeInTheDocument()
     expect(mockReadContentDraftTextResult).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: /Weekly digest/i }))
