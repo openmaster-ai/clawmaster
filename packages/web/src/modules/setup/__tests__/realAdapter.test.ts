@@ -947,4 +947,97 @@ describe('realSetupAdapter', () => {
       timeoutMs: 10000,
     })
   })
+
+  it('strips /chat/completions suffix from custom-openai-compatible baseUrl on probe', async () => {
+    vi.mocked(probeHttpStatusResult).mockResolvedValue({
+      success: true,
+      data: { ok: true, status: 200 },
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.testApiKey(
+        'custom-openai-compatible',
+        'glm-key',
+        'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+      ),
+    ).resolves.toBe(true)
+
+    const calls = vi.mocked(probeHttpStatusResult).mock.calls
+    for (const [arg] of calls) {
+      expect(arg.url).not.toContain('/chat/completions/chat/completions')
+      expect(arg.url.startsWith('https://open.bigmodel.cn/api/paas/v4/')).toBe(true)
+    }
+  })
+
+  it('persists a normalized baseUrl when user pastes a completions URL', async () => {
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey(
+        'custom-openai-compatible',
+        'glm-key',
+        'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+      ),
+    ).resolves.toBeUndefined()
+
+    expect(setConfigResult).toHaveBeenCalledWith(
+      'models.providers.custom-openai-compatible',
+      expect.objectContaining({
+        apiKey: 'glm-key',
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      }),
+    )
+  })
+
+  it('falls back to GET /models when all chat/completions probes fail with an unknown model', async () => {
+    vi.mocked(probeHttpStatusResult)
+      // chat/completions probe with fallback gpt-4o-mini → 400 unknown model
+      .mockResolvedValueOnce({
+        success: true,
+        data: { ok: false, status: 400 },
+        error: null,
+      })
+      // GET /models → 200 (valid auth)
+      .mockResolvedValueOnce({
+        success: true,
+        data: { ok: true, status: 200 },
+        error: null,
+      })
+
+    await expect(
+      realSetupAdapter.onboarding.testApiKey(
+        'custom-openai-compatible',
+        'glm-key',
+        'https://open.bigmodel.cn/api/paas/v4',
+      ),
+    ).resolves.toBe(true)
+
+    const calls = vi.mocked(probeHttpStatusResult).mock.calls
+    expect(calls.length).toBeGreaterThanOrEqual(2)
+    const lastCall = calls[calls.length - 1]![0]
+    expect(lastCall.url).toBe('https://open.bigmodel.cn/api/paas/v4/models')
+    expect(lastCall.method).toBe('GET')
+    expect(lastCall.headers).toMatchObject({ Authorization: 'Bearer glm-key' })
+  })
+
+  it('returns false when GET /models fallback also fails', async () => {
+    vi.mocked(probeHttpStatusResult).mockResolvedValue({
+      success: true,
+      data: { ok: false, status: 401 },
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.testApiKey(
+        'custom-openai-compatible',
+        'bad-key',
+        'https://open.bigmodel.cn/api/paas/v4',
+      ),
+    ).resolves.toBe(false)
+  })
 })

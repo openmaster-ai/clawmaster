@@ -33,6 +33,23 @@ function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, '')
 }
 
+/**
+ * Normalize an OpenAI-compatible base URL. Many providers (e.g. GLM/bigmodel)
+ * document the full completions endpoint in their quickstart — users then paste
+ * that directly into the base URL field, which causes probes to hit
+ * `/chat/completions/chat/completions` and return 404. Strip the known
+ * completions suffixes so the stored value is a true base.
+ */
+export function normalizeOpenAiCompatibleBaseUrl(raw: string | undefined | null): string {
+  if (!raw) return ''
+  let value = raw.trim()
+  if (!value) return ''
+  value = trimTrailingSlash(value)
+  value = value.replace(/\/chat\/completions$/i, '')
+  value = value.replace(/\/completions$/i, '')
+  return trimTrailingSlash(value)
+}
+
 function normalizeUrlPathname(pathname: string) {
   const normalized = trimTrailingSlash(pathname)
   return normalized || '/'

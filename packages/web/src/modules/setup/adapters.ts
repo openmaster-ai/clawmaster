@@ -11,6 +11,7 @@ import { startGatewayResult, getGatewayStatusResult } from '@/shared/adapters/ga
 import { getConfigResult, resolvePluginRootResult, setConfigResult } from '@/shared/adapters/openclaw'
 import { getSkillsResult, installSkillResult } from '@/shared/adapters/clawhub'
 import { detectSystemResult, probeHttpStatusResult } from '@/shared/adapters/system'
+import { normalizeOpenAiCompatibleBaseUrl } from '@/shared/providerCatalog'
 import {
   CAPABILITIES,
   PROVIDERS,
@@ -240,7 +241,8 @@ const realOnboardingAdapter: OnboardingAdapter = {
       }
     }
 
-    const endpoint = baseUrl || cfg?.baseUrl || 'https://api.openai.com/v1'
+    const rawEndpoint = baseUrl || cfg?.baseUrl || 'https://api.openai.com/v1'
+    const endpoint = normalizeOpenAiCompatibleBaseUrl(rawEndpoint) || rawEndpoint
 
     if (providerKind === 'text-to-image') {
       try {
@@ -290,6 +292,20 @@ const realOnboardingAdapter: OnboardingAdapter = {
       return array.indexOf(model) === index
     })
 
+    const probeModelsList = async () => {
+      const result = await probeHttpStatusResult({
+        url: `${endpoint}/models`,
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        timeoutMs: 10000,
+      })
+      if (!result.success) return { reached: false, ok: false, status: 0 }
+      const status = result.data?.status ?? 0
+      return { reached: status > 0, ok: status === 200, status }
+    }
+
     const probeModel = async (model: string) => {
       const result = await probeHttpStatusResult({
         url: `${endpoint}/chat/completions`,
@@ -311,7 +327,11 @@ const realOnboardingAdapter: OnboardingAdapter = {
         }
       }
 
-      return false
+      // Fallback: `GET /models` catches custom endpoints (e.g. GLM/bigmodel)
+      // whose catalog differs from our fallback model list, where every
+      // chat/completions probe returns "unknown model" despite valid auth.
+      const listResult = await probeModelsList()
+      return listResult.ok
     } catch {
       return false
     }
@@ -320,7 +340,14 @@ const realOnboardingAdapter: OnboardingAdapter = {
   async setApiKey(provider, apiKey, baseUrl?) {
     const cfg = PROVIDERS[provider]
     const configKey = getProviderRuntimeId(provider)
-    const effectiveBaseUrl = baseUrl || cfg?.baseUrl
+    const rawBaseUrl = baseUrl || cfg?.baseUrl
+    // For OpenAI-compatible providers (including `custom-openai-compatible`),
+    // strip `/chat/completions` suffix users commonly paste from vendor docs.
+    // Non-OpenAI-compatible providers (Ollama, image, Anthropic) keep the raw
+    // value — their paths don't match the stripper pattern anyway.
+    const effectiveBaseUrl = rawBaseUrl
+      ? normalizeOpenAiCompatibleBaseUrl(rawBaseUrl) || rawBaseUrl
+      : rawBaseUrl
     const configResult = await getConfigResult()
     const existingProvider =
       configResult.success && configResult.data?.models?.providers?.[configKey]
