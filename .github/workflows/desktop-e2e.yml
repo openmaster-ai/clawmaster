@@ -83,8 +83,42 @@ jobs:
 
       - run: npm ci
 
+      - name: Resolve OpenClaw CLI version
+        id: openclaw-version
+        shell: bash
+        run: |
+          # Pin CLI version to match tests/desktop/harness.mjs so cache keys
+          # invalidate exactly when the harness bumps the dependency.
+          version=$(grep -oE "openclaw@[0-9]+\.[0-9]+\.[0-9]+" tests/desktop/harness.mjs | head -1 | cut -d@ -f2)
+          if [ -z "$version" ]; then
+            echo "Could not parse openclaw version from harness.mjs" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Using openclaw@$version"
+
+      - name: Resolve npm global prefix
+        id: npm-prefix
+        shell: bash
+        run: |
+          prefix="$(npm config get prefix)"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+
+      - name: Cache global OpenClaw CLI install
+        id: openclaw-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.npm-prefix.outputs.prefix }}/lib/node_modules/openclaw
+            ${{ steps.npm-prefix.outputs.prefix }}/bin/openclaw
+            ${{ steps.npm-prefix.outputs.prefix }}/bin/openclaw.cmd
+            ${{ steps.npm-prefix.outputs.prefix }}/node_modules/openclaw
+            ${{ steps.npm-prefix.outputs.prefix }}/openclaw.cmd
+          key: openclaw-cli-${{ runner.os }}-${{ steps.openclaw-version.outputs.version }}
+
       - name: Install OpenClaw CLI
-        run: npm install -g openclaw
+        if: steps.openclaw-cache.outputs.cache-hit != 'true'
+        run: npm install -g openclaw@${{ steps.openclaw-version.outputs.version }}
 
       - name: Add npm global bin to PATH
         if: runner.os != 'Windows'
@@ -97,15 +131,32 @@ jobs:
           $prefix = npm config get prefix
           $prefix | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Install tauri-driver
+      - name: Cache cargo-installed WebDriver tools
         if: matrix.smokeMode == 'webdriver'
+        id: webdriver-tools-cache
+        uses: actions/cache@v4
+        with:
+          # Install directly to ~/.cargo/bin so tests/desktop/harness.mjs finds
+          # the binaries at their expected hardcoded path.
+          path: |
+            ~/.cargo/bin/tauri-driver
+            ~/.cargo/bin/tauri-driver.exe
+            ~/.cargo/bin/msedgedriver-tool
+            ~/.cargo/bin/msedgedriver-tool.exe
+          key: cargo-webdriver-tools-${{ runner.os }}-v1
+
+      - name: Install tauri-driver
+        if: matrix.smokeMode == 'webdriver' && steps.webdriver-tools-cache.outputs.cache-hit != 'true'
         run: cargo install tauri-driver --locked
 
-      - name: Install matching Edge WebDriver
+      - name: Install matching Edge WebDriver tool
+        if: runner.os == 'Windows' && steps.webdriver-tools-cache.outputs.cache-hit != 'true'
+        run: cargo install --git https://github.com/chippers/msedgedriver-tool --locked
+
+      - name: Materialize Edge WebDriver binary
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          cargo install --git https://github.com/chippers/msedgedriver-tool --locked
           $driverDir = Join-Path $env:RUNNER_TEMP 'msedgedriver'
           $maxAttempts = 3
 
