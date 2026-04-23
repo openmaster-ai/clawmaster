@@ -149,6 +149,74 @@ You still get provider management, observability, memory tooling, sessions, plug
 - **Plugins, skills, and MCP** — Enable or disable capabilities, install curated items, add MCP servers, import MCP definitions.
 - **Sessions, memory, and observability** — Inspect sessions, manage memory backends, track token usage and estimated spend.
 
+## Product Feature Overview
+
+### Overview dashboard
+
+At-a-glance view of runtime health, gateway status, active channels, and recommended next steps for anyone who just opened the app.
+
+<p align="center">
+  <img src="./docs/screenshots/page-dashboard.png" alt="ClawMaster dashboard — runtime health, gateway status, quick-start task flows" width="900" />
+</p>
+
+### Guided setup wizard
+
+Two-step wizard: detect your OpenClaw installation, then pick an LLM provider and default model. Providers are grouped into **Sponsors**, **Featured**, and **Compatible & Local** tiers — China-accessible options surface first, and ``Custom (OpenAI Compatible)`` covers anything else.
+
+<p align="center">
+  <img src="./docs/screenshots/wizard-provider.png" alt="Setup wizard — provider selection grouped into Sponsors / Featured / Compatible & Local tiers" width="450" />
+  <img src="./docs/screenshots/wizard-models.png" alt="Setup wizard — default model picker after provider validation" width="450" />
+</p>
+
+### Models and providers
+
+Add, validate, and manage multiple LLM providers side by side. Live key validation, ``/models`` catalog fetch for custom OpenAI-compatible endpoints, and per-provider default selection.
+
+<p align="center">
+  <img src="./docs/screenshots/page-models.png" alt="Models page — provider cards with key validation and default-model selection" width="900" />
+</p>
+
+### Gateway and channels
+
+Bring up the OpenClaw gateway and onboard conversational channels — Feishu, WeChat, Discord, Slack, Telegram, WhatsApp — with step-by-step guides per platform.
+
+<p align="center">
+  <img src="./docs/screenshots/page-channels.png" alt="Channels page — guided onboarding cards per platform" width="900" />
+</p>
+
+### Observability
+
+ClawProbe-backed dashboard for per-session cost, token usage, gateway health, and recent activity. No grepping log files.
+
+<p align="center">
+  <img src="./docs/screenshots/page-observe.png" alt="Observability page — session cost, token usage, and gateway health" width="900" />
+</p>
+
+### Memory
+
+PowerMem-backed memory workspace with FTS5 local search, with a graceful fallback to markdown grep when a vector backend is not configured. Seekdb-based retrieval is in progress.
+
+<p align="center">
+  <img src="./docs/screenshots/page-memory.png" alt="Memory page — workspace manager with search" width="900" />
+</p>
+
+### Skills, plugins, and MCP
+
+Install, toggle, and audit skills and plugins; add MCP servers by URL or import definitions from other agent frameworks.
+
+<p align="center">
+  <img src="./docs/screenshots/page-skills.png" alt="Skills page — curated skill list with toggles and audit metadata" width="450" />
+  <img src="./docs/screenshots/page-mcp.png" alt="MCP page — server management and definition import" width="450" />
+</p>
+
+### Settings
+
+One place to manage profiles, service auth, UI preferences, and advanced runtime options.
+
+<p align="center">
+  <img src="./docs/screenshots/page-settings.png" alt="Settings page — profile, auth, and runtime preferences" width="900" />
+</p>
+
 ## Roadmap
 
 Six core capabilities — each moves from infrastructure toward real daily use:
