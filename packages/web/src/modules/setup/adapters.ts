@@ -11,7 +11,7 @@ import { startGatewayResult, getGatewayStatusResult } from '@/shared/adapters/ga
 import { getConfigResult, resolvePluginRootResult, setConfigResult } from '@/shared/adapters/openclaw'
 import { getSkillsResult, installSkillResult } from '@/shared/adapters/clawhub'
 import { detectSystemResult, probeHttpStatusResult } from '@/shared/adapters/system'
-import { normalizeOpenAiCompatibleBaseUrl } from '@/shared/providerCatalog'
+import { appendPathToBaseUrl, normalizeOpenAiCompatibleBaseUrl } from '@/shared/providerCatalog'
 import {
   CAPABILITIES,
   PROVIDERS,
@@ -247,7 +247,7 @@ const realOnboardingAdapter: OnboardingAdapter = {
     if (providerKind === 'text-to-image') {
       try {
         const result = await probeHttpStatusResult({
-          url: `${endpoint}/images/generations`,
+          url: appendPathToBaseUrl(endpoint, '/images/generations'),
           method: 'POST',
           headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -293,22 +293,32 @@ const realOnboardingAdapter: OnboardingAdapter = {
     })
 
     const probeModelsList = async () => {
-      const result = await probeHttpStatusResult({
-        url: `${endpoint}/models`,
+      const modelsUrl = appendPathToBaseUrl(endpoint, '/models')
+      const authenticatedResult = await probeHttpStatusResult({
+        url: modelsUrl,
         method: 'GET',
         headers: {
           Authorization: `Bearer ${apiKey}`,
         },
         timeoutMs: 10000,
       })
-      if (!result.success) return { reached: false, ok: false, status: 0 }
-      const status = result.data?.status ?? 0
-      return { reached: status > 0, ok: status === 200, status }
+
+      if (!authenticatedResult.success || authenticatedResult.data?.status !== 200) {
+        return false
+      }
+
+      const unauthenticatedResult = await probeHttpStatusResult({
+        url: modelsUrl,
+        method: 'GET',
+        timeoutMs: 10000,
+      })
+
+      return unauthenticatedResult.success && unauthenticatedResult.data?.status !== 200
     }
 
     const probeModel = async (model: string) => {
       const result = await probeHttpStatusResult({
-        url: `${endpoint}/chat/completions`,
+        url: appendPathToBaseUrl(endpoint, '/chat/completions'),
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -330,8 +340,9 @@ const realOnboardingAdapter: OnboardingAdapter = {
       // Fallback: `GET /models` catches custom endpoints (e.g. GLM/bigmodel)
       // whose catalog differs from our fallback model list, where every
       // chat/completions probe returns "unknown model" despite valid auth.
-      const listResult = await probeModelsList()
-      return listResult.ok
+      // Only trust it when the same endpoint rejects an unauthenticated request;
+      // public model catalogs would otherwise accept bad API keys.
+      return await probeModelsList()
     } catch {
       return false
     }

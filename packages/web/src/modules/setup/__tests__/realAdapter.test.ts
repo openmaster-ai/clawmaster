@@ -970,6 +970,26 @@ describe('realSetupAdapter', () => {
     }
   })
 
+  it('preserves query strings when probing a pasted completions URL', async () => {
+    vi.mocked(probeHttpStatusResult).mockResolvedValue({
+      success: true,
+      data: { ok: true, status: 200 },
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.testApiKey(
+        'custom-openai-compatible',
+        'azure-key',
+        'https://example.openai.azure.com/openai/deployments/test/chat/completions?api-version=2024-10-21',
+      ),
+    ).resolves.toBe(true)
+
+    expect(probeHttpStatusResult).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://example.openai.azure.com/openai/deployments/test/chat/completions?api-version=2024-10-21',
+    }))
+  })
+
   it('persists a normalized baseUrl when user pastes a completions URL', async () => {
     vi.mocked(setConfigResult).mockResolvedValue({
       success: true,
@@ -994,6 +1014,30 @@ describe('realSetupAdapter', () => {
     )
   })
 
+  it('persists a normalized baseUrl with query strings intact', async () => {
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey(
+        'custom-openai-compatible',
+        'azure-key',
+        'https://example.openai.azure.com/openai/deployments/test/chat/completions?api-version=2024-10-21',
+      ),
+    ).resolves.toBeUndefined()
+
+    expect(setConfigResult).toHaveBeenCalledWith(
+      'models.providers.custom-openai-compatible',
+      expect.objectContaining({
+        apiKey: 'azure-key',
+        baseUrl: 'https://example.openai.azure.com/openai/deployments/test?api-version=2024-10-21',
+      }),
+    )
+  })
+
   it('falls back to GET /models when all chat/completions probes fail with an unknown model', async () => {
     vi.mocked(probeHttpStatusResult)
       // chat/completions probe with fallback gpt-4o-mini → 400 unknown model
@@ -1008,6 +1052,12 @@ describe('realSetupAdapter', () => {
         data: { ok: true, status: 200 },
         error: null,
       })
+      // unauthenticated GET /models → 401 (catalog requires auth)
+      .mockResolvedValueOnce({
+        success: true,
+        data: { ok: false, status: 401 },
+        error: null,
+      })
 
     await expect(
       realSetupAdapter.onboarding.testApiKey(
@@ -1018,11 +1068,15 @@ describe('realSetupAdapter', () => {
     ).resolves.toBe(true)
 
     const calls = vi.mocked(probeHttpStatusResult).mock.calls
-    expect(calls.length).toBeGreaterThanOrEqual(2)
-    const lastCall = calls[calls.length - 1]![0]
-    expect(lastCall.url).toBe('https://open.bigmodel.cn/api/paas/v4/models')
-    expect(lastCall.method).toBe('GET')
-    expect(lastCall.headers).toMatchObject({ Authorization: 'Bearer glm-key' })
+    expect(calls.length).toBeGreaterThanOrEqual(3)
+    const authenticatedModelsCall = calls[calls.length - 2]![0]
+    const unauthenticatedModelsCall = calls[calls.length - 1]![0]
+    expect(authenticatedModelsCall.url).toBe('https://open.bigmodel.cn/api/paas/v4/models')
+    expect(authenticatedModelsCall.method).toBe('GET')
+    expect(authenticatedModelsCall.headers).toMatchObject({ Authorization: 'Bearer glm-key' })
+    expect(unauthenticatedModelsCall.url).toBe('https://open.bigmodel.cn/api/paas/v4/models')
+    expect(unauthenticatedModelsCall.method).toBe('GET')
+    expect(unauthenticatedModelsCall.headers).toBeUndefined()
   })
 
   it('returns false when GET /models fallback also fails', async () => {
@@ -1037,6 +1091,33 @@ describe('realSetupAdapter', () => {
         'custom-openai-compatible',
         'bad-key',
         'https://open.bigmodel.cn/api/paas/v4',
+      ),
+    ).resolves.toBe(false)
+  })
+
+  it('returns false when GET /models is publicly reachable without authentication', async () => {
+    vi.mocked(probeHttpStatusResult)
+      .mockResolvedValueOnce({
+        success: true,
+        data: { ok: false, status: 401 },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { ok: true, status: 200 },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { ok: true, status: 200 },
+        error: null,
+      })
+
+    await expect(
+      realSetupAdapter.onboarding.testApiKey(
+        'custom-openai-compatible',
+        'bad-key',
+        'https://openrouter.ai/api/v1',
       ),
     ).resolves.toBe(false)
   })

@@ -56,6 +56,32 @@ function parseCatalogBaseUrl(raw: string) {
   return url
 }
 
+function isPrivateOrLinkLocalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+
+  if (host === 'localhost' || host === '::1' || host === '0.0.0.0' || host === '::') {
+    return true
+  }
+
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (ipv4) {
+    const [a, b] = ipv4.slice(1).map(Number) as [number, number, number, number]
+    if (a === 10) return true
+    if (a === 127) return true
+    if (a === 169 && b === 254) return true
+    if (a === 172 && b >= 16 && b <= 31) return true
+    if (a === 192 && b === 168) return true
+    return false
+  }
+
+  if (host.startsWith('fc') || host.startsWith('fd')) return true
+  if (host.startsWith('fe80:')) return true
+  if (host.startsWith('::ffff:')) {
+    return isPrivateOrLinkLocalHost(host.slice('::ffff:'.length))
+  }
+  return false
+}
+
 export function assertSafeProviderCatalogBaseUrl(providerId: string, baseUrl?: string) {
   const normalizedBaseUrl = baseUrl?.trim()
   if (!normalizedBaseUrl) {
@@ -63,7 +89,14 @@ export function assertSafeProviderCatalogBaseUrl(providerId: string, baseUrl?: s
   }
 
   if (providerId === 'custom-openai-compatible') {
-    throw new Error('Live model catalogs are not available for custom providers in web mode')
+    // User-supplied endpoints: accept any public http/https host.
+    // Block loopback + RFC1918 + link-local so a custom provider cannot be
+    // used to SSRF cloud metadata (169.254.169.254) or internal services.
+    const candidate = parseCatalogBaseUrl(normalizedBaseUrl)
+    if (isPrivateOrLinkLocalHost(candidate.hostname)) {
+      throw new Error('Custom provider baseUrl cannot target loopback, private, or link-local hosts')
+    }
+    return
   }
 
   const candidate = parseCatalogBaseUrl(normalizedBaseUrl)

@@ -33,6 +33,17 @@ function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, '')
 }
 
+function trimSingleTrailingRootSlash(value: string) {
+  return value.replace(/\/(?=$|[?#])/, '')
+}
+
+function stripOpenAiCompatibleCompletionsSuffix(pathname: string) {
+  let value = trimTrailingSlash(pathname)
+  value = value.replace(/\/chat\/completions$/i, '')
+  value = value.replace(/\/completions$/i, '')
+  return trimTrailingSlash(value) || '/'
+}
+
 /**
  * Normalize an OpenAI-compatible base URL. Many providers (e.g. GLM/bigmodel)
  * document the full completions endpoint in their quickstart — users then paste
@@ -42,12 +53,36 @@ function trimTrailingSlash(value: string) {
  */
 export function normalizeOpenAiCompatibleBaseUrl(raw: string | undefined | null): string {
   if (!raw) return ''
-  let value = raw.trim()
+  const value = raw.trim()
   if (!value) return ''
-  value = trimTrailingSlash(value)
-  value = value.replace(/\/chat\/completions$/i, '')
-  value = value.replace(/\/completions$/i, '')
-  return trimTrailingSlash(value)
+
+  try {
+    const url = new URL(value)
+    url.pathname = stripOpenAiCompatibleCompletionsSuffix(url.pathname)
+    return trimSingleTrailingRootSlash(url.toString())
+  } catch {
+    const match = value.match(/^([^?#]*)([?#].*)?$/)
+    const base = match?.[1] ?? value
+    const suffix = match?.[2] ?? ''
+    return `${stripOpenAiCompatibleCompletionsSuffix(base)}${suffix}`
+  }
+}
+
+export function appendPathToBaseUrl(baseUrl: string, pathSuffix: string): string {
+  const trimmedBaseUrl = baseUrl.trim()
+  const normalizedPathSuffix = pathSuffix.startsWith('/') ? pathSuffix : `/${pathSuffix}`
+
+  try {
+    const url = new URL(trimmedBaseUrl)
+    const basePath = url.pathname === '/' ? '' : trimTrailingSlash(url.pathname)
+    url.pathname = `${basePath}${normalizedPathSuffix}` || normalizedPathSuffix
+    return trimSingleTrailingRootSlash(url.toString())
+  } catch {
+    const match = trimmedBaseUrl.match(/^([^?#]*)([?#].*)?$/)
+    const base = trimTrailingSlash(match?.[1] ?? trimmedBaseUrl)
+    const suffix = match?.[2] ?? ''
+    return `${base}${normalizedPathSuffix}${suffix}`
+  }
 }
 
 function normalizeUrlPathname(pathname: string) {
@@ -75,6 +110,27 @@ function parseCatalogBaseUrl(raw: string) {
   return url
 }
 
+function isPrivateOrLinkLocalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (host === 'localhost' || host === '::1' || host === '0.0.0.0' || host === '::') return true
+
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (ipv4) {
+    const [a, b] = ipv4.slice(1).map(Number) as [number, number, number, number]
+    if (a === 10) return true
+    if (a === 127) return true
+    if (a === 169 && b === 254) return true
+    if (a === 172 && b >= 16 && b <= 31) return true
+    if (a === 192 && b === 168) return true
+    return false
+  }
+
+  if (host.startsWith('fc') || host.startsWith('fd')) return true
+  if (host.startsWith('fe80:')) return true
+  if (host.startsWith('::ffff:')) return isPrivateOrLinkLocalHost(host.slice('::ffff:'.length))
+  return false
+}
+
 export function assertSafeProviderCatalogBaseUrl(providerId: string, baseUrl?: string) {
   const normalizedBaseUrl = baseUrl?.trim()
   if (!normalizedBaseUrl) {
@@ -82,7 +138,14 @@ export function assertSafeProviderCatalogBaseUrl(providerId: string, baseUrl?: s
   }
 
   if (providerId === 'custom-openai-compatible') {
-    throw new Error('Live model catalogs are not available for custom providers')
+    // User-supplied endpoints: shape-validate and block private/loopback
+    // ranges so a custom provider cannot be used to SSRF cloud metadata
+    // (169.254.169.254) or internal services.
+    const candidate = parseCatalogBaseUrl(normalizedBaseUrl)
+    if (isPrivateOrLinkLocalHost(candidate.hostname)) {
+      throw new Error('Custom provider baseUrl cannot target loopback, private, or link-local hosts')
+    }
+    return
   }
 
   const candidate = parseCatalogBaseUrl(normalizedBaseUrl)
@@ -166,9 +229,13 @@ function filterProviderCatalogModels(providerId: string, models: ProviderCatalog
 
 export function supportsProviderCatalog(
   providerId: string,
-  _provider?: OpenClawModelProvider & { api?: string; apiKey?: string; api_key?: string },
+  provider?: OpenClawModelProvider & { api?: string; apiKey?: string; api_key?: string },
 ) {
-  if (providerId === 'custom-openai-compatible') return false
+  if (providerId === 'custom-openai-compatible') {
+    // Enable live catalog only once the user has configured a baseUrl — the
+    // catalog probe has nowhere to go otherwise.
+    return Boolean(provider?.baseUrl?.trim())
+  }
   if (providerId === 'ollama') return true
   if (providerId === 'anthropic') return true
   if (providerId === 'google') return true

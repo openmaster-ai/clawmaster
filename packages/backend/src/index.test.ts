@@ -377,7 +377,7 @@ test('createApp rejects untrusted provider catalog base URLs', async () => {
       })
 
       assert.equal(response.status, 400)
-      assert.match(await response.text(), /not available for custom providers in web mode/i)
+      assert.match(await response.text(), /loopback, private, or link-local/i)
     } finally {
       if (server.listening) {
         await new Promise<void>((resolve, reject) => {
