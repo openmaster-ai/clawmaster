@@ -53,12 +53,14 @@ function CapabilityRow({
   capability,
   progress,
   anyInstalling,
+  actionsDisabled,
   onInstall,
   onReinstall,
 }: {
   capability: CapabilityStatus
   progress: InstallProgress | undefined
   anyInstalling: boolean
+  actionsDisabled: boolean
   onInstall: (id: CapabilityId) => void
   onReinstall: (id: CapabilityId) => void
 }) {
@@ -124,7 +126,7 @@ function CapabilityRow({
         <button
           type="button"
           onClick={() => onReinstall(capability.id)}
-          disabled={anyInstalling}
+          disabled={anyInstalling || actionsDisabled}
           className="button-secondary"
         >
           <RotateCw className="h-4 w-4" />
@@ -136,7 +138,7 @@ function CapabilityRow({
       <button
         type="button"
         onClick={() => onInstall(capability.id)}
-        disabled={anyInstalling}
+        disabled={anyInstalling || actionsDisabled}
         className="button-primary"
       >
         <Download className="h-4 w-4" />
@@ -191,6 +193,7 @@ export function CapabilitiesSection() {
   const [npmProxySaving, setNpmProxySaving] = useState(false)
   const [npmProxyError, setNpmProxyError] = useState<string | null>(null)
   const npmProxySavePromiseRef = useRef<Promise<void> | null>(null)
+  const npmProxyLoadPromiseRef = useRef<Promise<void> | null>(null)
   const npmProxyPersistedEnabledRef = useRef(false)
   const npmProxyPersistedRegistryUrlRef = useRef<string | null>(null)
   const npmProxyRequestedEnabledRef = useRef(false)
@@ -202,7 +205,7 @@ export function CapabilitiesSection() {
   useEffect(() => {
     let cancelled = false
 
-    async function loadNpmProxy() {
+    const loadPromise = (async function loadNpmProxy() {
       setNpmProxyLoading(true)
       setNpmProxyError(null)
       const result = await platformResults.getClawmasterNpmProxy()
@@ -218,9 +221,13 @@ export function CapabilitiesSection() {
       setNpmProxyEnabled(result.data.enabled)
       setNpmProxyRegistryUrl(result.data.registryUrl)
       setNpmProxyLoading(false)
-    }
+    })().finally(() => {
+      if (npmProxyLoadPromiseRef.current === loadPromise) {
+        npmProxyLoadPromiseRef.current = null
+      }
+    })
 
-    void loadNpmProxy()
+    npmProxyLoadPromiseRef.current = loadPromise
 
     return () => {
       cancelled = true
@@ -231,22 +238,22 @@ export function CapabilitiesSection() {
     ? (npmProxyRegistryUrl ?? DEFAULT_NPM_PROXY_REGISTRY_URL)
     : null
 
-  const installOptions = effectiveNpmProxyRegistryUrl
-    ? { registryUrl: effectiveNpmProxyRegistryUrl }
-    : undefined
-
   const handleInstall = useCallback(
     (id: CapabilityId) => {
       void (async () => {
         try {
+          await npmProxyLoadPromiseRef.current
           await npmProxySavePromiseRef.current
         } catch {
           return
         }
+        const installOptions = npmProxyRequestedEnabledRef.current
+          ? { registryUrl: npmProxyPersistedRegistryUrlRef.current ?? DEFAULT_NPM_PROXY_REGISTRY_URL }
+          : undefined
         await install([id], installOptions).catch(() => {})
       })()
     },
-    [install, installOptions],
+    [install],
   )
 
   const handleConfirmReinstall = useCallback(() => {
@@ -255,13 +262,17 @@ export function CapabilitiesSection() {
     setConfirmReinstallId(null)
     void (async () => {
       try {
+        await npmProxyLoadPromiseRef.current
         await npmProxySavePromiseRef.current
       } catch {
         return
       }
+      const installOptions = npmProxyRequestedEnabledRef.current
+        ? { registryUrl: npmProxyPersistedRegistryUrlRef.current ?? DEFAULT_NPM_PROXY_REGISTRY_URL }
+        : undefined
       await install([id], installOptions).catch(() => {})
     })()
-  }, [confirmReinstallId, install, installOptions])
+  }, [confirmReinstallId, install])
 
   const handleNpmProxyChange = useCallback(async (enabled: boolean) => {
     npmProxyRequestedEnabledRef.current = enabled
@@ -313,6 +324,7 @@ export function CapabilitiesSection() {
   const confirmCapability = confirmReinstallId
     ? capabilities.find((c) => c.id === confirmReinstallId)
     : null
+  const installActionsDisabled = npmProxyLoading || npmProxySaving
 
   return (
     <section id="settings-capabilities" className="surface-card">
@@ -383,6 +395,7 @@ export function CapabilitiesSection() {
               capability={capability}
               progress={installProgress[capability.id]}
               anyInstalling={installing}
+              actionsDisabled={installActionsDisabled}
               onInstall={handleInstall}
               onReinstall={(id) => setConfirmReinstallId(id)}
             />
@@ -401,6 +414,7 @@ export function CapabilitiesSection() {
             : undefined
         }
         confirmLabel={t('settings.capabilities.reinstall')}
+        busy={installActionsDisabled}
         onCancel={() => setConfirmReinstallId(null)}
         onConfirm={handleConfirmReinstall}
       />

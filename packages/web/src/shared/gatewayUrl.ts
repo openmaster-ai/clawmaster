@@ -22,7 +22,20 @@ function normalizeGatewayHost(bind?: string): string {
     return '127.0.0.1'
   }
 
+  if (value.includes(':') && !value.startsWith('[') && !value.endsWith(']')) {
+    return `[${value}]`
+  }
+
   return value
+}
+
+function normalizeGatewayBasePath(basePath?: string): string {
+  const value = basePath?.trim()
+  if (!value) return ''
+
+  const collapsed = value.replace(/^\/+/, '').replace(/\/+$/, '')
+  if (!collapsed) return ''
+  return `/${collapsed}`
 }
 
 export function buildGatewayUrl(
@@ -33,7 +46,7 @@ export function buildGatewayUrl(
   const host = normalizeGatewayHost(config?.gateway?.bind)
   const proto = options?.protocol ?? 'http'
   const basePath = options?.includeBasePath
-    ? (config?.gateway?.controlUi?.basePath ?? '')
+    ? normalizeGatewayBasePath(config?.gateway?.controlUi?.basePath)
     : ''
   return `${proto}://${host}:${port}${basePath}`
 }

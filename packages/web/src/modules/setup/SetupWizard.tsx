@@ -177,8 +177,10 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const recoveryStartedAtRef = useRef<number | null>(null)
   const mirrorTouchedRef = useRef(false)
   const mirrorSavePromiseRef = useRef<Promise<void> | null>(null)
+  const mirrorLoadPromiseRef = useRef<Promise<void> | null>(null)
   const mirrorPersistedEnabledRef = useRef(false)
   const mirrorRequestedEnabledRef = useRef(false)
+  const [mirrorLoading, setMirrorLoading] = useState(true)
   const [mirrorSaving, setMirrorSaving] = useState(false)
 
   // Provider / model state
@@ -387,12 +389,24 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   useEffect(() => {
     let cancelled = false
 
-    void getClawmasterNpmProxyResult().then((result) => {
-      if (cancelled || mirrorTouchedRef.current || !result.success || !result.data) return
-      mirrorPersistedEnabledRef.current = result.data.enabled
-      mirrorRequestedEnabledRef.current = result.data.enabled
-      setUseMirror(result.data.enabled)
+    setMirrorLoading(true)
+    const loadPromise = getClawmasterNpmProxyResult().then((result) => {
+      if (cancelled) return
+      if (!mirrorTouchedRef.current && result.success && result.data) {
+        mirrorPersistedEnabledRef.current = result.data.enabled
+        mirrorRequestedEnabledRef.current = result.data.enabled
+        setUseMirror(result.data.enabled)
+      }
+    }).finally(() => {
+      if (!cancelled) {
+        setMirrorLoading(false)
+      }
+      if (mirrorLoadPromiseRef.current === loadPromise) {
+        mirrorLoadPromiseRef.current = null
+      }
     })
+
+    mirrorLoadPromiseRef.current = loadPromise
 
     return () => {
       cancelled = true
@@ -418,6 +432,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
   const startInstall = useCallback(async () => {
     try {
+      await mirrorLoadPromiseRef.current
       await mirrorSavePromiseRef.current
     } catch (error) {
       setInstallError(error instanceof Error ? error.message : String(error))
@@ -432,7 +447,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     simProgress.start()
     saveInstallState({ phase: 'installing', startedAt: Date.now() })
 
-    const installOptions = useMirror
+    const installOptions = mirrorRequestedEnabledRef.current
       ? { registryUrl: NPM_MIRROR_REGISTRY_URL }
       : undefined
 
@@ -452,7 +467,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       setInstallError(err instanceof Error ? err.message : String(err))
       setPhase('install_error')
     }
-  }, [adapter, simProgress, useMirror])
+  }, [adapter, simProgress])
 
   const handleMirrorChange = useCallback((checked: boolean) => {
     mirrorTouchedRef.current = true
@@ -625,6 +640,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             installError={installError}
             simProgress={simProgress}
             isDemo={isDemo}
+            mirrorLoading={mirrorLoading}
             mirrorSaving={mirrorSaving}
             useMirror={useMirror}
             onMirrorChange={handleMirrorChange}
@@ -663,6 +679,7 @@ function EngineStep({
   installError,
   simProgress,
   isDemo,
+  mirrorLoading,
   mirrorSaving,
   useMirror,
   onMirrorChange,
@@ -674,6 +691,7 @@ function EngineStep({
   installError: string | null
   simProgress: ReturnType<typeof useSimulatedProgress>
   isDemo: boolean
+  mirrorLoading: boolean
   mirrorSaving: boolean
   useMirror: boolean
   onMirrorChange: (value: boolean) => void
@@ -681,6 +699,7 @@ function EngineStep({
   onRetry: () => void
 }) {
   const { t } = useTranslation()
+  const mirrorBusy = mirrorLoading || mirrorSaving
 
   return (
     <div className="wizard-engine-step">
@@ -756,7 +775,7 @@ function EngineStep({
           <input
             type="checkbox"
             checked={useMirror}
-            disabled={mirrorSaving}
+            disabled={mirrorBusy}
             onChange={(e) => onMirrorChange(e.target.checked)}
             className="accent-primary"
           />
@@ -767,14 +786,14 @@ function EngineStep({
       {/* Action buttons */}
       <div className="wizard-actions">
         {phase === 'not_installed' && (
-          <button onClick={onInstall} disabled={mirrorSaving} className="wizard-btn-primary">
+          <button onClick={onInstall} disabled={mirrorBusy} className="wizard-btn-primary">
             <Download className="h-4 w-4" />
             {t('setup.installCore')}
           </button>
         )}
         {phase === 'install_error' && (
           <>
-            <button onClick={onInstall} disabled={mirrorSaving} className="wizard-btn-primary">
+            <button onClick={onInstall} disabled={mirrorBusy} className="wizard-btn-primary">
               <Download className="h-4 w-4" />
               {t('common.retry')}
             </button>

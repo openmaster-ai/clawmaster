@@ -20,12 +20,31 @@ describe('buildGatewayUrl', () => {
     })).toBe('http://127.0.0.1:3010')
   })
 
+  it('brackets bare ipv6 binds for browser-safe urls', () => {
+    expect(buildGatewayUrl({
+      gateway: {
+        port: 3010,
+        bind: '::1',
+      },
+    })).toBe('http://[::1]:3010')
+  })
+
   it('includes the control ui base path when requested', () => {
     expect(buildGatewayUrl({
       gateway: {
         port: 3010,
         bind: 'loopback',
         controlUi: { basePath: '/openclaw' },
+      },
+    }, { includeBasePath: true })).toBe('http://127.0.0.1:3010/openclaw')
+  })
+
+  it('normalizes malformed control ui base paths before building urls', () => {
+    expect(buildGatewayUrl({
+      gateway: {
+        port: 3010,
+        bind: 'loopback',
+        controlUi: { basePath: 'openclaw/' },
       },
     }, { includeBasePath: true })).toBe('http://127.0.0.1:3010/openclaw')
   })
@@ -61,6 +80,39 @@ describe('buildGatewayUrl', () => {
       },
     }, 'agent:main:daily-report')).toBe(
       'http://127.0.0.1:3010/openclaw/chat?token=secret-token&session=agent%3Amain%3Adaily-report',
+    )
+  })
+
+  it('does not throw when the configured web ui base path misses a leading slash', () => {
+    expect(buildGatewayWebUiUrl({
+      gateway: {
+        port: 3010,
+        bind: 'loopback',
+        auth: { mode: 'token', token: 'secret-token' },
+        controlUi: { basePath: 'openclaw' },
+      },
+    })).toBe('http://127.0.0.1:3010/openclaw?token=secret-token')
+  })
+
+  it('builds authenticated webui and chat urls for ipv6 binds', () => {
+    expect(buildGatewayWebUiUrl({
+      gateway: {
+        port: 3010,
+        bind: '::1',
+        auth: { mode: 'token', token: 'secret-token' },
+        controlUi: { basePath: '/openclaw' },
+      },
+    })).toBe('http://[::1]:3010/openclaw?token=secret-token')
+
+    expect(buildGatewayChatUrl({
+      gateway: {
+        port: 3010,
+        bind: '::1',
+        auth: { mode: 'token', token: 'secret-token' },
+        controlUi: { basePath: '/openclaw' },
+      },
+    }, 'agent:main:daily-report')).toBe(
+      'http://[::1]:3010/openclaw/chat?token=secret-token&session=agent%3Amain%3Adaily-report',
     )
   })
 })
