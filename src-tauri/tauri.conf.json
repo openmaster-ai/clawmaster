@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ClawMaster",
-  "version": "0.3.0-rc.2",
+  "version": "0.3.0-rc.3",
   "identifier": "ai.openclaw.manager",
   "build": {
     "frontendDist": "../packages/web/dist",

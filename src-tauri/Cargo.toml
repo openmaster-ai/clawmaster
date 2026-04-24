@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.3.0-rc.2"
+version = "0.3.0-rc.3"
 description = "A Tauri App"
 authors = ["openmaster-ai"]
 license = "Apache-2.0"
