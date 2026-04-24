@@ -31,6 +31,12 @@ interface DraftVariantDetail {
   images: DraftImagePreview[]
 }
 
+interface DraftImageDialogState {
+  variantId: string
+  variantTitle: string
+  image: DraftImagePreview
+}
+
 function headingClassName(level: number): string {
   switch (level) {
     case 1:
@@ -413,6 +419,7 @@ export default function ContentDraftsPage() {
   const [hiddenIds, setHiddenIds] = useState<string[]>([])
   const [pendingDeleteVariant, setPendingDeleteVariant] = useState<ContentDraftVariantSummary | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [selectedExtraImage, setSelectedExtraImage] = useState<DraftImageDialogState | null>(null)
   const imageUrlsRef = useRef<Record<string, string[]>>({})
 
   const variants = (variantsState.data ?? []).filter((variant) => !hiddenIds.includes(variant.id))
@@ -555,6 +562,9 @@ export default function ContentDraftsPage() {
     setHiddenIds((current) => [...current, variant.id])
     if (expandedId === variant.id) {
       setExpandedId(null)
+    }
+    if (selectedExtraImage?.variantId === variant.id) {
+      setSelectedExtraImage(null)
     }
     void variantsState.refetch()
   }
@@ -779,16 +789,22 @@ export default function ContentDraftsPage() {
                               </div>
                               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                                 {extraImages.map((image) => (
-                                  <figure
+                                  <button
                                     key={image.name}
-                                    className="overflow-hidden rounded-[20px] border border-border/70 bg-background"
+                                    type="button"
+                                    onClick={() => setSelectedExtraImage({
+                                      variantId: variant.id,
+                                      variantTitle: variant.title ?? variant.runId,
+                                      image,
+                                    })}
+                                    className="group overflow-hidden rounded-[20px] border border-border/70 bg-background text-left transition hover:border-primary/35 hover:shadow-[0_14px_36px_rgba(20,20,20,0.08)]"
                                   >
-                                    <img src={image.src} alt={image.name} className="aspect-square w-full object-cover" />
-                                    <figcaption className="flex items-center justify-between gap-3 px-3 py-2.5 text-[11px] text-muted-foreground">
+                                    <img src={image.src} alt={image.name} className="aspect-square w-full object-cover transition group-hover:scale-[1.02]" />
+                                    <span className="flex items-center justify-between gap-3 px-3 py-2.5 text-[11px] text-muted-foreground">
                                       <span className="truncate">{image.name}</span>
                                       <span>{image.mimeType}</span>
-                                    </figcaption>
-                                  </figure>
+                                    </span>
+                                  </button>
                                 ))}
                               </div>
                             </div>
@@ -834,6 +850,55 @@ export default function ContentDraftsPage() {
           void handleDeleteVariant(current)
         }}
       />
+
+      {selectedExtraImage ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('contentDrafts.imageDialogTitle', { name: selectedExtraImage.image.name })}
+          onClick={() => setSelectedExtraImage(null)}
+        >
+          <div
+            className="flex max-h-[min(92vh,56rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-border/70 bg-background shadow-[0_28px_80px_rgba(0,0,0,0.35)] xl:flex-row"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="min-h-0 min-w-0 flex-1 bg-muted/20">
+              <img
+                src={selectedExtraImage.image.src}
+                alt={selectedExtraImage.image.name}
+                className="h-full max-h-[70vh] w-full object-contain xl:max-h-[92vh]"
+              />
+            </div>
+            <aside className="flex w-full shrink-0 flex-col gap-4 border-t border-border/70 bg-card/70 p-5 xl:w-[22rem] xl:border-l xl:border-t-0">
+              <div className="space-y-1">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  {t('contentDrafts.extraImagesTitle')}
+                </p>
+                <h3 className="text-lg font-semibold text-foreground">
+                  {selectedExtraImage.image.name}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {t('contentDrafts.imageDialogBody', { title: selectedExtraImage.variantTitle })}
+                </p>
+              </div>
+
+              <div className="grid gap-2.5">
+                <MetaItem label={t('contentDrafts.imageDialogFileName')} value={selectedExtraImage.image.name} />
+                <MetaItem label={t('contentDrafts.imageDialogMimeType')} value={selectedExtraImage.image.mimeType} />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedExtraImage(null)}
+                className="button-secondary mt-auto px-3 py-2 text-sm"
+              >
+                {t('contentDrafts.imageDialogClose')}
+              </button>
+            </aside>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

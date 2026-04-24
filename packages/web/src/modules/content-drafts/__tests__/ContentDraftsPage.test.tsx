@@ -120,6 +120,20 @@ describe('ContentDraftsPage', () => {
     expect(await screen.findByText('Card two')).toBeInTheDocument()
     expect(mockReadContentDraftImageResult).toHaveBeenCalledWith('/tmp/content-drafts/run-199/xhs/images/card-1.webp')
     expect(mockReadContentDraftImageResult).toHaveBeenCalledWith('/tmp/content-drafts/run-199/xhs/images/card-2.webp')
+    expect(await screen.findByText('Saved images not referenced in markdown')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /card-1\.webp/i }))
+
+    const imageDialog = await screen.findByRole('dialog', { name: 'Saved image details: card-1.webp' })
+    expect(within(imageDialog).getByText('This saved image belongs to XHS recap but is not embedded directly in the article body.')).toBeInTheDocument()
+    expect(within(imageDialog).getByText('File Name')).toBeInTheDocument()
+    expect(within(imageDialog).getByText('MIME Type')).toBeInTheDocument()
+    expect(within(imageDialog).getByRole('button', { name: 'Close image' })).toBeInTheDocument()
+
+    fireEvent.click(within(imageDialog).getByRole('button', { name: 'Close image' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Saved image details: card-1.webp' })).not.toBeInTheDocument()
+    })
   })
 
   it('removes a draft variant after delete confirmation', async () => {

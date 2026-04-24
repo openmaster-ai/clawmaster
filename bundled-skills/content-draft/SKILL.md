@@ -23,6 +23,9 @@ This skill is the default repo-owned workflow for URL to draft generation.
 - For illustrations, prefer the repo-owned `ernie-image` skill when it is available. Otherwise use the runtime's built-in image generation capability. Do not route illustration work through `baoyu-*` skills for this workflow.
 - Use `memory_recall` before drafting when tone, audience, or visual style preferences matter.
 - This skill generates drafts and saved artifacts. Do not publish anything unless the user explicitly asks for publishing.
+- Treat illustration relevance as a hard requirement. Every generated image should map to the article's actual subject, section, or example instead of generic "AI article" decoration.
+- Before saving artifacts, revise the markdown so generated images are embedded inline wherever they strengthen the reading flow. Saved-but-unused images are a fallback, not the target outcome.
+- If an image does not clearly support the article context, either regenerate it or omit it from the saved artifact set.
 
 ## Default Workflow
 
@@ -83,6 +86,8 @@ For GitHub repos or YouTube inputs, prefer the best runtime-native extraction pa
   Usually prepare 1 hero image plus optional inline support visuals.
 - Prefer `ernie-image` for repo-owned illustration generation when it is available in the workspace.
 - Generate images only after the article structure is stable.
+- Match each image to a concrete section intent before you generate it: lead image, architecture explainer, workflow step, comparison card, etc.
+- Rework the draft after image generation so the final markdown references as many saved images as the platform can reasonably support.
 - Save every generated image path so it can be persisted with the bundled save helper.
 
 ## Saving Artifacts
@@ -113,6 +118,8 @@ node ${SKILL_DIR}/scripts/build-chat-response.mjs \
 ```
 
 This helper rewrites local draft image references into OpenClaw-compatible `MEDIA:` blocks in the markdown flow and appends any leftover generated images under a `Generated Images` section.
+
+Aim for that leftover section to be empty in normal successful runs. If images still land there, they should be intentionally extra variants or backups rather than unexplained generic leftovers.
 
 Return this helper output to the user as the final assistant reply unless the user explicitly asked for a shorter summary instead.
 Do not summarize, paraphrase, or describe the helper output after generating it. Emit the helper output itself as the final assistant message so the draft body and `MEDIA:` images survive intact in chat.

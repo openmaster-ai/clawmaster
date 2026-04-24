@@ -268,6 +268,9 @@ test('bundled Content Draft skill explicitly keeps article drafting on the repo-
   assert.match(skillBody, /node \$\{SKILL_DIR\}\/scripts\/fetch-url-markdown\.mjs/)
   assert.match(skillBody, /node \$\{SKILL_DIR\}\/scripts\/build-chat-response\.mjs/)
   assert.match(skillBody, /runtime's built-in image generation capability/i)
+  assert.match(skillBody, /Every generated image should map to the article's actual subject, section, or example/i)
+  assert.match(skillBody, /revise the markdown so generated images are embedded inline wherever they strengthen the reading flow/i)
+  assert.match(skillBody, /If an image does not clearly support the article context, either regenerate it or omit it/i)
   assert.match(skillBody, /Return the full final draft body plus the generated images in the same reply\./)
 })
 
