@@ -257,6 +257,37 @@ test('syncInstalledBundledSkills refreshes already-installed bundled skills with
   assert.equal(fs.existsSync(path.join(installDir, 'scripts', 'stale-script.mjs')), false)
 })
 
+test('syncInstalledBundledSkills skips matching skill dirs that are not marked as bundled', () => {
+  const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-bundled-skill-sync-src-'))
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-bundled-skill-sync-data-'))
+  const installDir = path.join(dataDir, 'workspace', 'skills', 'content-draft')
+
+  fs.mkdirSync(path.join(sourceRoot, 'scripts'), { recursive: true })
+  fs.writeFileSync(path.join(sourceRoot, 'SKILL.md'), '# Content Draft v2\n', 'utf8')
+  fs.writeFileSync(path.join(sourceRoot, '_meta.json'), '{"slug":"content-draft","version":"0.3.0","bundled":true}\n', 'utf8')
+  fs.writeFileSync(path.join(sourceRoot, 'scripts', 'save-draft-artifacts.mjs'), 'console.log("new-save")\n', 'utf8')
+
+  fs.mkdirSync(path.join(installDir, 'scripts'), { recursive: true })
+  fs.writeFileSync(path.join(installDir, 'SKILL.md'), '# Custom Content Draft\n', 'utf8')
+  fs.writeFileSync(path.join(installDir, '_meta.json'), '{"slug":"content-draft","version":"9.9.9","bundled":false}\n', 'utf8')
+  fs.writeFileSync(path.join(installDir, 'scripts', 'save-draft-artifacts.mjs'), 'console.log("custom-save")\n', 'utf8')
+
+  const synced = syncInstalledBundledSkills({
+    dataDir,
+    env: {
+      ...process.env,
+      CLAWMASTER_BUNDLED_CONTENT_DRAFT_SKILL_ROOT: sourceRoot,
+    },
+  })
+
+  assert.deepEqual(synced, [])
+  assert.equal(fs.readFileSync(path.join(installDir, 'SKILL.md'), 'utf8'), '# Custom Content Draft\n')
+  assert.equal(
+    fs.readFileSync(path.join(installDir, 'scripts', 'save-draft-artifacts.mjs'), 'utf8'),
+    'console.log("custom-save")\n',
+  )
+})
+
 test('syncInstalledBundledSkills refreshes WSL-installed bundled skills with a WSL existence check', () => {
   const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-bundled-skill-sync-src-'))
   const wslScripts: Array<{ distro: string; script: string }> = []
@@ -283,12 +314,19 @@ test('syncInstalledBundledSkills refreshes WSL-installed bundled skills with a W
         }
         return { code: 1, stdout: '', stderr: '' }
       }
+      if (script.startsWith('cat ')) {
+        if (script.includes('/workspace/skills/content-draft/_meta.json')) {
+          return { code: 0, stdout: '{"slug":"content-draft","version":"0.3.0","bundled":true}\n', stderr: '' }
+        }
+        return { code: 1, stdout: '', stderr: '' }
+      }
       return { code: 0, stdout: '', stderr: '' }
     },
   })
 
   assert.deepEqual(synced, ['content-draft'])
   assert.equal(wslScripts.filter(({ script }) => script.startsWith('test -e ')).length, 5)
+  assert.equal(wslScripts.filter(({ script }) => script.startsWith('cat ')).length, 1)
   const copyScript = wslScripts.find(({ script }) => /cp -a/.test(script))
   assert.ok(copyScript)
   assert.equal(copyScript?.distro, 'Ubuntu')

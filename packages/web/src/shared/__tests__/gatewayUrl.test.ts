@@ -20,6 +20,15 @@ describe('buildGatewayUrl', () => {
     })).toBe('http://127.0.0.1:3010')
   })
 
+  it('maps ipv6 wildcard binds to ipv6 loopback for browser access', () => {
+    expect(buildGatewayUrl({
+      gateway: {
+        port: 3010,
+        bind: '::',
+      },
+    })).toBe('http://[::1]:3010')
+  })
+
   it('brackets bare ipv6 binds for browser-safe urls', () => {
     expect(buildGatewayUrl({
       gateway: {
@@ -114,5 +123,15 @@ describe('buildGatewayUrl', () => {
     }, 'agent:main:daily-report')).toBe(
       'http://[::1]:3010/openclaw/chat?token=secret-token&session=agent%3Amain%3Adaily-report',
     )
+  })
+
+  it('uses ipv6 loopback for authenticated urls when the gateway bind is an ipv6 wildcard', () => {
+    expect(buildGatewayWebUiUrl({
+      gateway: {
+        port: 3010,
+        bind: '::',
+        auth: { mode: 'token', token: 'secret-token' },
+      },
+    })).toBe('http://[::1]:3010/?token=secret-token')
   })
 })

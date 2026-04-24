@@ -166,6 +166,38 @@ function bundledSkillInstallDirExists(
   return result.code === 0
 }
 
+function readBundledSkillInstallMeta(
+  installDir: string,
+  options: BundledSkillInstallOptions = {},
+): Record<string, unknown> | null {
+  const dataDir = options.dataDir ?? getOpenclawDataDir()
+  const metaPath = path.join(installDir, '_meta.json')
+
+  try {
+    if (!shouldInstallBundledSkillThroughWsl(dataDir, options)) {
+      if (!fs.existsSync(metaPath)) return null
+      return JSON.parse(fs.readFileSync(metaPath, 'utf8')) as Record<string, unknown>
+    }
+
+    const distro = options.wslDistro ?? requireSelectedWslDistroSync()
+    const runWslScript = options.runWslScript ?? runWslShellSync
+    const wslMetaPath = path.posix.join(installDir, '_meta.json')
+    const result = runWslScript(distro, `cat ${shellEscapePosixArg(wslMetaPath)}`)
+    if (result.code !== 0) return null
+    return JSON.parse(result.stdout) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function isSafeBundledSkillRefreshInstall(
+  installDir: string,
+  options: BundledSkillInstallOptions = {},
+): boolean {
+  const meta = readBundledSkillInstallMeta(installDir, options)
+  return meta?.['bundled'] === true
+}
+
 export function syncInstalledBundledSkills(
   options: BundledSkillInstallOptions = {},
 ): BundledSkillSlug[] {
@@ -175,6 +207,7 @@ export function syncInstalledBundledSkills(
     const spec = BUNDLED_SKILLS[slug]
     const installDir = resolveBundledSkillInstallDir(spec, options)
     if (!bundledSkillInstallDirExists(installDir, options)) continue
+    if (!isSafeBundledSkillRefreshInstall(installDir, options)) continue
     installBundledSkill(slug, options)
     synced.push(slug)
   }

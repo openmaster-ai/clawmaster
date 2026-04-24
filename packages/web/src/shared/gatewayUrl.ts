@@ -18,8 +18,16 @@ function normalizeGatewayHost(bind?: string): string {
   const value = bind?.trim()
   if (!value) return '127.0.0.1'
 
-  if (value === '0.0.0.0' || value === '::' || value === '[::]' || value === 'loopback') {
+  if (value === 'loopback') {
     return '127.0.0.1'
+  }
+
+  if (value === '0.0.0.0') {
+    return '127.0.0.1'
+  }
+
+  if (value === '::' || value === '[::]') {
+    return '[::1]'
   }
 
   if (value.includes(':') && !value.startsWith('[') && !value.endsWith(']')) {
