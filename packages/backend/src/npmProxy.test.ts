@@ -10,12 +10,16 @@ import { writeClawmasterSettings } from './clawmasterSettings.js'
 function withTempHome(fn: (homeDir: string) => void): void {
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-npm-proxy-'))
   const previousHome = process.env.HOME
+  const previousUserProfile = process.env.USERPROFILE
   process.env.HOME = homeDir
+  process.env.USERPROFILE = homeDir
   try {
     fn(homeDir)
   } finally {
     if (previousHome === undefined) delete process.env.HOME
     else process.env.HOME = previousHome
+    if (previousUserProfile === undefined) delete process.env.USERPROFILE
+    else process.env.USERPROFILE = previousUserProfile
   }
 }
 

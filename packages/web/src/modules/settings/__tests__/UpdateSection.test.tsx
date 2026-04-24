@@ -176,6 +176,8 @@ const mockBootstrap = vi.fn()
 const mockSaveProfile = vi.fn()
 const mockClearProfile = vi.fn()
 const mockSaveRuntime = vi.fn()
+const mockGetNpmProxy = vi.fn()
+const mockSaveNpmProxy = vi.fn()
 const mockGetLogsResult = vi.fn()
 const mockGetLocalDataStats = vi.fn()
 const mockRebuildLocalData = vi.fn()
@@ -234,7 +236,9 @@ function makeSystemInfo(overrides: any = {}) {
 
 vi.mock('@/shared/adapters/platformResults', () => ({
   platformResults: {
+    getClawmasterNpmProxy: (...args: any[]) => mockGetNpmProxy(...args),
     saveClawmasterRuntime: (...args: any[]) => mockSaveRuntime(...args),
+    saveClawmasterNpmProxy: (...args: any[]) => mockSaveNpmProxy(...args),
     saveOpenclawProfile: (...args: any[]) => mockSaveProfile(...args),
     clearOpenclawProfile: (...args: any[]) => mockClearProfile(...args),
     listOpenclawNpmVersions: (...args: any[]) => mockListVersions(...args),
@@ -296,6 +300,16 @@ describe('UpdateSection', () => {
     vi.mocked(platform.detectSystem).mockResolvedValue(makeSystemInfo())
     mockIsTauri.mockReturnValue(false)
     mockBootstrap.mockResolvedValue({ success: true })
+    mockGetNpmProxy.mockResolvedValue({
+      success: true,
+      data: { enabled: false, registryUrl: null },
+      error: null,
+    })
+    mockSaveNpmProxy.mockResolvedValue({
+      success: true,
+      data: { enabled: false, registryUrl: null },
+      error: null,
+    })
     mockSaveProfile.mockResolvedValue({ success: true, data: undefined, error: null })
     mockClearProfile.mockResolvedValue({ success: true, data: undefined, error: null })
     mockSaveRuntime.mockResolvedValue({ success: true, data: undefined, error: null })
