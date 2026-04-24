@@ -39,9 +39,10 @@ This skill is the default repo-owned workflow for URL to draft generation.
    Save concise, publish-ready markdown, not raw notes.
 5. Generate the illustration set with `ernie-image` when available, or the runtime's built-in image generation capability otherwise.
    Follow the platform image counts in `references/platforms.md`.
-6. Save the markdown and generated images with the bundled script.
+6. Save the markdown and generated images with the bundled script, and pass image slots or image metadata into that save step whenever possible.
    Standard output layout is documented in `references/output-contract.md`.
-7. Build the final chat response from the saved draft and saved images.
+7. Only use the post-generation image linker as a fallback for already-saved messy runs.
+8. Build the final chat response from the saved draft and saved images.
    Return the helper output so the user gets the full draft body plus embedded images in the same reply.
 
 ## Platform Scope
@@ -107,6 +108,60 @@ The script prints a JSON summary with the saved paths.
 
 Use `--run-id <id>` when saving multiple platform variants for the same source so they land under the same run directory.
 
+Preferred pattern for article-aware image linkage:
+
+```bash
+node ${SKILL_DIR}/scripts/save-draft-artifacts.mjs \
+  --platform wechat \
+  --title "Deep Agents Review" \
+  --markdown-file /tmp/wechat-draft.md \
+  --image-slot hero=/tmp/hero---abc.png \
+  --image-meta-file /tmp/image-meta.json
+```
+
+`--image-slot` is the best default because it gives the workflow one stable semantic handle per image without forcing the agent to author a perfect sidecar file after the fact.
+
+When you use `--image-slot role=/path/to/file.png`, write the draft with either the original source path or the final slot path `images/<role>.<ext>`. Do not invent alternate semantic file names like `01-hero-section.png`.
+Every declared slot must appear in the resolved draft. `save-draft-artifacts.mjs` now fails if any slot is still orphaned after rewrite.
+
+## Post-Generation Image Linking Fallback
+
+When a run has already been saved with UUID-style names or weak linkage, run the bundled linker against the saved platform artifact directory before you build the final chat response.
+
+Prepare a small JSON file that maps each saved image to its article role:
+
+```json
+{
+  "articleSlug": "deep-agents-sdk-review",
+  "images": [
+    {
+      "match": "hero---5f3d9fe0-dc7f-4cb8-a27c-5b020b4077b6.png",
+      "role": "hero",
+      "section": "Problem background",
+      "anchor": "problem-background",
+      "caption": "Lead image for the opening section",
+      "prompt": "..."
+    }
+  ]
+}
+```
+
+Then run:
+
+```bash
+node ${SKILL_DIR}/scripts/link-generated-images.mjs \
+  --manifest-file /abs/path/to/manifest.json \
+  --links-file /tmp/image-links.json
+```
+
+This helper:
+
+- renames saved images to semantic names such as `01-hero-problem-background.png`
+- rewrites `draft.md` image references to the new names
+- stores additive `images[]` linkage metadata in `manifest.json`
+
+Use this as a repair step, not as the primary happy path.
+
 ## Building The Final Chat Reply
 
 After saving artifacts, build the final reply markdown from the saved draft plus saved images:
@@ -136,8 +191,19 @@ Do not summarize, paraphrase, or describe the helper output after generating it.
 | `--markdown-file <path>` | Read markdown from a file |
 | `--markdown <text>` | Inline markdown when a temp file is unnecessary |
 | `--image <path>` | Copy one image into the platform `images/` directory; repeatable |
+| `--image-slot <role=path>` | Copy one image and preserve a semantic slot such as `hero`, `architecture`, or `workflow-step` |
+| `--image-meta-file <path>` | JSON file with additive image metadata keyed by `sourcePath` or original file name |
 | `--images-dir <path>` | Copy every file from a directory into `images/` |
 | `--slug <value>` | Optional stable slug for the run directory |
+
+`link-generated-images.mjs` arguments:
+
+| Flag | Purpose |
+|---|---|
+| `--manifest-file <path>` | Saved `manifest.json` from `save-draft-artifacts.mjs` |
+| `--platform-dir <path>` | Alternative to `--manifest-file`; points to the saved platform directory |
+| `--links-file <path>` | JSON file describing article linkage for saved images |
+| `--article-slug <value>` | Optional slug override used when generating semantic file names |
 
 ## Output Contract
 
@@ -162,9 +228,11 @@ When the user wants the actual draft:
 2. State which preference memories influenced the result.
 3. State which illustration path you used.
 4. Save the artifacts with the bundled script and report the saved location.
-5. Run `build-chat-response.mjs` against the saved draft and saved images.
-6. Return the full final draft body plus the generated images in the same reply.
-7. Only replace the full draft with a concise summary when the user explicitly asks for summary-only output.
+5. Prefer `--image-slot` and `--image-meta-file` during `save-draft-artifacts.mjs` so linkage is captured in the normal save path.
+6. Only if a run is already saved without good linkage, repair it with `link-generated-images.mjs`.
+7. Run `build-chat-response.mjs` against the saved draft and saved images.
+8. Return the full final draft body plus the generated images in the same reply.
+9. Only replace the full draft with a concise summary when the user explicitly asks for summary-only output.
 
 When the user only wants planning:
 

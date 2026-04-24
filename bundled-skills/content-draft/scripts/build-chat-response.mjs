@@ -24,6 +24,10 @@ function parseArgs(argv) {
         args.imagesDir = next
         i += 1
         break
+      case '--manifest-file':
+        args.manifestFile = next
+        i += 1
+        break
       case '--image':
         args.images.push(next)
         i += 1
@@ -116,6 +120,37 @@ function buildImageLookup(imagePaths) {
   return lookup
 }
 
+function mergeManifestImageLookup(lookup, manifestFile) {
+  if (!manifestFile) return lookup
+  const resolvedManifest = path.resolve(manifestFile)
+  if (!fs.existsSync(resolvedManifest)) {
+    fail(`Manifest file not found: ${resolvedManifest}`)
+  }
+  const manifest = JSON.parse(fs.readFileSync(resolvedManifest, 'utf8'))
+  const images = Array.isArray(manifest.images) ? manifest.images : []
+  const imagesDir = manifest.imagesDir ? path.resolve(manifest.imagesDir) : path.dirname(resolvedManifest)
+
+  for (const item of images) {
+    if (!item || typeof item !== 'object' || typeof item.fileName !== 'string') continue
+    const filePath = path.join(imagesDir, item.fileName)
+    const payload = {
+      name: item.fileName,
+      path: filePath,
+      mimeType: inferMimeType(filePath),
+    }
+    for (const key of [
+      item.fileName,
+      `images/${item.fileName}`,
+      typeof item.originalFileName === 'string' ? item.originalFileName : null,
+      typeof item.originalFileName === 'string' ? `images/${item.originalFileName}` : null,
+    ].filter(Boolean).map(normalizeRef)) {
+      lookup.set(key, payload)
+    }
+  }
+
+  return lookup
+}
+
 function buildChatResponse(markdown, imageLookup) {
   const referenced = new Set()
   let output = markdown.replace(/!\[([^\]]*)]\(([^)]+)\)/g, (full, alt, target) => {
@@ -161,7 +196,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2))
   const markdownPath = path.resolve(args.markdownFile)
   const markdown = fs.readFileSync(markdownPath, 'utf8')
-  const imageLookup = buildImageLookup(collectImagePaths(args))
+  const imageLookup = mergeManifestImageLookup(buildImageLookup(collectImagePaths(args)), args.manifestFile)
   const response = buildChatResponse(markdown, imageLookup)
 
   if (args.json) {

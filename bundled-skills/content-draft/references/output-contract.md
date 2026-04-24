@@ -29,8 +29,31 @@ The bundled save helper currently writes:
   "draftPath": "/abs/path/draft.md",
   "imagesDir": "/abs/path/images",
   "imageFiles": ["cover.png", "panel-1.png"],
+  "images": [
+    {
+      "fileName": "cover.png",
+      "originalFileName": "hero---abc123.png",
+      "role": "hero",
+      "section": "Opening hook",
+      "anchor": "opening-hook",
+      "caption": "Lead image",
+      "prompt": null,
+      "generator": "ernie-image",
+      "sourcePath": "/tmp/hero---abc123.png",
+      "linked": true
+    }
+  ],
+  "imageLinking": {
+    "articleSlug": "my-post",
+    "linkedAt": "2026-04-19T09:30:00.000Z",
+    "linkedCount": 1,
+    "totalImageCount": 1
+  },
   "savedAt": "2026-04-19T09:30:00.000Z"
 }
 ```
 
 Keep new fields additive so future viewers can read older manifests.
+
+The normal save path should populate `images[]` and `imageLinking` whenever image slots or image metadata are available.
+The fallback linker may also add or repair those same fields later.
