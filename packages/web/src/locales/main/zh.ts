@@ -1862,6 +1862,7 @@ export default {
   "cron.disable": "停用",
   "cron.runNow": "立即运行",
   "cron.viewRuns": "运行记录",
+  "cron.openInWebUi": "在 WebUI 中打开",
   "cron.loadingRuns": "正在加载运行记录...",
   "cron.noRuns": "这个任务还没有运行记录。",
   "cron.runHistoryTitle": "运行记录 · {{name}}",

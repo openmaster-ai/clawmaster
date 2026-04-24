@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildGatewayUrl, buildGatewayWebUiUrl } from '../gatewayUrl'
+import { buildGatewayChatUrl, buildGatewayUrl, buildGatewayWebUiUrl } from '../gatewayUrl'
 
 describe('buildGatewayUrl', () => {
   it('maps loopback bind to a browser-safe local host', () => {
@@ -49,5 +49,18 @@ describe('buildGatewayUrl', () => {
         auth: { mode: 'none', token: 'secret-token' },
       },
     })).toBe('http://127.0.0.1:3010/')
+  })
+
+  it('builds an authenticated chat url for a specific session key', () => {
+    expect(buildGatewayChatUrl({
+      gateway: {
+        port: 3010,
+        bind: 'loopback',
+        auth: { mode: 'token', token: 'secret-token' },
+        controlUi: { basePath: '/openclaw' },
+      },
+    }, 'agent:main:daily-report')).toBe(
+      'http://127.0.0.1:3010/openclaw/chat?token=secret-token&session=agent%3Amain%3Adaily-report',
+    )
   })
 })

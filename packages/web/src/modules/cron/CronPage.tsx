@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Play, RefreshCw, SquarePen, TimerReset, Trash2 } from 'lucide-react'
+import { ExternalLink, Play, RefreshCw, SquarePen, TimerReset, Trash2 } from 'lucide-react'
 import { ActionBanner } from '@/shared/components/ActionBanner'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { LoadingState } from '@/shared/components/LoadingState'
 import { buildCostDigestDraft, isCostDigestPeriod } from '@/shared/cronCostDigests'
 import { getGatewayStatusResult } from '@/shared/adapters/gateway'
+import { getConfigResult } from '@/shared/adapters/openclaw'
 import {
   createCronJobResult,
   getCronJobsResult,
@@ -22,6 +23,7 @@ import {
   type CronRun,
 } from '@/shared/adapters/cron'
 import { useAdapterCall } from '@/shared/hooks/useAdapterCall'
+import { buildGatewayChatUrl } from '@/shared/gatewayUrl'
 import { buildSchedulePreview } from './schedulePreview'
 
 type FilterMode = 'all' | 'enabled' | 'disabled'
@@ -123,6 +125,23 @@ function runBadgeClass(run: CronRun): string {
   return 'border-border/70 bg-background/70 text-muted-foreground'
 }
 
+function resolveCronWebUiSessionKey(job: CronJob): string | null {
+  const explicitSessionKey = job.sessionKey.trim()
+  if (explicitSessionKey) return explicitSessionKey
+
+  const sessionName = job.session.trim().toLowerCase()
+  const agentId = job.agent.trim() || 'main'
+  if (sessionName === 'main') {
+    return `agent:${agentId}:main`
+  }
+
+  if (sessionName === 'isolated' && job.lastRun.trim()) {
+    return `agent:${agentId}:cron:${job.id}`
+  }
+
+  return null
+}
+
 function getSchedulePresets(scheduleType: CronJobDraft['scheduleType'], t: TFunction): SchedulePreset[] {
   if (scheduleType === 'cron') {
     return [
@@ -207,6 +226,7 @@ export default function CronPage() {
   const jobsState = useAdapterCall(getCronJobsResult, { pollInterval: 30_000 })
   const statusState = useAdapterCall(getCronStatusResult, { pollInterval: 30_000 })
   const gatewayState = useAdapterCall(getGatewayStatusResult, { pollInterval: 30_000 })
+  const configState = useAdapterCall(getConfigResult, { pollInterval: 30_000 })
   const templateApplied = useRef(false)
 
   const [filter, setFilter] = useState<FilterMode>('all')
@@ -308,6 +328,12 @@ export default function CronPage() {
     setEditorError(null)
   }
 
+  function closeRunsPanel() {
+    setRunsJob(null)
+    setRuns([])
+    setRunsError(null)
+  }
+
   async function handleSaveJob() {
     setSaving(true)
     setEditorError(null)
@@ -377,9 +403,7 @@ export default function CronPage() {
       return
     }
     if (runsJob?.id === current.id) {
-      setRunsJob(null)
-      setRuns([])
-      setRunsError(null)
+      closeRunsPanel()
     }
     setFeedback({ tone: 'success', message: t('cron.deleteSuccess') })
     await Promise.all([jobsState.refetch(), statusState.refetch()])
@@ -524,6 +548,11 @@ export default function CronPage() {
         <div className="space-y-4">
           {filteredJobs.map((job) => {
             const busy = busyJobId === job.id
+            const runsExpanded = runsJob?.id === job.id
+            const chatSessionKey = resolveCronWebUiSessionKey(job)
+            const webUiHref = chatSessionKey && configState.data
+              ? buildGatewayChatUrl(configState.data, chatSessionKey)
+              : null
             return (
               <div key={job.id} className="list-card space-y-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -544,6 +573,17 @@ export default function CronPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2 md:justify-end">
+                    {webUiHref ? (
+                      <a
+                        href={webUiHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="button-secondary px-3 py-1.5 text-sm"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        {t('cron.openInWebUi')}
+                      </a>
+                    ) : null}
                     <button type="button" onClick={() => void handleToggleJob(job)} className="button-secondary px-3 py-1.5 text-sm" disabled={busy || !gatewayReady}>
                       {job.enabled ? t('cron.disable') : t('cron.enable')}
                     </button>
@@ -551,8 +591,19 @@ export default function CronPage() {
                       <Play className="h-4 w-4" />
                       {t('cron.runNow')}
                     </button>
-                    <button type="button" onClick={() => void handleLoadRuns(job)} className="button-secondary px-3 py-1.5 text-sm" disabled={!gatewayReady}>
-                      {t('cron.viewRuns')}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (runsExpanded) {
+                          closeRunsPanel()
+                          return
+                        }
+                        void handleLoadRuns(job)
+                      }}
+                      className="button-secondary px-3 py-1.5 text-sm"
+                      disabled={!gatewayReady}
+                    >
+                      {runsExpanded ? t('common.close') : t('cron.viewRuns')}
                     </button>
                     <button type="button" onClick={() => openEditDialog(job)} className="button-secondary px-3 py-1.5 text-sm" disabled={!gatewayReady}>
                       <SquarePen className="h-4 w-4" />
@@ -613,78 +664,89 @@ export default function CronPage() {
                     </p>
                   </div>
                 ) : null}
+
+                {runsExpanded ? (
+                  <section className="space-y-3 rounded-[1.5rem] border border-border/70 bg-background/60 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-base font-semibold text-foreground">
+                          {t('cron.runHistoryTitle', { name: job.name || job.id })}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">{job.id}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleLoadRuns(job)}
+                          className="button-secondary px-3 py-1.5 text-sm"
+                          disabled={runsLoading || !gatewayReady}
+                        >
+                          {t('common.refresh')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={closeRunsPanel}
+                          className="button-secondary px-3 py-1.5 text-sm"
+                        >
+                          {t('common.close')}
+                        </button>
+                      </div>
+                    </div>
+
+                    {runsLoading ? <LoadingState message={t('cron.loadingRuns')} fullPage={false} /> : null}
+                    {!runsLoading && runsError ? <div className="surface-card-danger text-sm">{runsError}</div> : null}
+                    {!runsLoading && !runsError && runs.length === 0 ? (
+                      <div className="state-panel min-h-[12rem] text-muted-foreground">{t('cron.noRuns')}</div>
+                    ) : null}
+
+                    {!runsLoading && runs.length > 0 ? (
+                      <div className="space-y-3">
+                        {runs.map((run) => (
+                          <div key={run.id} className="list-card bg-background/70">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${runBadgeClass(run)}`}>
+                                  {run.status || t('cron.statusUnknown')}
+                                </span>
+                                {run.exitCode != null ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    {t('cron.exitCode', { code: run.exitCode })}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDateValue(run.startedAt, '-')}
+                              </span>
+                            </div>
+                            <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                              <div>
+                                <p className="text-muted-foreground">{t('cron.startedAt')}</p>
+                                <p className="font-medium">{formatDateValue(run.startedAt, '-')}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">{t('cron.finishedAt')}</p>
+                                <p className="font-medium">{formatDateValue(run.finishedAt, '-')}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">{t('cron.duration')}</p>
+                                <p className="font-medium">{run.durationMs != null ? t('cron.durationMs', { value: run.durationMs }) : '-'}</p>
+                              </div>
+                            </div>
+                            {run.output ? (
+                              <pre className="mt-3 overflow-auto rounded-2xl border border-border/70 bg-muted/20 p-3 text-xs text-foreground whitespace-pre-wrap">
+                                {run.output}
+                              </pre>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </section>
+                ) : null}
               </div>
             )
           })}
         </div>
-      ) : null}
-
-      {runsJob ? (
-        <section className="surface-card">
-          <div className="section-heading">
-            <div>
-              <h3 className="section-title">{t('cron.runHistoryTitle', { name: runsJob.name || runsJob.id })}</h3>
-              <p className="section-subtitle">{runsJob.id}</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => void handleLoadRuns(runsJob)} className="button-secondary px-3 py-1.5 text-sm" disabled={runsLoading || !gatewayReady}>
-                {t('common.refresh')}
-              </button>
-              <button type="button" onClick={() => setRunsJob(null)} className="button-secondary px-3 py-1.5 text-sm">
-                {t('common.close')}
-              </button>
-            </div>
-          </div>
-
-          {runsLoading ? <LoadingState message={t('cron.loadingRuns')} fullPage={false} /> : null}
-          {!runsLoading && runsError ? <div className="surface-card-danger text-sm">{runsError}</div> : null}
-          {!runsLoading && !runsError && runs.length === 0 ? (
-            <div className="state-panel min-h-[12rem] text-muted-foreground">{t('cron.noRuns')}</div>
-          ) : null}
-
-          {!runsLoading && runs.length > 0 ? (
-            <div className="space-y-3">
-              {runs.map((run) => (
-                <div key={run.id} className="list-card bg-background/70">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${runBadgeClass(run)}`}>
-                        {run.status || t('cron.statusUnknown')}
-                      </span>
-                      {run.exitCode != null ? (
-                        <span className="text-xs text-muted-foreground">
-                          {t('cron.exitCode', { code: run.exitCode })}
-                        </span>
-                      ) : null}
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDateValue(run.startedAt, '-')}
-                    </span>
-                  </div>
-                  <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
-                    <div>
-                      <p className="text-muted-foreground">{t('cron.startedAt')}</p>
-                      <p className="font-medium">{formatDateValue(run.startedAt, '-')}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">{t('cron.finishedAt')}</p>
-                      <p className="font-medium">{formatDateValue(run.finishedAt, '-')}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">{t('cron.duration')}</p>
-                      <p className="font-medium">{run.durationMs != null ? t('cron.durationMs', { value: run.durationMs }) : '-'}</p>
-                    </div>
-                  </div>
-                  {run.output ? (
-                    <pre className="mt-3 overflow-auto rounded-2xl border border-border/70 bg-muted/20 p-3 text-xs text-foreground whitespace-pre-wrap">
-                      {run.output}
-                    </pre>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </section>
       ) : null}
 
       <ConfirmDialog

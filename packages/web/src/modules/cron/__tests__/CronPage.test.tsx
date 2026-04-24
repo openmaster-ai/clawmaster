@@ -14,6 +14,7 @@ const mockRemoveCronJob = vi.fn()
 const mockRunCronJob = vi.fn()
 const mockSetCronJobEnabled = vi.fn()
 const mockGetGatewayStatus = vi.fn()
+const mockGetConfig = vi.fn()
 
 vi.mock('@/shared/adapters/cron', () => ({
   getCronJobsResult: (...args: any[]) => mockGetCronJobs(...args),
@@ -28,6 +29,10 @@ vi.mock('@/shared/adapters/cron', () => ({
 
 vi.mock('@/shared/adapters/gateway', () => ({
   getGatewayStatusResult: (...args: any[]) => mockGetGatewayStatus(...args),
+}))
+
+vi.mock('@/shared/adapters/openclaw', () => ({
+  getConfigResult: (...args: any[]) => mockGetConfig(...args),
 }))
 
 function renderPage(initialEntries: string[] = ['/cron']) {
@@ -93,6 +98,16 @@ describe('CronPage', () => {
         port: 18789,
       },
     })
+    mockGetConfig.mockResolvedValue({
+      success: true,
+      data: {
+        gateway: {
+          port: 18789,
+          bind: 'loopback',
+          auth: { mode: 'token', token: 'secret-token' },
+        },
+      },
+    })
     mockGetCronRuns.mockResolvedValue({
       success: true,
       data: [
@@ -125,6 +140,10 @@ describe('CronPage', () => {
     expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
     expect(screen.getByText('Morning report')).toBeInTheDocument()
     expect(screen.getByText('Daily summary')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open in WebUI' })).toHaveAttribute(
+      'href',
+      'http://127.0.0.1:18789/chat?token=secret-token&session=agent%3Amain%3Amain',
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Run History' }))
 
@@ -132,6 +151,41 @@ describe('CronPage', () => {
       expect(mockGetCronRuns).toHaveBeenCalledWith('job-1', 20)
     })
     expect(await screen.findByText('done')).toBeInTheDocument()
+  })
+
+  it('opens cron jobs with explicit session keys in the webui chat', async () => {
+    mockGetCronJobs.mockResolvedValue({
+      success: true,
+      data: [baseJob({ sessionKey: 'agent:main:daily-report' })],
+    })
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open in WebUI' })).toHaveAttribute(
+      'href',
+      'http://127.0.0.1:18789/chat?token=secret-token&session=agent%3Amain%3Adaily-report',
+    )
+  })
+
+  it('opens isolated cron jobs in the stable cron session after they have run', async () => {
+    mockGetCronJobs.mockResolvedValue({
+      success: true,
+      data: [baseJob({
+        id: 'job-isolated',
+        session: 'isolated',
+        sessionKey: '',
+        agent: 'main',
+      })],
+    })
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Cron Jobs' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open in WebUI' })).toHaveAttribute(
+      'href',
+      'http://127.0.0.1:18789/chat?token=secret-token&session=agent%3Amain%3Acron%3Ajob-isolated',
+    )
   })
 
   it('submits the create dialog through the cron adapter', async () => {

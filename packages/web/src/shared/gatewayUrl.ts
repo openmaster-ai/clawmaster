@@ -51,3 +51,20 @@ export function buildGatewayWebUiUrl(
 
   return url.toString()
 }
+
+export function buildGatewayChatUrl(
+  config: GatewayConfig | null | undefined,
+  sessionKey: string,
+): string {
+  const trimmedSessionKey = sessionKey.trim()
+  const url = new URL(buildGatewayWebUiUrl(config))
+
+  const basePath = url.pathname.replace(/\/+$/, '')
+  url.pathname = basePath ? `${basePath}/chat` : '/chat'
+
+  if (trimmedSessionKey) {
+    url.searchParams.set('session', trimmedSessionKey)
+  }
+
+  return url.toString()
+}

@@ -1862,6 +1862,7 @@ export default {
   "cron.disable": "Disable",
   "cron.runNow": "Run Now",
   "cron.viewRuns": "Run History",
+  "cron.openInWebUi": "Open in WebUI",
   "cron.loadingRuns": "Loading runs...",
   "cron.noRuns": "No runs found for this job yet.",
   "cron.runHistoryTitle": "Run History · {{name}}",

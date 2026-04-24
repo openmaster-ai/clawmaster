@@ -1862,6 +1862,7 @@ export default {
   "cron.disable": "無効化",
   "cron.runNow": "今すぐ実行",
   "cron.viewRuns": "実行履歴",
+  "cron.openInWebUi": "WebUI で開く",
   "cron.loadingRuns": "実行履歴を読み込み中...",
   "cron.noRuns": "このジョブの実行履歴はまだありません。",
   "cron.runHistoryTitle": "実行履歴 · {{name}}",
