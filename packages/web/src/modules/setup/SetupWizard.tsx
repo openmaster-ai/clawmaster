@@ -180,8 +180,10 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const mirrorLoadPromiseRef = useRef<Promise<void> | null>(null)
   const mirrorPersistedEnabledRef = useRef(false)
   const mirrorRequestedEnabledRef = useRef(false)
+  const installPendingRef = useRef(false)
   const [mirrorLoading, setMirrorLoading] = useState(true)
   const [mirrorSaving, setMirrorSaving] = useState(false)
+  const [installPending, setInstallPending] = useState(false)
 
   // Provider / model state
   const [onboard, setOnboard] = useState<OnboardingState>(DEFAULT_ONBOARDING_STATE)
@@ -431,41 +433,52 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   // ─── Step 1b: Install OpenClaw ───
 
   const startInstall = useCallback(async () => {
-    try {
-      await mirrorLoadPromiseRef.current
-      await mirrorSavePromiseRef.current
-    } catch (error) {
-      setInstallError(error instanceof Error ? error.message : String(error))
-      setPhase('install_error')
+    if (installPendingRef.current) {
       return
     }
-
-    recoveryStartedAtRef.current = null
-    setRecoveringInstall(false)
-    setPhase('installing')
-    setInstallError(null)
-    simProgress.start()
-    saveInstallState({ phase: 'installing', startedAt: Date.now() })
-
-    const installOptions = mirrorRequestedEnabledRef.current
-      ? { registryUrl: NPM_MIRROR_REGISTRY_URL }
-      : undefined
+    installPendingRef.current = true
+    setInstallPending(true)
 
     try {
-      await adapter.installCapabilities(['engine'], () => {}, installOptions)
+      try {
+        await mirrorLoadPromiseRef.current
+        await mirrorSavePromiseRef.current
+      } catch (error) {
+        setInstallError(error instanceof Error ? error.message : String(error))
+        setPhase('install_error')
+        return
+      }
 
-      simProgress.finish()
-      saveInstallState({ phase: 'installed', startedAt: Date.now() })
-      await new Promise((r) => setTimeout(r, 600))
       recoveryStartedAtRef.current = null
-      clearInstallState()
-      setPhase('provider')
-    } catch (err) {
-      simProgress.reset()
-      recoveryStartedAtRef.current = null
-      clearInstallState()
-      setInstallError(err instanceof Error ? err.message : String(err))
-      setPhase('install_error')
+      setRecoveringInstall(false)
+      setPhase('installing')
+      setInstallError(null)
+      simProgress.start()
+      saveInstallState({ phase: 'installing', startedAt: Date.now() })
+
+      const installOptions = mirrorRequestedEnabledRef.current
+        ? { registryUrl: NPM_MIRROR_REGISTRY_URL }
+        : undefined
+
+      try {
+        await adapter.installCapabilities(['engine'], () => {}, installOptions)
+
+        simProgress.finish()
+        saveInstallState({ phase: 'installed', startedAt: Date.now() })
+        await new Promise((r) => setTimeout(r, 600))
+        recoveryStartedAtRef.current = null
+        clearInstallState()
+        setPhase('provider')
+      } catch (err) {
+        simProgress.reset()
+        recoveryStartedAtRef.current = null
+        clearInstallState()
+        setInstallError(err instanceof Error ? err.message : String(err))
+        setPhase('install_error')
+      }
+    } finally {
+      installPendingRef.current = false
+      setInstallPending(false)
     }
   }, [adapter, simProgress])
 
@@ -642,6 +655,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             isDemo={isDemo}
             mirrorLoading={mirrorLoading}
             mirrorSaving={mirrorSaving}
+            installPending={installPending}
             useMirror={useMirror}
             onMirrorChange={handleMirrorChange}
             onInstall={startInstall}
@@ -681,6 +695,7 @@ function EngineStep({
   isDemo,
   mirrorLoading,
   mirrorSaving,
+  installPending,
   useMirror,
   onMirrorChange,
   onInstall,
@@ -693,13 +708,15 @@ function EngineStep({
   isDemo: boolean
   mirrorLoading: boolean
   mirrorSaving: boolean
+  installPending: boolean
   useMirror: boolean
   onMirrorChange: (value: boolean) => void
   onInstall: () => void
   onRetry: () => void
 }) {
   const { t } = useTranslation()
-  const mirrorBusy = mirrorLoading || mirrorSaving
+  const mirrorToggleBusy = mirrorLoading || mirrorSaving
+  const installActionDisabled = installPending || phase === 'installing'
 
   return (
     <div className="wizard-engine-step">
@@ -775,7 +792,7 @@ function EngineStep({
           <input
             type="checkbox"
             checked={useMirror}
-            disabled={mirrorBusy}
+            disabled={mirrorToggleBusy}
             onChange={(e) => onMirrorChange(e.target.checked)}
             className="accent-primary"
           />
@@ -786,14 +803,14 @@ function EngineStep({
       {/* Action buttons */}
       <div className="wizard-actions">
         {phase === 'not_installed' && (
-          <button onClick={onInstall} disabled={mirrorBusy} className="wizard-btn-primary">
+          <button onClick={onInstall} disabled={installActionDisabled} className="wizard-btn-primary">
             <Download className="h-4 w-4" />
             {t('setup.installCore')}
           </button>
         )}
         {phase === 'install_error' && (
           <>
-            <button onClick={onInstall} disabled={mirrorBusy} className="wizard-btn-primary">
+            <button onClick={onInstall} disabled={installActionDisabled} className="wizard-btn-primary">
               <Download className="h-4 w-4" />
               {t('common.retry')}
             </button>

@@ -253,6 +253,7 @@ describe('CapabilitiesSection', () => {
     })
 
     fireEvent.click(checkbox)
+    expect(screen.getByRole('button', { name: '安装' })).not.toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: '安装' }))
 
     expect(mockInstall).not.toHaveBeenCalled()
@@ -269,6 +270,52 @@ describe('CapabilitiesSection', () => {
         expect.any(Function),
         undefined,
       )
+    })
+  })
+
+  it('does not queue duplicate capability installs while npm proxy persistence is pending', async () => {
+    await changeLanguage('zh')
+    mockGetNpmProxy.mockResolvedValue({
+      success: true,
+      data: { enabled: true, registryUrl: 'https://registry.npmmirror.com' },
+      error: null,
+    })
+    mockDetect.mockImplementation(async (cb) => {
+      const r = missingObserve()
+      cb?.(r, new Map([[r.id, r]]))
+      return [r]
+    })
+
+    let resolveSave!: (value: { success: boolean; data: { enabled: boolean; registryUrl: null }; error: null }) => void
+    mockSaveNpmProxy.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve
+      }),
+    )
+
+    renderSection()
+
+    const checkbox = await screen.findByRole('checkbox')
+    await waitFor(() => {
+      expect(checkbox).toBeChecked()
+    })
+
+    fireEvent.click(checkbox)
+    const installBtn = screen.getByRole('button', { name: '安装' })
+    fireEvent.click(installBtn)
+    expect(installBtn).toBeDisabled()
+    fireEvent.click(installBtn)
+
+    expect(mockInstall).not.toHaveBeenCalled()
+
+    resolveSave({
+      success: true,
+      data: { enabled: false, registryUrl: null },
+      error: null,
+    })
+
+    await waitFor(() => {
+      expect(mockInstall).toHaveBeenCalledTimes(1)
     })
   })
 

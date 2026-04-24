@@ -192,11 +192,13 @@ export function CapabilitiesSection() {
   const [npmProxyLoading, setNpmProxyLoading] = useState(true)
   const [npmProxySaving, setNpmProxySaving] = useState(false)
   const [npmProxyError, setNpmProxyError] = useState<string | null>(null)
+  const [queuedInstallIds, setQueuedInstallIds] = useState<CapabilityId[]>([])
   const npmProxySavePromiseRef = useRef<Promise<void> | null>(null)
   const npmProxyLoadPromiseRef = useRef<Promise<void> | null>(null)
   const npmProxyPersistedEnabledRef = useRef(false)
   const npmProxyPersistedRegistryUrlRef = useRef<string | null>(null)
   const npmProxyRequestedEnabledRef = useRef(false)
+  const queuedInstallIdsRef = useRef<Set<CapabilityId>>(new Set())
 
   useEffect(() => {
     void detect()
@@ -238,41 +240,63 @@ export function CapabilitiesSection() {
     ? (npmProxyRegistryUrl ?? DEFAULT_NPM_PROXY_REGISTRY_URL)
     : null
 
+  const setCapabilityQueued = useCallback((id: CapabilityId, queued: boolean) => {
+    if (queued) {
+      queuedInstallIdsRef.current.add(id)
+    } else {
+      queuedInstallIdsRef.current.delete(id)
+    }
+    setQueuedInstallIds([...queuedInstallIdsRef.current])
+  }, [])
+
   const handleInstall = useCallback(
     (id: CapabilityId) => {
+      if (queuedInstallIdsRef.current.has(id)) {
+        return
+      }
+      setCapabilityQueued(id, true)
       void (async () => {
         try {
           await npmProxyLoadPromiseRef.current
           await npmProxySavePromiseRef.current
+          const installOptions = npmProxyRequestedEnabledRef.current
+            ? { registryUrl: npmProxyPersistedRegistryUrlRef.current ?? DEFAULT_NPM_PROXY_REGISTRY_URL }
+            : undefined
+          await install([id], installOptions).catch(() => {})
         } catch {
           return
+        } finally {
+          setCapabilityQueued(id, false)
         }
-        const installOptions = npmProxyRequestedEnabledRef.current
-          ? { registryUrl: npmProxyPersistedRegistryUrlRef.current ?? DEFAULT_NPM_PROXY_REGISTRY_URL }
-          : undefined
-        await install([id], installOptions).catch(() => {})
       })()
     },
-    [install],
+    [install, setCapabilityQueued],
   )
 
   const handleConfirmReinstall = useCallback(() => {
     if (!confirmReinstallId) return
     const id = confirmReinstallId
+    if (queuedInstallIdsRef.current.has(id)) {
+      setConfirmReinstallId(null)
+      return
+    }
     setConfirmReinstallId(null)
+    setCapabilityQueued(id, true)
     void (async () => {
       try {
         await npmProxyLoadPromiseRef.current
         await npmProxySavePromiseRef.current
+        const installOptions = npmProxyRequestedEnabledRef.current
+          ? { registryUrl: npmProxyPersistedRegistryUrlRef.current ?? DEFAULT_NPM_PROXY_REGISTRY_URL }
+          : undefined
+        await install([id], installOptions).catch(() => {})
       } catch {
         return
+      } finally {
+        setCapabilityQueued(id, false)
       }
-      const installOptions = npmProxyRequestedEnabledRef.current
-        ? { registryUrl: npmProxyPersistedRegistryUrlRef.current ?? DEFAULT_NPM_PROXY_REGISTRY_URL }
-        : undefined
-      await install([id], installOptions).catch(() => {})
     })()
-  }, [confirmReinstallId, install])
+  }, [confirmReinstallId, install, setCapabilityQueued])
 
   const handleNpmProxyChange = useCallback(async (enabled: boolean) => {
     npmProxyRequestedEnabledRef.current = enabled
@@ -324,7 +348,6 @@ export function CapabilitiesSection() {
   const confirmCapability = confirmReinstallId
     ? capabilities.find((c) => c.id === confirmReinstallId)
     : null
-  const installActionsDisabled = npmProxyLoading || npmProxySaving
 
   return (
     <section id="settings-capabilities" className="surface-card">
@@ -395,7 +418,7 @@ export function CapabilitiesSection() {
               capability={capability}
               progress={installProgress[capability.id]}
               anyInstalling={installing}
-              actionsDisabled={installActionsDisabled}
+              actionsDisabled={queuedInstallIds.includes(capability.id)}
               onInstall={handleInstall}
               onReinstall={(id) => setConfirmReinstallId(id)}
             />
@@ -414,7 +437,7 @@ export function CapabilitiesSection() {
             : undefined
         }
         confirmLabel={t('settings.capabilities.reinstall')}
-        busy={installActionsDisabled}
+        busy={installing || (confirmReinstallId !== null && queuedInstallIds.includes(confirmReinstallId))}
         onCancel={() => setConfirmReinstallId(null)}
         onConfirm={handleConfirmReinstall}
       />

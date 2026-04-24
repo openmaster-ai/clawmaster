@@ -248,6 +248,7 @@ describe('SetupWizard', () => {
 
       const installButton = screen.getByRole('button', { name: /安装核心引擎/i })
       fireEvent.click(checkbox)
+      expect(installButton).not.toBeDisabled()
       fireEvent.click(installButton)
 
       expect(mockInstallCapabilities).not.toHaveBeenCalled()
@@ -259,16 +260,47 @@ describe('SetupWizard', () => {
       })
 
       await waitFor(() => {
-        expect(installButton).not.toBeDisabled()
-      })
-      fireEvent.click(installButton)
-
-      await waitFor(() => {
         expect(mockInstallCapabilities).toHaveBeenCalledWith(
           ['engine'],
           expect.any(Function),
           undefined,
         )
+      })
+    })
+
+    it('does not queue duplicate engine installs while mirror persistence is pending', async () => {
+      await changeLanguage('zh')
+      mockGetNpmProxy.mockResolvedValue({
+        success: true,
+        data: { enabled: true, registryUrl: 'https://registry.npmmirror.com' },
+        error: null,
+      })
+      const save = deferred<{ success: boolean; data: { enabled: boolean; registryUrl: null }; error: null }>()
+      mockSaveNpmProxy.mockReturnValue(save.promise)
+
+      render(<SetupWizard onComplete={() => {}} />)
+
+      const checkbox = await screen.findByRole('checkbox')
+      await waitFor(() => {
+        expect(checkbox).toBeChecked()
+      })
+
+      const installButton = screen.getByRole('button', { name: /安装核心引擎/i })
+      fireEvent.click(checkbox)
+      fireEvent.click(installButton)
+      expect(installButton).toBeDisabled()
+      fireEvent.click(installButton)
+
+      expect(mockInstallCapabilities).not.toHaveBeenCalled()
+
+      save.resolve({
+        success: true,
+        data: { enabled: false, registryUrl: null },
+        error: null,
+      })
+
+      await waitFor(() => {
+        expect(mockInstallCapabilities).toHaveBeenCalledTimes(1)
       })
     })
 
