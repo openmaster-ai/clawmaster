@@ -128,7 +128,7 @@
   }
 
   .app-shell {
-    @apply relative flex min-h-screen min-h-dvh bg-transparent;
+    @apply relative flex h-screen min-h-screen h-dvh min-h-dvh overflow-hidden bg-transparent;
   }
 
   .app-shell::before {
@@ -148,7 +148,7 @@
   }
 
   .app-sidebar {
-    @apply border-r border-border/80 bg-card/70 backdrop-blur-xl;
+    @apply sticky top-0 h-screen h-dvh overflow-hidden border-r border-border/80 bg-card/70 backdrop-blur-xl;
     box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.3);
   }
 
@@ -326,7 +326,7 @@
   }
 
   .app-main {
-    @apply relative flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-6;
+    @apply relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6 sm:py-6;
   }
 
   .app-main [id] {
