@@ -244,18 +244,33 @@ describe('MemoryPage', () => {
       data: {
         memories: [
           {
+            id: 'managed-gateway-1',
+            memoryId: 'managed-gateway-1',
+            content: 'gateway powermem smoke test 2026-04-24',
+            userId: 'haili',
+            agentId: 'main',
+            metadata: {
+              source: 'openclaw-gateway-auto-capture',
+            },
+            createdAt: '2026-04-12T17:02:00.000Z',
+            updatedAt: '2026-04-12T17:02:00.000Z',
+            accessCount: 0,
+          },
+          {
             id: 'managed-1',
             memoryId: 'managed-1',
             content: 'Alice prefers espresso after lunch.',
             userId: 'alice',
             agentId: 'planner',
-            metadata: {},
+            metadata: {
+              importedFrom: 'openclaw-workspace',
+            },
             createdAt: '2026-04-12T17:00:00.000Z',
             updatedAt: '2026-04-12T17:00:00.000Z',
             accessCount: 0,
           },
         ],
-        total: 1,
+        total: 2,
         limit: 8,
         offset: 0,
       },
@@ -358,12 +373,16 @@ describe('MemoryPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Memory Management' })).toBeInTheDocument()
     expect(await screen.findByText('PowerMem foundation')).toBeInTheDocument()
+    expect(screen.getByText('Recent gateway captures')).toBeInTheDocument()
+    expect(screen.getAllByText('gateway powermem smoke test 2026-04-24').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Gateway capture').length).toBeGreaterThan(0)
     expect(screen.getByText('Why managed memory is better')).toBeInTheDocument()
     expect(screen.getByText('Legacy memory import')).toBeInTheDocument()
     expect(screen.getByText('1 / 2')).toBeInTheDocument()
     expect(screen.getByText('Once you add a managed memory here, it stays queryable without touching workspace markdown files.')).toBeInTheDocument()
     expect(screen.getByText('Run compare')).toBeInTheDocument()
     expect(screen.getByText('Alice prefers espresso after lunch.')).toBeInTheDocument()
+    expect(screen.getByText('Imported workspace')).toBeInTheDocument()
     expect(await screen.findByText('Memory Overview')).toBeInTheDocument()
     expect(screen.getAllByText('Storage Files').length).toBeGreaterThan(0)
     expect(screen.getByText('/tmp/openclaw/memory')).toBeInTheDocument()
@@ -463,6 +482,9 @@ describe('MemoryPage', () => {
         content: 'Alice prefers espresso after lunch.',
         userId: 'alice',
         agentId: 'planner',
+        metadata: {
+          source: 'clawmaster-memory-page',
+        },
       })
     })
     expect(await screen.findByText('Managed PowerMem memory saved.')).toBeInTheDocument()

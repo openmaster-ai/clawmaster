@@ -41,6 +41,13 @@ interface NormalizedStatusEntry {
   totalFiles: number
 }
 
+type ManagedMemoryOriginTone = 'emerald' | 'amber' | 'slate'
+
+interface ManagedMemoryOrigin {
+  label: string
+  tone: ManagedMemoryOriginTone
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -107,6 +114,46 @@ function isKnownLegacyMemoryUnsupported(message: string): boolean {
     lower.includes("unknown command 'memory'") ||
     (lower.includes('requires node >=') && lower.includes('upgrade node and re-run openclaw'))
   )
+}
+
+function isManagedMemoryNativeModuleMismatch(message: string): boolean {
+  const lower = message.toLowerCase()
+  return lower.includes('better_sqlite3.node') && lower.includes('node_module_version')
+}
+
+function formatManagedSectionError(message: string | null, t: (key: string) => string): string | null {
+  if (!message) return null
+  if (isManagedMemoryNativeModuleMismatch(message)) {
+    return t('memory.managedNativeModuleMismatch')
+  }
+  return message
+}
+
+function getManagedMemoryOrigin(
+  metadata: Record<string, unknown> | undefined,
+  t: (key: string) => string,
+): ManagedMemoryOrigin {
+  if (metadata?.source === 'openclaw-gateway-auto-capture') {
+    return { label: t('memory.managedOriginGateway'), tone: 'emerald' }
+  }
+  if (metadata?.source === 'clawmaster-memory-page') {
+    return { label: t('memory.managedOriginPage'), tone: 'amber' }
+  }
+  if (metadata?.importedFrom === 'openclaw-workspace') {
+    return { label: t('memory.managedOriginImported'), tone: 'slate' }
+  }
+  return { label: t('memory.managedOriginManaged'), tone: 'slate' }
+}
+
+function getManagedOriginBadgeClass(tone: ManagedMemoryOriginTone): string {
+  switch (tone) {
+    case 'emerald':
+      return 'rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700 dark:text-emerald-400'
+    case 'amber':
+      return 'rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400'
+    default:
+      return 'rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground'
+  }
 }
 
 export default function MemoryPage() {
@@ -209,6 +256,10 @@ export default function MemoryPage() {
     () => (Array.isArray(managedList?.memories) ? managedList.memories : []),
     [managedList],
   )
+  const recentGatewayCaptures = useMemo(
+    () => managedMemories.filter((memory) => memory.metadata?.source === 'openclaw-gateway-auto-capture').slice(0, 3),
+    [managedMemories],
+  )
   const selectedFile =
     filesPayload?.files.find((entry) => entry.relativePath === selectedFilePath) ?? filesPayload?.files[0] ?? null
 
@@ -232,7 +283,10 @@ export default function MemoryPage() {
     return stderr
   }, [statusPayload?.stderr])
 
-  const managedSectionError = managedStatusErr || managedStatsErr || managedListErr || managedImportStatusErr
+  const managedSectionError = formatManagedSectionError(
+    managedStatusErr || managedStatsErr || managedListErr || managedImportStatusErr,
+    t,
+  )
   const managedBridgeReady = !isTauri || managedBridgeStatus?.state === 'ready'
   const managedDesktopBridgePending = isTauri && !managedBridgeReady
   const managedRuntimeInteractive = managedBridgeReady
@@ -449,6 +503,7 @@ export default function MemoryPage() {
       content,
       userId: managedUserId.trim() || undefined,
       agentId: managedAgentId.trim() || undefined,
+      metadata: { source: 'clawmaster-memory-page' },
     })
     setManagedMutationLoading(false)
 
@@ -822,6 +877,43 @@ export default function MemoryPage() {
 
                 <div className="section-subcard space-y-3">
                   <div>
+                    <h4 className="text-sm font-medium text-foreground">{t('memory.managedGatewayRecentTitle')}</h4>
+                    <p className="mt-1 text-sm text-muted-foreground">{t('memory.managedGatewayRecentHelp')}</p>
+                  </div>
+
+                  {recentGatewayCaptures.length > 0 ? (
+                    <ul className="space-y-3">
+                      {recentGatewayCaptures.map((memory) => (
+                        <li key={memory.memoryId} className="list-card bg-emerald-500/5 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={getManagedOriginBadgeClass('emerald')}>
+                              {t('memory.managedOriginGateway')}
+                            </span>
+                            {memory.userId ? (
+                              <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                user: {memory.userId}
+                              </span>
+                            ) : null}
+                            {memory.agentId ? (
+                              <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                agent: {memory.agentId}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap">{memory.content}</p>
+                          {memory.updatedAt ? (
+                            <p className="mt-2 text-xs text-muted-foreground">{new Date(memory.updatedAt).toLocaleString()}</p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t('memory.managedGatewayRecentEmpty')}</p>
+                  )}
+                </div>
+
+                <div className="section-subcard space-y-3">
+                  <div>
                     <h4 className="text-sm font-medium text-foreground">{t('memory.managedProofTitle')}</h4>
                     <p className="mt-1 text-sm text-muted-foreground">{t('memory.managedProofHelp')}</p>
                   </div>
@@ -1047,39 +1139,45 @@ export default function MemoryPage() {
                   <h4 className="text-sm font-medium text-foreground">{t('memory.managedRecentTitle')}</h4>
                   {managedMemories.length > 0 ? (
                     <ul className="space-y-3">
-                      {managedMemories.map((memory) => (
-                        <li key={memory.memoryId} className="list-card bg-background/70 text-sm">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                {memory.userId ? (
-                                  <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-                                    user: {memory.userId}
+                      {managedMemories.map((memory) => {
+                        const origin = getManagedMemoryOrigin(memory.metadata, t)
+                        return (
+                          <li key={memory.memoryId} className="list-card bg-background/70 text-sm">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={getManagedOriginBadgeClass(origin.tone)}>
+                                    {origin.label}
                                   </span>
-                                ) : null}
-                                {memory.agentId ? (
-                                  <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-                                    agent: {memory.agentId}
-                                  </span>
+                                  {memory.userId ? (
+                                    <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                      user: {memory.userId}
+                                    </span>
+                                  ) : null}
+                                  {memory.agentId ? (
+                                    <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                      agent: {memory.agentId}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p className="mt-2 whitespace-pre-wrap">{memory.content}</p>
+                                {memory.updatedAt ? (
+                                  <p className="mt-2 text-xs text-muted-foreground">{new Date(memory.updatedAt).toLocaleString()}</p>
                                 ) : null}
                               </div>
-                              <p className="mt-2 whitespace-pre-wrap">{memory.content}</p>
-                              {memory.updatedAt ? (
-                                <p className="mt-2 text-xs text-muted-foreground">{new Date(memory.updatedAt).toLocaleString()}</p>
-                              ) : null}
+                              <button
+                                type="button"
+                                disabled={managedMutationLoading || !managedRuntimeInteractive}
+                                onClick={() => void handleDeleteManagedMemory(memory.memoryId)}
+                                className="button-danger shrink-0 px-2 py-1 text-xs disabled:opacity-50"
+                                aria-label={`${t('common.delete')} ${memory.memoryId}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              disabled={managedMutationLoading || !managedRuntimeInteractive}
-                              onClick={() => void handleDeleteManagedMemory(memory.memoryId)}
-                              className="button-danger shrink-0 px-2 py-1 text-xs disabled:opacity-50"
-                              aria-label={`${t('common.delete')} ${memory.memoryId}`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </li>
-                      ))}
+                          </li>
+                        )
+                      })}
                     </ul>
                   ) : (
                     <p className="text-sm text-muted-foreground">{t('memory.managedEmpty')}</p>

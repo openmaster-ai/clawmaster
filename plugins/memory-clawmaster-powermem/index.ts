@@ -887,6 +887,7 @@ const plugin = {
               {
                 content: chunk,
                 ...withManagedScope(scope),
+                metadata: { source: 'openclaw-gateway-auto-capture' },
               },
               managedContext,
             )
