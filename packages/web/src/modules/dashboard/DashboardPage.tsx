@@ -726,6 +726,8 @@ function TaskEntryCard({
   const Icon = task.icon
   const summary = summarizeTaskChecklist(task.checklist)
   const nextItem = findNextChecklistItem(task.checklist)
+  const maxSecondaryActions = 3
+  const visibleSecondaryLinks = task.secondaryLinks.slice(0, nextItem ? maxSecondaryActions - 1 : maxSecondaryActions)
 
   return (
     <div className={`rounded-[1.6rem] border p-5 shadow-sm transition hover:border-primary/40 ${task.accentClass}`}>
@@ -753,27 +755,29 @@ function TaskEntryCard({
         ))}
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <button
           type="button"
           onClick={onOpen}
           aria-label={t('dashboard.task.openChecklistAria', { task: task.title })}
-          className="button-primary"
+          className="button-primary self-start"
         >
           {t('dashboard.task.reviewChecklist')}
           <ArrowRight className="h-4 w-4" />
         </button>
-        <div className="flex flex-wrap justify-end gap-2">
-          {nextItem && (
-            <Link to={nextItem.to} className="button-secondary px-3 py-1.5 text-sm">
-              {t('dashboard.task.jumpToSection')}
-            </Link>
-          )}
-          {task.secondaryLinks.map((link) => (
-            <Link key={link.to} to={link.to} className="button-secondary px-3 py-1.5 text-sm">
-              {link.label}
-            </Link>
-          ))}
+        <div className="max-w-full overflow-x-auto pb-1 lg:pb-0">
+          <div className="flex min-w-max flex-nowrap justify-start gap-2 lg:justify-end">
+            {nextItem && (
+              <Link to={nextItem.to} className="button-secondary shrink-0 whitespace-nowrap px-3 py-1.5 text-sm">
+                {t('dashboard.task.jumpToSection')}
+              </Link>
+            )}
+            {visibleSecondaryLinks.map((link) => (
+              <Link key={link.to} to={link.to} className="button-secondary shrink-0 whitespace-nowrap px-3 py-1.5 text-sm">
+                {link.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
     </div>
