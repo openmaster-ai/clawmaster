@@ -412,12 +412,20 @@ jobs:
           await modelPicker.first().waitFor({ timeout: 10000 });
           ok('Model picker rendered');
 
-          // Step 8: "Enter" button should be present
+          // Step 8: Advance from model selection into the required gateway step
+          const nextBtn = page.locator('text=下一步').or(page.locator('text=Next'));
+          await nextBtn.first().waitFor({ timeout: 5000 });
+          await nextBtn.first().click();
+          ok('Advanced to gateway step');
+
+          // Step 9: Gateway step should be visible with a final enter action
+          const gatewayStep = page.locator('text=网关').or(page.locator('text=Gateway'));
+          await gatewayStep.first().waitFor({ timeout: 5000 });
           const enterBtn = page.locator('text=进入管理大师').or(page.locator('text=Enter ClawMaster'));
           await enterBtn.first().waitFor({ timeout: 5000 });
-          ok('Enter button visible');
+          ok('Gateway step rendered');
 
-          // Step 9: Click enter → circle reveal animation → main app
+          // Step 10: Click enter → circle reveal animation → main app
           await enterBtn.first().click();
           await page.waitForTimeout(2000);
           const mainVisible = await page.locator('.app-layout, [class*="Layout"], nav').first()
@@ -425,12 +433,15 @@ jobs:
           if (!mainVisible) bail('Main app layout not visible after circle reveal');
           ok('Circle reveal → main app rendered');
 
-          // Step 10: Test skip flow
+          // Step 11: Test skip flow
           await page.goto(`${BASE}?demo=install`, { waitUntil: 'domcontentloaded', timeout: 15000 });
           await page.waitForSelector('text=配置 LLM 提供商', { timeout: 15000 })
             .catch(() => page.waitForSelector('text=Configure LLM Provider', { timeout: 5000 }));
           const skipLink = page.locator('text=跳过剩余步骤').or(page.locator('text=Skip'));
           await skipLink.first().click();
+          const skipEnterBtn = page.locator('text=进入管理大师').or(page.locator('text=Enter ClawMaster'));
+          await skipEnterBtn.first().waitFor({ timeout: 5000 });
+          await skipEnterBtn.first().click();
           await page.waitForTimeout(2000);
           const skipMainVisible = await page.locator('.app-layout, [class*="Layout"], nav').first()
             .isVisible().catch(() => false);
