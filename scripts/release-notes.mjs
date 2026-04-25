@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Emits a Markdown "What's Changed" section for a tag, grouping commits by
-// conventional-commit type into 4 buckets with emoji. Designed for GitHub
+// Emits a Markdown "What's Changed" section for a tag, grouping user-facing
+// conventional commits into a few release-note buckets. CI / release
+// housekeeping and unprefixed commits are intentionally excluded. Designed for GitHub
 // releases where `gh api .../releases/generate-notes` falls short because the
 // tagged branch only contains release-merge commits (git-flow pattern).
 //
@@ -47,19 +48,16 @@ const commits = log
 const BUCKETS = [
   { id: 'features', title: '### ✨ Features & Polish', types: ['feat', 'polish'] },
   { id: 'fixes', title: '### 🐛 Fixes', types: ['fix'] },
-  {
-    id: 'ci-tests',
-    title: '### 🔧 CI & Tests',
-    types: ['ci', 'test', 'build', 'perf', 'refactor'],
-  },
-  { id: 'release', title: '### 📦 Release', types: ['chore', 'docs', 'style'] },
   { id: 'misc', title: '### 📝 Misc', types: [] },
 ]
 
+const EXCLUDED_TYPES = new Set(['ci', 'test', 'build', 'perf', 'refactor', 'chore', 'docs', 'style'])
+
 function bucketOf(subject) {
   const m = subject.match(/^([a-z]+)(?:\([^)]+\))?:/)
-  if (!m) return 'misc'
+  if (!m) return null
   const type = m[1]
+  if (EXCLUDED_TYPES.has(type)) return null
   return BUCKETS.find((b) => b.types.includes(type))?.id ?? 'misc'
 }
 

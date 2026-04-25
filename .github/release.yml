@@ -14,9 +14,9 @@ changelog:
     - title: Docs and DX
       labels:
         - docs
-        - ci
         - dx
-        - chore
   exclude:
     labels:
       - skip-release-notes
+      - ci
+      - chore
