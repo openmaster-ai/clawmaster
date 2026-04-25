@@ -441,6 +441,9 @@ jobs:
           await skipLink.first().click();
           const skipGatewayStep = page.locator('text=网关').or(page.locator('text=Gateway'));
           await skipGatewayStep.first().waitFor({ timeout: 5000 });
+          await page.locator('text=网关已启动').or(page.locator('text=Gateway started')).first()
+            .waitFor({ timeout: 10000 })
+            .catch(() => page.locator('text=已就绪').or(page.locator('text=Ready')).first().waitFor({ timeout: 2000 }));
           const skipEnterBtn = page.locator('text=进入管理大师').or(page.locator('text=Enter ClawMaster'));
           await skipEnterBtn.first().waitFor({ timeout: 5000 });
           await skipEnterBtn.first().click();
