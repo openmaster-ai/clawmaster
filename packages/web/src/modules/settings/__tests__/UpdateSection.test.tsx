@@ -89,16 +89,16 @@ vi.mock('react-i18next', () => ({
         'settings.localDataStateReady': 'Ready',
         'settings.localDataStateDegraded': 'Fallback',
         'settings.localDataStateBlocked': 'Blocked',
-        'settings.localDataEngineEmbedded': 'SeekDB embedded',
+        'settings.localDataEngineEmbedded': 'seekdb',
         'settings.localDataEngineFallback': 'Fallback store',
         'settings.localDataEngineUnavailable': 'Unavailable',
-        'settings.localDataReadySummary': 'SeekDB embedded can run for this runtime target.',
-        'settings.localDataFallbackSummary': 'ClawMaster will keep working through a file-backed fallback until SeekDB embedded is available.',
+        'settings.localDataReadySummary': 'seekdb can run for this runtime target.',
+        'settings.localDataFallbackSummary': 'ClawMaster will keep working through a file-backed fallback until this target supports seekdb.',
         'settings.localDataBlockedSummary': 'Local data cannot pick a safe target yet.',
         'settings.localDataNoPythonHint': 'This foundation uses JavaScript/TypeScript runtime paths only; no Python package or Python-based skill is required.',
-        'settings.localDataReasonNodeMissing': 'Node.js is missing in the selected runtime. SeekDB requires Node 20 or newer, so the fallback store is selected.',
-        'settings.localDataReasonNodeTooOld': 'The selected runtime uses Node.js below 20. Upgrade Node.js to enable SeekDB embedded where the platform supports it.',
-        'settings.localDataReasonUnsupportedPlatform': 'SeekDB embedded bindings are not available on this target yet. Use WSL2, server mode later, or fallback storage.',
+        'settings.localDataReasonNodeMissing': 'Node.js is missing in the selected runtime. seekdb requires Node 20 or newer, so the fallback store is selected.',
+        'settings.localDataReasonNodeTooOld': 'The selected runtime uses Node.js below 20. Upgrade Node.js to enable seekdb where the platform supports it.',
+        'settings.localDataReasonUnsupportedPlatform': 'seekdb bindings are not available on this target yet. Use WSL2, server mode later, or fallback storage.',
         'settings.localDataReasonWslDistroMissing': 'WSL2 mode is selected, but the saved distro is missing. Re-select the distro before Local Data can safely resolve a target.',
         'settings.localDataRuntime': 'Runtime',
         'settings.localDataProfile': 'Profile',
@@ -112,7 +112,7 @@ vi.mock('react-i18next', () => ({
         'settings.localDataRoot': 'Data root',
         'settings.localDataEngineRoot': 'Engine root',
         'settings.localDataDocuments': 'Documents',
-        'settings.localDataDocsModule': 'Docs indexed',
+        'settings.localDataDocsModule': 'Docs index',
         'settings.localDataUpdatedAt': 'Updated',
         'settings.localDataRebuild': 'Rebuild Index',
         'settings.localDataReset': 'Reset Store',
@@ -286,9 +286,9 @@ vi.mock('@/modules/setup/adapters', () => ({
 import Settings from '../SettingsPage'
 import { platform } from '@/adapters'
 
-function renderSettings() {
+function renderSettings(initialEntries?: string[]) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <Settings />
     </MemoryRouter>,
   )
@@ -393,6 +393,23 @@ describe('UpdateSection', () => {
     expect(screen.getAllByText(/v2026\.3\.28/).length).toBeGreaterThanOrEqual(1)
   })
 
+  it('auto-checks updates when opened from the update banner hash', async () => {
+    mockListVersions.mockResolvedValue({
+      success: true,
+      data: {
+        distTags: { latest: '2026.4.23', beta: '2026.4.24-beta.1', dev: '2026.4.25-dev.1' },
+        versions: ['2026.4.23', '2026.4.22'],
+      },
+      error: null,
+    })
+
+    renderSettings(['/settings#settings-update'])
+
+    expect(await screen.findByText('Version:')).toBeInTheDocument()
+    expect(mockListVersions).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Update to 2026.4.23' })).toBeInTheDocument()
+  })
+
   it('opens recent diagnostics logs from settings and keeps the full log stream', async () => {
     renderSettings()
     await waitFor(() => {
@@ -448,11 +465,11 @@ describe('UpdateSection', () => {
 
     expect(localData.getByText('Ready')).toBeInTheDocument()
     expect(localData.getAllByText('Fallback store').length).toBeGreaterThan(0)
-    expect(localData.getByText('ClawMaster will keep working through a file-backed fallback until SeekDB embedded is available.')).toBeInTheDocument()
+    expect(localData.getByText('ClawMaster will keep working through a file-backed fallback until this target supports seekdb.')).toBeInTheDocument()
     expect(localData.getByText('This foundation uses JavaScript/TypeScript runtime paths only; no Python package or Python-based skill is required.')).toBeInTheDocument()
     expect(localData.getByText('/home/.clawmaster/data/default/fallback')).toBeInTheDocument()
     expect(localData.getAllByText('12')).toHaveLength(2)
-    expect(localData.queryByText('SeekDB embedded can run for this runtime target.')).not.toBeInTheDocument()
+    expect(localData.queryByText('seekdb can run for this runtime target.')).not.toBeInTheDocument()
   })
 
   it('shows fallback summary and unsupported target guidance when embedded support is unavailable', async () => {
@@ -480,9 +497,9 @@ describe('UpdateSection', () => {
     expect(section).not.toBeNull()
     const localData = within(section!)
 
-    expect(localData.getByText('ClawMaster will keep working through a file-backed fallback until SeekDB embedded is available.')).toBeInTheDocument()
-    expect(localData.getByText('SeekDB embedded bindings are not available on this target yet. Use WSL2, server mode later, or fallback storage.')).toBeInTheDocument()
-    expect(localData.queryByText('SeekDB embedded can run for this runtime target.')).not.toBeInTheDocument()
+    expect(localData.getByText('ClawMaster will keep working through a file-backed fallback until this target supports seekdb.')).toBeInTheDocument()
+    expect(localData.getByText('seekdb bindings are not available on this target yet. Use WSL2, server mode later, or fallback storage.')).toBeInTheDocument()
+    expect(localData.queryByText('seekdb can run for this runtime target.')).not.toBeInTheDocument()
   })
 
   it('clears stale local data stats when a refresh fails', async () => {

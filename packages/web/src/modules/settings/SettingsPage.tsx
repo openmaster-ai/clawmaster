@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { platform } from '@/adapters'
 import { platformResults } from '@/shared/adapters/platformResults'
 import { isTauri } from '@/shared/adapters/platform'
@@ -86,6 +86,20 @@ function localDataSummaryLabelKey(info: LocalDataInfo): string {
 function localDataEffectiveReasonLabelKey(info: LocalDataInfo): string | null {
   return localDataReasonLabelKey(info.reasonCode)
     ?? (!info.supportsEmbedded ? 'settings.localDataReasonUnsupportedPlatform' : null)
+}
+
+function formatLocalDataUpdatedAt(value: string | null | undefined, locale: string, fallback: string): string {
+  if (!value) return fallback
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return fallback
+  return new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
 }
 
 export default function Settings() {
@@ -772,7 +786,7 @@ export default function Settings() {
       </section>
 
       {localData && (
-        <section id="settings-local-data" className="surface-card">
+        <section id="settings-local-data" className="surface-card space-y-4">
           <div className="section-heading">
             <div>
               <h3 className="section-title">{t('settings.localDataTitle')}</h3>
@@ -780,8 +794,8 @@ export default function Settings() {
             </div>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-            <div className="rounded-[1.75rem] border border-border/80 bg-muted/30 p-5">
+          <div className="rounded-[1.95rem] border border-border/80 bg-[linear-gradient(135deg,rgba(233,98,36,0.10),rgba(233,98,36,0)_22%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))] p-5 md:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-3">
                 <span className={`inline-flex whitespace-nowrap rounded-full border px-3 py-1 text-xs font-medium ${localDataStateClass(localData.state)}`}>
                   {t(localDataStateLabelKey(localData.state))}
@@ -790,74 +804,12 @@ export default function Settings() {
                   {t(localDataEngineLabelKey(localData.engine))}
                 </span>
               </div>
-              <div className="mt-5 flex items-start gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/80">
-                  <Database className="h-5 w-5 text-foreground" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground">
-                    {t(localDataSummaryLabelKey(localData))}
-                  </p>
-                  {localDataEffectiveReasonLabelKey(localData) ? (
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      {t(localDataEffectiveReasonLabelKey(localData)!)}
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      {t('settings.localDataNoPythonHint')}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataRuntime')}</p>
-                  <p className="mt-2 text-sm font-semibold">
-                    {localData.runtimeTarget === 'wsl2' ? t('settings.runtimeWsl2') : t('settings.runtimeNative')}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataProfile')}</p>
-                  <p className="mt-2 text-sm font-semibold">
-                    {resolvedProfileMode === 'named'
-                      ? `${t('settings.profileNamed')} · ${resolvedProfileName}`
-                      : resolvedProfileMode === 'dev'
-                        ? t('settings.profileDev')
-                        : t('settings.profileDefault')}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataEmbeddedSupport')}</p>
-                  <p className="mt-2 text-sm font-semibold">
-                    {localData.supportsEmbedded ? t('settings.localDataSupported') : t('settings.localDataUnavailable')}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataDocuments')}</p>
-                  <p className="mt-2 text-xl font-semibold">{localDataStats?.documentCount ?? 0}</p>
-                </div>
-                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataDocsModule')}</p>
-                  <p className="mt-2 text-xl font-semibold">{localDataStats?.moduleCounts.docs ?? 0}</p>
-                </div>
-                <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('settings.localDataUpdatedAt')}</p>
-                  <p className="mt-2 truncate text-sm font-semibold">
-                    {localDataStats?.updatedAt ? new Date(localDataStats.updatedAt).toLocaleString() : t('common.notSet')}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={() => void rebuildLocalData()}
                   disabled={localDataActionsDisabled}
-                  className="button-secondary"
+                  className="button-secondary whitespace-nowrap"
                 >
                   {localDataBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   {t('settings.localDataRebuild')}
@@ -866,30 +818,111 @@ export default function Settings() {
                   type="button"
                   onClick={() => setConfirmAction('local-data-reset')}
                   disabled={localDataActionsDisabled}
-                  className="button-danger"
+                  className="button-danger whitespace-nowrap"
                 >
                   {t('settings.localDataReset')}
                 </button>
               </div>
-              {isTauri() ? (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  {t('settings.localDataDesktopPending')}
-                </p>
-              ) : null}
             </div>
 
-            <div className="rounded-[1.75rem] border border-border/80 bg-muted/40 p-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                {t('settings.localDataResolved')}
-              </p>
-              <div className="mt-4 space-y-3 text-sm">
-                <LocalDataRow label={t('settings.localDataEngine')} value={t(localDataEngineLabelKey(localData.engine))} />
-                <LocalDataRow label={t('settings.localDataTarget')} value={`${localData.targetPlatform} · ${localData.targetArch}`} />
-                <LocalDataRow label={t('settings.localDataNodeRequirement')} value={localData.nodeRequirement} />
-                <LocalDataRow label={t('settings.localDataRoot')} value={localData.dataRoot ?? t('common.notSet')} monospace />
-                <LocalDataRow label={t('settings.localDataEngineRoot')} value={localData.engineRoot ?? t('common.notSet')} monospace />
+            <div className="mt-5 flex items-start gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.4rem] border border-border/70 bg-background/80">
+                <Database className="h-6 w-6 text-foreground" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[1.12rem] font-semibold leading-8 text-foreground">
+                  {t(localDataSummaryLabelKey(localData))}
+                </p>
+                <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+                  {localDataEffectiveReasonLabelKey(localData)
+                    ? t(localDataEffectiveReasonLabelKey(localData)!)
+                    : t('settings.localDataNoPythonHint')}
+                </p>
+                {isTauri() ? (
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                    {t('settings.localDataDesktopPending')}
+                  </p>
+                ) : null}
               </div>
             </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3">
+                <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground">{t('settings.localDataDocuments')}</p>
+                <p className="mt-2 text-2xl font-semibold">{localDataStats?.documentCount ?? 0}</p>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3">
+                <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground">{t('settings.localDataDocsModule')}</p>
+                <p className="mt-2 text-2xl font-semibold">{localDataStats?.moduleCounts.docs ?? 0}</p>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3">
+                <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground">{t('settings.localDataUpdatedAt')}</p>
+                <p className="mt-2 text-base font-semibold tabular-nums">
+                  {formatLocalDataUpdatedAt(localDataStats?.updatedAt, i18n.resolvedLanguage ?? i18n.language, t('common.notSet'))}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="inline-flex items-center rounded-full border border-border/70 bg-background/60 px-3 py-1.5 text-sm text-muted-foreground">
+                {t('settings.localDataRuntime')}: <span className="ml-2 font-medium text-foreground">{localData.runtimeTarget === 'wsl2' ? t('settings.runtimeWsl2') : t('settings.runtimeNative')}</span>
+              </span>
+              <span className="inline-flex items-center rounded-full border border-border/70 bg-background/60 px-3 py-1.5 text-sm text-muted-foreground">
+                {t('settings.localDataProfile')}: <span className="ml-2 font-medium text-foreground">
+                  {resolvedProfileMode === 'named'
+                    ? `${t('settings.profileNamed')} · ${resolvedProfileName}`
+                    : resolvedProfileMode === 'dev'
+                      ? t('settings.profileDev')
+                      : t('settings.profileDefault')}
+                </span>
+              </span>
+              <span className="inline-flex items-center rounded-full border border-border/70 bg-background/60 px-3 py-1.5 text-sm text-muted-foreground">
+                {t('settings.localDataEmbeddedSupport')}: <span className="ml-2 font-medium text-foreground">
+                  {localData.supportsEmbedded ? t('settings.localDataSupported') : t('settings.localDataUnavailable')}
+                </span>
+              </span>
+            </div>
+
+            <details className="mt-5 rounded-[1.45rem] border border-border/70 bg-background/55 p-4">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-foreground">
+                <span>{t('settings.localDataResolved')}</span>
+                <span className="text-xs text-muted-foreground">{t(localDataEngineLabelKey(localData.engine))}</span>
+              </summary>
+              <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/55 px-4 py-3">
+                    <span className="text-sm text-muted-foreground">{t('settings.localDataEngine')}</span>
+                    <span className="text-sm font-semibold text-foreground">{t(localDataEngineLabelKey(localData.engine))}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/55 px-4 py-3">
+                    <span className="text-sm text-muted-foreground">{t('settings.localDataTarget')}</span>
+                    <span className="text-sm font-semibold text-foreground">{`${localData.targetPlatform} · ${localData.targetArch}`}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/55 px-4 py-3">
+                    <span className="text-sm text-muted-foreground">{t('settings.localDataNodeRequirement')}</span>
+                    <span className="text-sm font-semibold text-foreground">{localData.nodeRequirement}</span>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      {t('settings.localDataRoot')}
+                    </p>
+                    <p className="mt-3 break-all font-mono text-sm leading-7 text-foreground">
+                      {localData.dataRoot ?? t('common.notSet')}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      {t('settings.localDataEngineRoot')}
+                    </p>
+                    <p className="mt-3 break-all font-mono text-sm leading-7 text-foreground">
+                      {localData.engineRoot ?? t('common.notSet')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
         </section>
       )}
@@ -1157,17 +1190,6 @@ export default function Settings() {
   )
 }
 
-function LocalDataRow({ label, value, monospace = false }: { label: string; value: string; monospace?: boolean }) {
-  return (
-    <div className="grid gap-1 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] sm:items-start">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`min-w-0 break-all text-left sm:text-right ${monospace ? 'font-mono text-xs' : 'font-medium'}`}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
 // ─── Update Section ───
 
 type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'error'
@@ -1216,6 +1238,7 @@ function UpdateSection({
   onUpdated: () => void
 }) {
   const { t } = useTranslation()
+  const location = useLocation()
   const [state, setState] = useState<UpdateState>('idle')
   const [versions, setVersions] = useState<OpenclawNpmVersions | null>(null)
   const [channel, setChannel] = useState<Channel>('stable')
@@ -1223,6 +1246,7 @@ function UpdateSection({
   const [error, setError] = useState<string | null>(null)
   const [releases, setReleases] = useState<ReleaseNote[]>([])
   const [changelogOpen, setChangelogOpen] = useState(false)
+  const autoCheckTriggeredRef = useRef(false)
   const updateTask = useInstallTask()
 
   const channelVersion = versions
@@ -1274,8 +1298,19 @@ function UpdateSection({
   // Recent versions for dropdown (max 20)
   const recentVersions = versions?.versions.slice(0, 20) ?? []
 
+  useEffect(() => {
+    const shouldAutoCheck = location.hash === '#settings-update'
+    if (!shouldAutoCheck) {
+      autoCheckTriggeredRef.current = false
+      return
+    }
+    if (autoCheckTriggeredRef.current || state !== 'idle' || updateTask.status !== 'idle') return
+    autoCheckTriggeredRef.current = true
+    void handleCheck()
+  }, [handleCheck, location.hash, state, updateTask.status])
+
   return (
-    <section className="surface-card">
+    <section id="settings-update" className="surface-card">
       <div className="section-heading">
         <h3 className="section-title">{t('settings.update')}</h3>
       </div>

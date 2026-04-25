@@ -387,18 +387,6 @@ export default function Layout({ children }: LayoutProps) {
         </button>
       </div>
 
-      <div className="app-sidebar-overview">
-        <div className="app-sidebar-overview-card">
-          <p className="app-sidebar-eyebrow">{currentSection ? t(currentSection.labelKey) : t('layout.appName')}</p>
-          <p className="app-sidebar-summary">{pageTitle}</p>
-          <p className="app-sidebar-note">{pageDescription}</p>
-          <div className="app-sidebar-status-row">
-            <span className={`h-2 w-2 rounded-full ${gwStatus?.running ? 'bg-green-500' : 'bg-red-500'}`} />
-            <span>{gwStatus?.running ? t('layout.status.gatewayRunning') : t('layout.status.gatewayStopped')}</span>
-          </div>
-        </div>
-      </div>
-
       <nav className="app-sidebar-nav">
         {navSections.map((section) => {
           const items = section.items
@@ -505,7 +493,7 @@ export default function Layout({ children }: LayoutProps) {
                       {t('layout.update.available', { version: updateBanner.latestVersion })}
                     </p>
                   </div>
-                  <Link to="/settings" className="button-secondary text-xs">
+                  <Link to="/settings#settings-update" className="button-secondary text-xs">
                     {t('layout.update.action')}
                   </Link>
                   <button
