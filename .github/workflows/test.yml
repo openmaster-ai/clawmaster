@@ -439,10 +439,10 @@ jobs:
             .catch(() => page.waitForSelector('text=Configure LLM Provider', { timeout: 5000 }));
           const skipLink = page.locator('text=跳过剩余步骤').or(page.locator('text=Skip'));
           await skipLink.first().click();
-          const skipGatewayStep = page.locator('text=网关').or(page.locator('text=Gateway'));
-          await skipGatewayStep.first().waitFor({ timeout: 5000 });
+          const skipGatewayStep = page.getByRole('heading', { name: /^(网关|Gateway|ゲートウェイ)$/ });
+          await skipGatewayStep.waitFor({ timeout: 5000 });
           const startGatewayBtn = page.locator('text=启动网关').or(page.locator('text=Start Gateway'));
-          const checkGatewayBtn = page.locator('text=重新检查网关').or(page.locator('text=Check Again'));
+          const checkGatewayBtn = page.locator('text=重新检查').or(page.locator('text=Check Again')).or(page.locator('text=再確認'));
           const skipEnterBtn = page.locator('text=进入管理大师').or(page.locator('text=Enter ClawMaster'));
           // Skip only needs to prove the wizard lands on the mandatory gateway step
           // and offers at least one valid next action from there.
