@@ -11,6 +11,8 @@ const mockClawprobeBootstrap = vi.fn()
 const mockInstallSkill = vi.fn()
 const mockSetSkillEnabled = vi.fn()
 const mockInstallCapabilities = vi.fn()
+const mockGetSessions = vi.fn()
+const mockGetSessionDetail = vi.fn()
 
 vi.mock('@/adapters', () => ({
   platformResults: {
@@ -30,6 +32,11 @@ vi.mock('@/modules/setup/adapters', () => ({
 
 vi.mock('@/shared/adapters/clawhub', () => ({
   setSkillEnabledResult: (...args: any[]) => mockSetSkillEnabled(...args),
+}))
+
+vi.mock('@/shared/adapters/sessions', () => ({
+  getSessions: (...args: any[]) => mockGetSessions(...args),
+  getSessionDetail: (...args: any[]) => mockGetSessionDetail(...args),
 }))
 
 const fallbackStatus = {
@@ -95,6 +102,18 @@ describe('ObservePage', () => {
     mockInstallSkill.mockResolvedValue({ success: true, data: undefined })
     mockSetSkillEnabled.mockResolvedValue({ success: true, data: undefined })
     mockInstallCapabilities.mockResolvedValue(undefined)
+    mockGetSessions.mockResolvedValue({
+      success: true,
+      data: {
+        path: '/tmp/.openclaw/workspace/.openclaw/sessions',
+        count: 0,
+        sessions: [],
+      },
+    })
+    mockGetSessionDetail.mockResolvedValue({
+      success: false,
+      error: 'session not found',
+    })
   })
 
   it('renders the missing-clawprobe zero state instead of an error screen', async () => {
@@ -217,5 +236,228 @@ describe('ObservePage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Daily Digest/i }))
 
     expect(await screen.findByText('Install failed: write failed')).toBeInTheDocument()
+  })
+
+  it('shows the latest session context usage and estimated cost', async () => {
+    mockClawprobeStatus.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...fallbackStatus,
+        daemonRunning: true,
+        installRequired: false,
+        sessionKey: null,
+      },
+    })
+    mockGetSessions.mockResolvedValueOnce({
+      success: true,
+      data: {
+        path: '/tmp/.openclaw/workspace/.openclaw/sessions',
+        count: 2,
+        sessions: [
+          {
+            key: 'agent:main:older',
+            sessionId: 'older',
+            agentId: 'main',
+            model: 'gpt-4.1-mini',
+            modelProvider: 'openai',
+            kind: 'direct',
+            inputTokens: 1200,
+            outputTokens: 300,
+            totalTokens: 1500,
+            contextTokens: 20000,
+            updatedAt: 1774800000000,
+            ageMs: 120000,
+          },
+          {
+            key: 'agent:main:latest',
+            sessionId: 'latest',
+            agentId: 'main',
+            model: 'gpt-4.1',
+            modelProvider: 'openai',
+            kind: 'direct',
+            inputTokens: 4300,
+            outputTokens: 700,
+            totalTokens: 5000,
+            contextTokens: 20000,
+            updatedAt: 1774900000000,
+            ageMs: 30000,
+          },
+        ],
+      },
+    })
+    mockGetSessionDetail.mockResolvedValueOnce({
+      success: true,
+      data: {
+        sessionKey: 'agent:main:latest',
+        model: 'gpt-4.1',
+        provider: 'openai',
+        inputTokens: 4300,
+        outputTokens: 700,
+        totalTokens: 25000,
+        contextTokens: 5000,
+        windowSize: 20000,
+        estimatedUsd: 0.042,
+        startedAt: 1774890000,
+        lastActiveAt: 1774900000,
+        durationMin: 12,
+        compactionCount: 0,
+        turns: [],
+      },
+    })
+
+    render(
+      <MemoryRouter>
+        <ObservePage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Latest Session')).toBeInTheDocument()
+    expect(screen.getByText('$0.0420')).toBeInTheDocument()
+    expect(screen.getByText('5,000 / 20,000 tokens')).toBeInTheDocument()
+    expect(screen.getByTitle('agent:main:latest')).toBeInTheDocument()
+    expect(mockGetSessionDetail).toHaveBeenCalledWith('agent:main:latest', { agentId: 'main' })
+  })
+
+  it('falls back to session list fields when latest session detail fails', async () => {
+    mockClawprobeStatus.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...fallbackStatus,
+        daemonRunning: true,
+        installRequired: false,
+        sessionKey: null,
+      },
+    })
+    mockGetSessions.mockResolvedValueOnce({
+      success: true,
+      data: {
+        path: '/tmp/.openclaw/workspace/.openclaw/sessions',
+        count: 1,
+        sessions: [
+          {
+            key: 'agent:main:detail-missing',
+            sessionId: 'detail-missing',
+            agentId: 'main',
+            model: 'gpt-4.1-mini',
+            modelProvider: 'openai',
+            kind: 'direct',
+            inputTokens: 1200,
+            outputTokens: 300,
+            totalTokens: 78000,
+            contextTokens: 20000,
+            updatedAt: 1774900000000,
+            ageMs: 30000,
+          },
+        ],
+      },
+    })
+    mockGetSessionDetail.mockResolvedValueOnce({
+      success: false,
+      error: 'session not found',
+    })
+
+    render(
+      <MemoryRouter>
+        <ObservePage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Latest Session')).toBeInTheDocument()
+    expect(screen.getByText('Unavailable')).toBeInTheDocument()
+    expect(screen.getByText('1,200 / 300')).toBeInTheDocument()
+    expect(screen.getByText('- / 20,000 tokens')).toBeInTheDocument()
+    expect(screen.queryByText('78,000 / 20,000 tokens')).not.toBeInTheDocument()
+  })
+
+  it('passes the latest session agent when fetching details from a multi-agent session list', async () => {
+    mockClawprobeStatus.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...fallbackStatus,
+        daemonRunning: true,
+        installRequired: false,
+        sessionKey: null,
+      },
+    })
+    mockGetSessions.mockResolvedValueOnce({
+      success: true,
+      data: {
+        path: '/tmp/.openclaw/workspace/.openclaw/sessions',
+        count: 1,
+        sessions: [
+          {
+            key: 'agent:review:latest',
+            sessionId: 'latest',
+            agentId: 'review',
+            model: 'gpt-4.1',
+            modelProvider: 'openai',
+            kind: 'direct',
+            inputTokens: 1000,
+            outputTokens: 100,
+            totalTokens: 1100,
+            contextTokens: 64000,
+            updatedAt: 1774900000000,
+            ageMs: 30000,
+          },
+        ],
+      },
+    })
+
+    render(
+      <MemoryRouter>
+        <ObservePage />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Latest Session')
+    expect(mockGetSessionDetail).toHaveBeenCalledWith('agent:review:latest', { agentId: 'review' })
+  })
+
+  it('uses the active status session key for cost detail when the session list is empty', async () => {
+    mockClawprobeStatus.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...fallbackStatus,
+        daemonRunning: true,
+        installRequired: false,
+        sessionKey: 'agent:main:active',
+        model: 'gpt-4.1-mini',
+        provider: 'openai',
+        sessionTokens: 2500,
+        windowSize: 10000,
+        utilizationPct: 25,
+        inputTokens: 2100,
+        outputTokens: 400,
+        isActive: true,
+      },
+    })
+    mockGetSessionDetail.mockResolvedValueOnce({
+      success: true,
+      data: {
+        sessionKey: 'agent:main:active',
+        model: 'gpt-4.1-mini',
+        provider: 'openai',
+        inputTokens: 2100,
+        outputTokens: 400,
+        totalTokens: 2500,
+        estimatedUsd: 0.0187,
+        startedAt: 1774890000,
+        lastActiveAt: 1774900000,
+        durationMin: 5,
+        compactionCount: 0,
+        turns: [],
+      },
+    })
+
+    render(
+      <MemoryRouter>
+        <ObservePage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Latest Session')).toBeInTheDocument()
+    expect(screen.getByText('$0.0187')).toBeInTheDocument()
+    expect(screen.getByText('2,500 / 10,000 tokens')).toBeInTheDocument()
+    expect(mockGetSessionDetail).toHaveBeenCalledWith('agent:main:active', { agentId: undefined })
   })
 })

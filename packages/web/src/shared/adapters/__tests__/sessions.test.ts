@@ -132,6 +132,40 @@ describe('sessions adapter', () => {
       expect(result.data!.durationMin).toBe(172)
     })
 
+    it('passes agent id when loading a session from a non-default agent', async () => {
+      const { execCommand } = await import('../platform')
+      await mockExec(JSON.stringify({ sessionKey: 'agent:review:latest' }))
+
+      const result = await getSessionDetail('agent:review:latest', { agentId: 'review' })
+
+      expect(result.success).toBe(true)
+      expect(execCommand).toHaveBeenCalledWith('clawprobe', [
+        'session',
+        'agent:review:latest',
+        '--json',
+        '--agent',
+        'review',
+      ])
+    })
+
+    it('parses current context tokens separately from cumulative billed tokens', async () => {
+      await mockExec(JSON.stringify({
+        sessionKey: 'agent:main:main',
+        inputTokens: 150000,
+        outputTokens: 20000,
+        totalTokens: 170000,
+        contextTokens: 32000,
+        windowSize: 128000,
+      }))
+
+      const result = await getSessionDetail('agent:main:main')
+
+      expect(result.success).toBe(true)
+      expect(result.data!.totalTokens).toBe(170000)
+      expect(result.data!.contextTokens).toBe(32000)
+      expect(result.data!.windowSize).toBe(128000)
+    })
+
     it('returns error when session not found', async () => {
       await mockExecFail('session not found')
       const result = await getSessionDetail('nonexistent')
