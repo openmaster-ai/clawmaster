@@ -28,12 +28,12 @@ For desktop (Tauri) development, see the Rust/Tauri section in `CLAUDE.md`.
 ## Branch and PR Workflow
 
 1. **Fork** the repository and clone your fork.
-2. Create a **feature branch** from `main`:
+2. Create a **feature branch** from `develop`:
    ```bash
-   git checkout -b feat/my-feature main
+   git checkout -b feat/my-feature develop
    ```
 3. Make your changes, commit with conventional messages (see below), and push.
-4. Open a **Pull Request** against `main` in the upstream repo.
+4. Open a **Pull Request** against `develop` in the upstream repo.
 5. Fill in the PR template. Link related issues with `Closes #123`.
 
 Keep PRs focused -- one logical change per PR.
@@ -45,6 +45,57 @@ Keep PRs focused -- one logical change per PR.
 - **Lucide React** for icons. No other icon libraries.
 - New features should be built as **capability modules** in `packages/web/src/modules/` (see `CLAUDE.md` for the `ClawModule` pattern).
 - Use split adapters in `shared/adapters/` and the `useAdapterCall` hook for data fetching.
+
+## Adding or Updating Model Providers
+
+ClawMaster is a UI and local service layer for OpenClaw. A provider should usually be supported by OpenClaw first; ClawMaster then makes that provider easy to discover, validate, and configure in the setup wizard and Models page.
+
+Before opening a provider PR:
+
+- Open or link an issue that identifies the provider, API docs, default base URL, API-key page, supported model IDs, and whether the API is native OpenAI-compatible.
+- Confirm the OpenClaw runtime provider id. Use that id in ClawMaster model refs (`provider/model`) unless there is already a documented alias.
+- Do not add dependencies for provider integration. Provider setup should use existing adapters, fetch helpers, and config writers.
+
+Provider UI source of truth:
+
+- Add the provider to `packages/web/src/modules/setup/types.ts` in `PROVIDERS`.
+- Include `label`, `keyUrl`, `models`, `defaultModel`, and `baseUrl` when the endpoint is fixed.
+- Set `api: 'openai-completions'` for OpenAI-compatible chat/completions providers that OpenClaw should persist with that API mode.
+- Use `labelByLocale` and `credentialLabelByLocale` only when the display name or credential name needs localization beyond the default English label and `API Key`.
+- Add the provider id to `TEXT_PROVIDER_TIERS` so it appears in both the setup wizard and Models add-provider dialog. Image-only providers must use `kind: 'text-to-image'` and belong in `PRIMARY_IMAGE_PROVIDERS` instead.
+- Use `runtimeProviderId` only when the UI entry intentionally writes to another OpenClaw provider key, such as a text-to-image variant sharing a chat provider account.
+- Use `configKeyOverride` only for legacy OpenClaw config compatibility.
+
+Live model catalogs:
+
+- Add the provider default base URL to both `packages/web/src/shared/providerCatalog.ts` and `packages/backend/src/services/providerCatalogService.ts` when the Models page should fetch `/models` in desktop and web modes.
+- Keep catalog allowlists strict. Non-custom providers must only accept their documented host, protocol, port, and base path. The custom OpenAI-compatible provider is the only path that may accept arbitrary public hosts.
+- Add response filtering when a provider returns embeddings, image models, OCR models, moderation models, or other non-chat entries in the same catalog.
+- Keep frontend and backend catalog behavior equivalent; the backend service powers web mode, while the frontend helper powers Tauri mode.
+
+Validation and persistence:
+
+- Provider key validation is implemented in `packages/web/src/modules/setup/adapters.ts`.
+- OpenAI-compatible providers should work through the existing chat/completions probe and `/models` fallback. Do not add provider-specific HTTP code unless the provider is not compatible with the common flow.
+- Saved provider config should include `apiKey`, `baseUrl`, `api` when needed, and the static fallback `models` list. The Models page uses that saved list when live catalog discovery is unavailable.
+- Default model refs must use the OpenClaw runtime provider id, for example `zai/glm-5.1`.
+
+Tests required for provider PRs:
+
+- `packages/web/src/modules/setup/__tests__/SetupWizard.test.tsx`: provider appears in the wizard and passes the expected provider id, key, and base URL into validation.
+- `packages/web/src/modules/models/__tests__/ModelsPage.test.tsx`: provider appears in the add dialog and configured-provider card, including live catalog behavior when supported.
+- `packages/web/src/modules/setup/__tests__/realAdapter.test.ts`: saved config shape includes the expected API mode, base URL, and fallback models.
+- `packages/web/src/shared/providerCatalog.test.ts`: catalog request URL, safety checks, and response filtering.
+- `packages/backend/src/services/providerCatalogService.test.ts`: matching backend catalog behavior for web mode.
+
+Run at least:
+
+```bash
+(cd packages/web && npx vitest run src/shared/providerCatalog.test.ts src/modules/setup/__tests__/realAdapter.test.ts src/modules/setup/__tests__/SetupWizard.test.tsx src/modules/models/__tests__/ModelsPage.test.tsx)
+npm test --workspace=@openclaw-manager/backend
+npm run build --workspace=@openclaw-manager/web
+npm run build --workspace=@openclaw-manager/backend
+```
 
 ## i18n Rules (internationalization / 国际化)
 

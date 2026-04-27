@@ -25,6 +25,7 @@ const OPENAI_COMPATIBLE_PROVIDER_DEFAULTS: Record<string, string> = {
   'kimi-coding': 'https://api.moonshot.cn/v1',
   siliconflow: 'https://api.siliconflow.cn/v1',
   'baidu-aistudio': 'https://aistudio.baidu.com/llm/lmapi/v3',
+  zai: 'https://api.z.ai/api/paas/v4',
   openrouter: 'https://openrouter.ai/api/v1',
   cerebras: 'https://api.cerebras.ai/v1',
 }
@@ -214,6 +215,10 @@ function isBaiduTextModel(id: string) {
   return !/(embedding|bge|stable-diffusion|infer-|sft-)/i.test(id)
 }
 
+function isZaiTextModel(id: string) {
+  return /^glm-/i.test(id) && !/(embedding|image|ocr)/i.test(id)
+}
+
 function filterProviderCatalogModels(providerId: string, models: ProviderCatalogModel[]) {
   switch (providerId) {
     case 'openai':
@@ -222,6 +227,8 @@ function filterProviderCatalogModels(providerId: string, models: ProviderCatalog
       return models.filter((model) => isMistralTextModel(model.id))
     case 'baidu-aistudio':
       return models.filter((model) => isBaiduTextModel(model.id))
+    case 'zai':
+      return models.filter((model) => isZaiTextModel(model.id))
     default:
       return models
   }

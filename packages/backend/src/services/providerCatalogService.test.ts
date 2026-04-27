@@ -64,3 +64,40 @@ test('listProviderModels normalizes custom OpenAI-compatible chat completions ba
     globalThis.fetch = originalFetch
   }
 })
+
+test('listProviderModels uses the native Z.AI GLM catalog endpoint', async () => {
+  const originalFetch = globalThis.fetch
+  let requestedUrl = ''
+  let requestedAuthorization = ''
+
+  globalThis.fetch = async (input, init) => {
+    requestedUrl = String(input)
+    requestedAuthorization = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? '')
+    return new Response(JSON.stringify({
+      data: [
+        { id: 'glm-5.1', name: 'GLM-5.1' },
+        { id: 'embedding-3', name: 'Embedding' },
+      ],
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+  }
+
+  try {
+    const result = await listProviderModels({
+      providerId: 'zai',
+      apiKey: 'zai-key',
+    })
+
+    assert.equal(requestedUrl, 'https://api.z.ai/api/paas/v4/models')
+    assert.equal(requestedAuthorization, 'Bearer zai-key')
+    assert.deepEqual(result, [
+      { id: 'glm-5.1', name: 'GLM-5.1' },
+    ])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

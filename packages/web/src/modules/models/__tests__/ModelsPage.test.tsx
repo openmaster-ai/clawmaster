@@ -172,6 +172,82 @@ describe('ModelsPage', () => {
     })
   })
 
+  it('lists GLM as a native provider in the add panel and can submit it', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add Provider' }))
+    expect(await screen.findByRole('heading', { name: 'Add Provider' })).toBeInTheDocument()
+
+    const panel = within(getElementById('models-add-provider'))
+
+    fireEvent.click(panel.getByRole('button', { name: 'GLM (Z.AI)' }))
+    expect(screen.getByRole('link', { name: 'Get GLM (Z.AI) API Key →' })).toHaveAttribute(
+      'href',
+      'https://z.ai/manage-apikey/apikey-list',
+    )
+    expect(screen.getAllByText('GLM-5.1 / GLM-5 / GLM-5 Turbo').length).toBeGreaterThan(0)
+
+    fireEvent.change(screen.getByPlaceholderText('Enter GLM (Z.AI) API Key'), {
+      target: { value: 'zai-key' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Verify & Add' }))
+
+    await waitFor(() => {
+      expect(mockTestApiKey).toHaveBeenCalledWith('zai', 'zai-key', undefined)
+    })
+    await waitFor(() => {
+      expect(mockSetApiKey).toHaveBeenCalledWith('zai', 'zai-key', undefined)
+    })
+  })
+
+  it('loads the native GLM live catalog for configured Z.AI providers', async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      agents: {
+        defaults: {
+          model: { primary: 'zai/glm-5.1' },
+          imageGenerationModel: { primary: '' },
+        },
+      },
+      models: {
+        providers: {
+          zai: {
+            apiKey: 'zai-key',
+            api: 'openai-completions',
+            baseUrl: 'https://api.z.ai/api/paas/v4',
+            models: [{ id: 'glm-5.1', name: 'GLM-5.1' }],
+          },
+        },
+      },
+    })
+    mockGetProviderModelCatalog.mockResolvedValueOnce({
+      success: true,
+      data: [
+        { id: 'glm-5.1', name: 'GLM-5.1' },
+        { id: 'glm-4.6', name: 'GLM-4.6' },
+      ],
+      error: null,
+    })
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+    expect(screen.getByText('GLM (Z.AI)')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockGetProviderModelCatalog).toHaveBeenCalledWith({
+        providerId: 'zai',
+        apiKey: 'zai-key',
+        baseUrl: 'https://api.z.ai/api/paas/v4',
+      })
+    })
+
+    fireEvent.click(within(getProviderCardByLabel('GLM (Z.AI)')).getByRole('button', { name: 'Choose Model' }))
+    const picker = getElementById('models-provider-picker-zai')
+    expect(within(picker!).getByText('Live catalog')).toBeInTheDocument()
+    expect(within(picker!).getByRole('button', { name: /GLM-4\.6 glm-4\.6/ })).toBeInTheDocument()
+  })
+
   it('lists ERNIE-Image in the expanded provider catalog and surfaces text-to-image guidance', async () => {
     mockGetConfig.mockResolvedValueOnce({
       agents: {

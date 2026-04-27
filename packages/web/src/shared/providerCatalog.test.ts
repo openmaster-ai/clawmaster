@@ -157,4 +157,40 @@ describe('providerCatalog', () => {
       expect(request?.url).toBe('https://open.bigmodel.cn/api/paas/v4/models')
     })
   })
+
+  describe('zai catalog', () => {
+    it('buildProviderCatalogRequest targets the native GLM catalog endpoint with Bearer auth', () => {
+      const request = buildProviderCatalogRequest({
+        providerId: 'zai',
+        apiKey: 'zai-key',
+      })
+
+      expect(request).toEqual({
+        url: 'https://api.z.ai/api/paas/v4/models',
+        headers: { Authorization: 'Bearer zai-key' },
+      })
+    })
+
+    it('assertSafeProviderCatalogBaseUrl accepts the official Z.AI base URL', () => {
+      expect(() =>
+        assertSafeProviderCatalogBaseUrl('zai', 'https://api.z.ai/api/paas/v4'),
+      ).not.toThrow()
+    })
+
+    it('filters the native GLM catalog to text model ids', () => {
+      const result = normalizeProviderCatalogResponse('zai', {
+        data: [
+          { id: 'glm-5.1', name: 'GLM-5.1' },
+          { id: 'glm-4.6', name: 'GLM-4.6' },
+          { id: 'embedding-3', name: 'Embedding' },
+          { id: 'glm-image', name: 'GLM Image' },
+        ],
+      })
+
+      expect(result).toEqual([
+        { id: 'glm-5.1', name: 'GLM-5.1' },
+        { id: 'glm-4.6', name: 'GLM-4.6' },
+      ])
+    })
+  })
 })

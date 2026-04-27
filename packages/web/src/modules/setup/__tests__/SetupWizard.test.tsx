@@ -541,6 +541,44 @@ describe('SetupWizard', () => {
       })
     })
 
+    it('configures Z.AI GLM as a native provider in the wizard', async () => {
+      render(<SetupWizard onComplete={() => {}} />)
+
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText('GLM (Z.AI)'))
+      expect(screen.getByRole('link', { name: 'Get GLM (Z.AI) API Key →' })).toHaveAttribute(
+        'href',
+        'https://z.ai/manage-apikey/apikey-list',
+      )
+      fireEvent.change(screen.getByPlaceholderText(/Enter GLM \(Z\.AI\) API Key/i), {
+        target: { value: 'zai-key' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /Validate & Continue/i }))
+
+      await waitFor(() => {
+        expect(mockSetupAdapter.onboarding.testApiKey).toHaveBeenCalledWith(
+          'zai',
+          'zai-key',
+          'https://api.z.ai/api/paas/v4',
+        )
+      })
+      await waitFor(() => {
+        expect(mockSetupAdapter.onboarding.setApiKey).toHaveBeenCalledWith(
+          'zai',
+          'zai-key',
+          'https://api.z.ai/api/paas/v4',
+        )
+      })
+      await waitFor(() => {
+        expect(mockGetProviderModelCatalogResult).toHaveBeenCalledWith({
+          providerId: 'zai',
+          apiKey: 'zai-key',
+          baseUrl: 'https://api.z.ai/api/paas/v4',
+        })
+      })
+    })
+
     it('requires revalidation when the API key changes after validation', async () => {
       render(<SetupWizard onComplete={() => {}} />)
 
