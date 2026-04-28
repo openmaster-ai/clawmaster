@@ -5,6 +5,7 @@ import express from 'express'
 import { registerDomainRoutes, registerDomainJsonRoutes, attachLogsStreamServer } from './routes/index.js'
 import { requireServiceAuth } from './serviceAuth.js'
 import { syncInstalledBundledSkills } from './services/bundledSkills.js'
+import { isGatewayWatchdogEnabledByEnv, startGatewayWatchdog, stopGatewayWatchdog } from './services/gatewayService.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CLAWPROBE_COST_DIGEST_SKILL_ROOT = path.resolve(__dirname, '../../../bundled-skills/clawprobe-cost-digest')
@@ -92,6 +93,14 @@ export function startServer() {
       : 'UI assets not found; API only'
     console.log(`ClawMaster service listening on http://${host}:${port} (${uiStatus})`)
   })
+
+  if (isGatewayWatchdogEnabledByEnv()) {
+    const status = startGatewayWatchdog()
+    console.log(`ClawMaster OpenClaw gateway safeguard enabled (interval ${status.intervalMs}ms)`)
+    server.once('close', () => {
+      stopGatewayWatchdog()
+    })
+  }
 
   attachLogsStreamServer(server)
   return server

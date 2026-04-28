@@ -123,6 +123,30 @@ describe('GatewayPage', () => {
     expect(await screen.findByText('Token copied')).toBeInTheDocument()
   })
 
+  it('shows the service watchdog safeguard state when available', async () => {
+    mockGetGatewayStatus.mockResolvedValue({
+      success: true,
+      data: {
+        running: true,
+        port: 18789,
+        watchdog: {
+          enabled: true,
+          state: 'healthy',
+          intervalMs: 30000,
+          restartCount: 2,
+          lastCheckAt: '2026-04-28T00:00:00.000Z',
+        },
+      },
+    })
+
+    renderGatewayPage()
+
+    expect((await screen.findAllByText('Auto-restart enabled')).length).toBeGreaterThan(0)
+    expect(screen.getByText('Healthy')).toBeInTheDocument()
+    expect(screen.getByText('ClawMaster service monitors OpenClaw gateway and restarts it after unexpected downtime.')).toBeInTheDocument()
+    expect(screen.getAllByText('2').length).toBeGreaterThan(0)
+  })
+
   it('starts a stopped gateway and refreshes the runtime controls', async () => {
     mockGetGatewayStatus
       .mockResolvedValueOnce({ success: true, data: { running: false, port: 18789 } })
