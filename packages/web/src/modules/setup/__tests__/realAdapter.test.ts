@@ -312,6 +312,29 @@ describe('realSetupAdapter', () => {
     )
   })
 
+  it('writes Baidu Qianfan Coding Plan as a BCE OpenAI-compatible provider', async () => {
+    vi.mocked(setConfigResult).mockResolvedValue({
+      success: true,
+      data: undefined,
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.setApiKey('baiduqianfancodingplan', 'bce-test-key'),
+    ).resolves.toBeUndefined()
+
+    expect(setConfigResult).toHaveBeenCalledWith('models.providers.baiduqianfancodingplan', {
+      apiKey: 'bce-test-key',
+      api: 'openai-completions',
+      baseUrl: 'https://qianfan.baidubce.com/v2/coding',
+      models: [
+        { id: 'qianfan-code-latest', name: 'Qianfan Code Latest' },
+        { id: 'qwen3-coder-480b-a35b-instruct', name: 'Qwen3 Coder 480B A35B Instruct' },
+        { id: 'qwen3-coder-30b-a3b-instruct', name: 'Qwen3 Coder 30B A3B Instruct' },
+      ],
+    })
+  })
+
   it('throws when the ERNIE-Image runtime plugin root cannot be resolved', async () => {
     vi.mocked(setConfigResult).mockResolvedValue({
       success: true,
@@ -768,6 +791,33 @@ describe('realSetupAdapter', () => {
       },
       body: JSON.stringify({
         model: 'ernie-5.0-thinking-preview',
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 1,
+      }),
+      timeoutMs: 10000,
+    })
+  })
+
+  it('probes Baidu Qianfan Coding Plan through the BCE chat completions endpoint', async () => {
+    vi.mocked(probeHttpStatusResult).mockResolvedValue({
+      success: true,
+      data: { ok: true, status: 200 },
+      error: null,
+    })
+
+    await expect(
+      realSetupAdapter.onboarding.testApiKey('baiduqianfancodingplan', 'bce-test-key'),
+    ).resolves.toBe(true)
+
+    expect(probeHttpStatusResult).toHaveBeenCalledWith({
+      url: 'https://qianfan.baidubce.com/v2/coding/chat/completions',
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer bce-test-key',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'qianfan-code-latest',
         messages: [{ role: 'user', content: 'hi' }],
         max_tokens: 1,
       }),

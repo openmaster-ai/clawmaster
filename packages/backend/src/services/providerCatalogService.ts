@@ -23,6 +23,7 @@ const OPENAI_COMPATIBLE_PROVIDER_DEFAULTS: Record<string, string> = {
   'kimi-coding': 'https://api.moonshot.cn/v1',
   siliconflow: 'https://api.siliconflow.cn/v1',
   'baidu-aistudio': 'https://aistudio.baidu.com/llm/lmapi/v3',
+  baiduqianfancodingplan: 'https://qianfan.baidubce.com/v2/coding',
   zai: 'https://api.z.ai/api/paas/v4',
   openrouter: 'https://openrouter.ai/api/v1',
   cerebras: 'https://api.cerebras.ai/v1',
@@ -190,6 +191,16 @@ function filterProviderCatalogModels(providerId: string, models: ProviderCatalog
       return models.filter((model) => !/(embed|moderation)/i.test(model.id))
     case 'baidu-aistudio':
       return models.filter((model) => !/(embedding|bge|stable-diffusion|infer-|sft-)/i.test(model.id))
+    case 'baiduqianfancodingplan': {
+      const codingModels = models.filter((model) =>
+        /(?:qianfan-code|coder|codellama|sqlcoder)/i.test(model.id) &&
+        !/(embedding|bge|image|ocr|stable-diffusion|wan-|vl)/i.test(model.id),
+      )
+      if (!codingModels.some((model) => model.id === 'qianfan-code-latest')) {
+        codingModels.unshift({ id: 'qianfan-code-latest', name: 'Qianfan Code Latest' })
+      }
+      return codingModels
+    }
     case 'zai':
       return models.filter((model) => /^glm-/i.test(model.id) && !/(embedding|image|ocr)/i.test(model.id))
     default:

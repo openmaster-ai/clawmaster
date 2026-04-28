@@ -95,7 +95,7 @@ export interface OnboardingState {
 }
 
 export const DEFAULT_ONBOARDING_STATE: OnboardingState = {
-  provider: 'baidu-aistudio',
+  provider: 'baiduqianfancodingplan',
   apiKey: '',
   customBaseUrl: '',
   model: '',
@@ -335,6 +335,30 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     ],
     defaultModel: 'ernie-5.0-thinking-preview',
   },
+  baiduqianfancodingplan: {
+    label: 'Baidu Qianfan Coding Plan',
+    labelByLocale: {
+      zh: '百度千帆 Coding Plan',
+      en: 'Baidu Qianfan Coding Plan',
+      ja: 'Baidu Qianfan Coding Plan',
+    },
+    api: 'openai-completions',
+    keyUrl: 'https://cloud.baidu.com/doc/qianfan/s/Rmn2ms2nm',
+    credentialLabel: 'BCE API Key',
+    credentialLabelByLocale: {
+      zh: 'BCE API Key',
+      en: 'BCE API Key',
+      ja: 'BCE APIキー',
+    },
+    noteKey: 'providers.baiduQianfanCodingPlanNote',
+    baseUrl: 'https://qianfan.baidubce.com/v2/coding',
+    models: [
+      { id: 'qianfan-code-latest', name: 'Qianfan Code Latest' },
+      { id: 'qwen3-coder-480b-a35b-instruct', name: 'Qwen3 Coder 480B A35B Instruct' },
+      { id: 'qwen3-coder-30b-a3b-instruct', name: 'Qwen3 Coder 30B A3B Instruct' },
+    ],
+    defaultModel: 'qianfan-code-latest',
+  },
   'baidu-aistudio-image': {
     label: 'ERNIE-Image',
     labelByLocale: {
@@ -521,7 +545,7 @@ export const TEXT_PROVIDER_TIERS: readonly ProviderTier[] = [
   {
     id: 'sponsors',
     labelKey: 'providers.tierInvitedSponsors',
-    members: ['baidu-aistudio'],
+    members: ['baiduqianfancodingplan', 'baidu-aistudio'],
   },
   {
     id: 'featured',
@@ -570,6 +594,7 @@ export const PRIMARY_PROVIDERS = TEXT_PROVIDER_TIERS.flatMap((tier) => [
 export const PRIMARY_IMAGE_PROVIDERS = ['baidu-aistudio-image', 'google-image', 'openai-image'] as const
 
 export const PROVIDER_BADGES: Partial<Record<keyof typeof PROVIDERS, ProviderBadgeTone>> = {
+  baiduqianfancodingplan: 'golden-sponsor',
   'baidu-aistudio': 'golden-sponsor',
   'baidu-aistudio-image': 'golden-sponsor',
 }

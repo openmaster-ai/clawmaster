@@ -101,3 +101,42 @@ test('listProviderModels uses the native Z.AI GLM catalog endpoint', async () =>
     globalThis.fetch = originalFetch
   }
 })
+
+test('listProviderModels uses the Baidu BCE Qianfan coding catalog endpoint', async () => {
+  const originalFetch = globalThis.fetch
+  let requestedUrl = ''
+  let requestedAuthorization = ''
+
+  globalThis.fetch = async (input, init) => {
+    requestedUrl = String(input)
+    requestedAuthorization = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? '')
+    return new Response(JSON.stringify({
+      data: [
+        { id: 'ernie-4.5-turbo-128k', name: 'ERNIE 4.5 Turbo' },
+        { id: 'qwen3-coder-480b-a35b-instruct', name: 'Qwen3 Coder 480B' },
+        { id: 'qwen3-embedding-4b', name: 'Qwen3 Embedding' },
+      ],
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+  }
+
+  try {
+    const result = await listProviderModels({
+      providerId: 'baiduqianfancodingplan',
+      apiKey: 'bce-key',
+    })
+
+    assert.equal(requestedUrl, 'https://qianfan.baidubce.com/v2/coding/models')
+    assert.equal(requestedAuthorization, 'Bearer bce-key')
+    assert.deepEqual(result, [
+      { id: 'qianfan-code-latest', name: 'Qianfan Code Latest' },
+      { id: 'qwen3-coder-480b-a35b-instruct', name: 'Qwen3 Coder 480B' },
+    ])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

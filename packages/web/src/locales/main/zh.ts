@@ -306,6 +306,7 @@ export default {
   "providers.tierFeatured": "推荐提供商",
   "providers.tierFeaturedMore": "其他提供商（{{count}}）",
   "providers.tierCompatibleAndLocal": "兼容端点 · 本地",
+  "providers.baiduQianfanCodingPlanNote": "使用百度 BCE 千帆 Coding Plan 的 OpenAI 兼容代码模型端点。",
   "providers.ernieQuotaNote": "注册后可领取 100 万 Tokens，完善用户资料后再领取 100 万 Tokens。",
   "providers.ernieImageNote": "与文心大模型共用同一枚 Baidu AI Studio 令牌。验证时会实际发起一次图像生成请求。",
   "providers.ernieImageGuide": "这个提供商用于图像生成，不要把它当作智能体对话主模型。",

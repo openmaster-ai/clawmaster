@@ -106,24 +106,25 @@ describe('ModelsPage', () => {
     expect(within(firstRun).getByText('Text providers')).toBeInTheDocument()
     expect(within(firstRun).getByText('Image providers')).toBeInTheDocument()
     // First-run grid surfaces the top 4 providers from PRIMARY_PROVIDERS:
-    // ERNIE LLM API plus the default featured trio (OpenAI, Anthropic, Gemini).
+    // invited sponsors first, then the default featured providers.
+    expect(within(firstRun).getByText('Baidu Qianfan Coding Plan')).toBeInTheDocument()
     expect(within(firstRun).getByText('ERNIE LLM API')).toBeInTheDocument()
     expect(within(firstRun).getByText('OpenAI')).toBeInTheDocument()
     expect(within(firstRun).getByText('Anthropic')).toBeInTheDocument()
-    expect(within(firstRun).getByText('Google Gemini')).toBeInTheDocument()
+    expect(within(firstRun).queryByText('Google Gemini')).not.toBeInTheDocument()
     expect(within(firstRun).getByText('ERNIE-Image')).toBeInTheDocument()
     expect(within(firstRun).getByText('Gemini Image')).toBeInTheDocument()
     expect(within(firstRun).getByText('GPT Image')).toBeInTheDocument()
 
-    fireEvent.click(getProviderButtonByLabel('ERNIE LLM API'))
+    fireEvent.click(getProviderButtonByLabel('Baidu Qianfan Coding Plan'))
 
     expect(await screen.findByRole('heading', { name: 'Add Provider' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Get ERNIE LLM API Access Token →' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Get Baidu Qianfan Coding Plan BCE API Key →' })).toHaveAttribute(
       'href',
-      'https://aistudio.baidu.com/usercenter/token',
+      'https://cloud.baidu.com/doc/qianfan/s/Rmn2ms2nm',
     )
-    expect(screen.getByPlaceholderText('Enter ERNIE LLM API Access Token')).toBeInTheDocument()
-    expect(screen.getByText('Get 1,000,000 free tokens after registration, then another 1,000,000 after completing your profile.')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Enter Baidu Qianfan Coding Plan BCE API Key')).toBeInTheDocument()
+    expect(screen.getByText("Uses Baidu BCE Qianfan Coding Plan's OpenAI-compatible coding endpoint.")).toBeInTheDocument()
   })
 
   it('requires a base URL for providers that need a custom endpoint before verifying', async () => {
@@ -169,6 +170,36 @@ describe('ModelsPage', () => {
     })
     await waitFor(() => {
       expect(mockSetApiKey).toHaveBeenCalledWith('baidu-aistudio', 'bce-test-token', undefined)
+    })
+  })
+
+  it('lists Baidu Qianfan Coding Plan as an invited sponsor and can submit it', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add Provider' }))
+    expect(await screen.findByRole('heading', { name: 'Add Provider' })).toBeInTheDocument()
+
+    const panel = within(getElementById('models-add-provider'))
+
+    fireEvent.click(panel.getByRole('button', { name: /Baidu Qianfan Coding Plan/ }))
+    expect(screen.getByRole('link', { name: 'Get Baidu Qianfan Coding Plan BCE API Key →' })).toHaveAttribute(
+      'href',
+      'https://cloud.baidu.com/doc/qianfan/s/Rmn2ms2nm',
+    )
+    expect(screen.getAllByText('Qianfan Code Latest / Qwen3 Coder 480B A35B Instruct / Qwen3 Coder 30B A3B Instruct').length).toBeGreaterThan(0)
+
+    fireEvent.change(screen.getByPlaceholderText('Enter Baidu Qianfan Coding Plan BCE API Key'), {
+      target: { value: 'bce-test-key' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Verify & Add' }))
+
+    await waitFor(() => {
+      expect(mockTestApiKey).toHaveBeenCalledWith('baiduqianfancodingplan', 'bce-test-key', undefined)
+    })
+    await waitFor(() => {
+      expect(mockSetApiKey).toHaveBeenCalledWith('baiduqianfancodingplan', 'bce-test-key', undefined)
     })
   })
 
@@ -246,6 +277,52 @@ describe('ModelsPage', () => {
     const picker = getElementById('models-provider-picker-zai')
     expect(within(picker!).getByText('Live catalog')).toBeInTheDocument()
     expect(within(picker!).getByRole('button', { name: /GLM-4\.6 glm-4\.6/ })).toBeInTheDocument()
+  })
+
+  it('loads the BCE coding live catalog for configured Baidu Qianfan providers', async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      agents: {
+        defaults: {
+          model: { primary: 'baiduqianfancodingplan/qianfan-code-latest' },
+          imageGenerationModel: { primary: '' },
+        },
+      },
+      models: {
+        providers: {
+          baiduqianfancodingplan: {
+            apiKey: 'bce-key',
+            api: 'openai-completions',
+            baseUrl: 'https://qianfan.baidubce.com/v2/coding',
+            models: [{ id: 'qianfan-code-latest', name: 'Qianfan Code Latest' }],
+          },
+        },
+      },
+    })
+    mockGetProviderModelCatalog.mockResolvedValueOnce({
+      success: true,
+      data: [
+        { id: 'qianfan-code-latest', name: 'Qianfan Code Latest' },
+        { id: 'qwen3-coder-480b-a35b-instruct', name: 'Qwen3 Coder 480B' },
+      ],
+      error: null,
+    })
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'Model Configuration' })).toBeInTheDocument()
+    expect(screen.getByText('Baidu Qianfan Coding Plan')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockGetProviderModelCatalog).toHaveBeenCalledWith({
+        providerId: 'baiduqianfancodingplan',
+        apiKey: 'bce-key',
+        baseUrl: 'https://qianfan.baidubce.com/v2/coding',
+      })
+    })
+
+    fireEvent.click(within(getProviderCardByLabel('Baidu Qianfan Coding Plan')).getByRole('button', { name: 'Choose Model' }))
+    const picker = getElementById('models-provider-picker-baiduqianfancodingplan')
+    expect(within(picker!).getByText('Live catalog')).toBeInTheDocument()
+    expect(within(picker!).getByRole('button', { name: /Qwen3 Coder 480B qwen3-coder-480b-a35b-instruct/ })).toBeInTheDocument()
   })
 
   it('lists ERNIE-Image in the expanded provider catalog and surfaces text-to-image guidance', async () => {
@@ -394,8 +471,10 @@ describe('ModelsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ Add Provider' }))
     const addPanel = getElementById('models-add-provider')
     const providerButtons = Array.from(addPanel.querySelectorAll<HTMLButtonElement>('[data-provider-id]'))
-    expect(providerButtons[0]?.dataset.providerId).toBe('baidu-aistudio')
-    expect(providerButtons[0]?.textContent).toContain('ERNIE LLM API')
+    expect(providerButtons[0]?.dataset.providerId).toBe('baiduqianfancodingplan')
+    expect(providerButtons[0]?.textContent).toContain('Baidu Qianfan Coding Plan')
+    expect(providerButtons[1]?.dataset.providerId).toBe('baidu-aistudio')
+    expect(providerButtons[1]?.textContent).toContain('ERNIE LLM API')
   })
 
   it('shows the canonical ERNIE catalog on configured cards even when saved config still has the old model list', async () => {

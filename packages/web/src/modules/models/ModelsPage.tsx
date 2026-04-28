@@ -259,7 +259,7 @@ export default function Models() {
   const [, setModels] = useState<ModelInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
-  const [preferredProvider, setPreferredProvider] = useState('baidu-aistudio')
+  const [preferredProvider, setPreferredProvider] = useState('baiduqianfancodingplan')
 
   const loadData = useCallback(async () => {
     try {
@@ -314,7 +314,7 @@ export default function Models() {
         <button
           id="models-add-provider-trigger"
           onClick={() => {
-            setPreferredProvider('baidu-aistudio')
+            setPreferredProvider('baiduqianfancodingplan')
             setShowAdd(true)
           }}
           className="button-primary"

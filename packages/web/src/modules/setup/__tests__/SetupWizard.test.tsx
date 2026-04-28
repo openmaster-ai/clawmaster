@@ -351,11 +351,12 @@ describe('SetupWizard', () => {
   // ──────────────────────────────────────────────────────
 
   describe('Step 2: Provider selection', () => {
-    it('shows ERNIE under the invited sponsors tier', async () => {
+    it('shows Baidu sponsor providers under the invited sponsors tier', async () => {
       render(<SetupWizard onComplete={() => {}} />)
 
       await screen.findByText('Configure LLM Provider')
       expect(screen.getByText('Invited Sponsors')).toBeInTheDocument()
+      expect(screen.getByText('Baidu Qianfan Coding Plan')).toBeInTheDocument()
       expect(screen.getByText('ERNIE LLM API')).toBeInTheDocument()
     })
 
@@ -373,6 +374,7 @@ describe('SetupWizard', () => {
 
       await screen.findByText('Configure LLM Provider')
       // Tier 1 — invited sponsors
+      expect(screen.getByText('Baidu Qianfan Coding Plan')).toBeInTheDocument()
       expect(screen.getByText('ERNIE LLM API')).toBeInTheDocument()
       // Tier 2 featured (visible by default)
       expect(screen.getByText('OpenAI')).toBeInTheDocument()
@@ -575,6 +577,45 @@ describe('SetupWizard', () => {
           providerId: 'zai',
           apiKey: 'zai-key',
           baseUrl: 'https://api.z.ai/api/paas/v4',
+        })
+      })
+    })
+
+    it('configures Baidu Qianfan Coding Plan as an invited sponsor provider', async () => {
+      render(<SetupWizard onComplete={() => {}} />)
+
+      await screen.findByText('Configure LLM Provider')
+
+      fireEvent.click(screen.getByText('Baidu Qianfan Coding Plan'))
+      expect(screen.getByRole('link', { name: 'Get Baidu Qianfan Coding Plan BCE API Key →' })).toHaveAttribute(
+        'href',
+        'https://cloud.baidu.com/doc/qianfan/s/Rmn2ms2nm',
+      )
+      expect(screen.getByText("Uses Baidu BCE Qianfan Coding Plan's OpenAI-compatible coding endpoint.")).toBeInTheDocument()
+      fireEvent.change(screen.getByPlaceholderText(/Enter Baidu Qianfan Coding Plan BCE API Key/i), {
+        target: { value: 'bce-test-key' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /Validate & Continue/i }))
+
+      await waitFor(() => {
+        expect(mockSetupAdapter.onboarding.testApiKey).toHaveBeenCalledWith(
+          'baiduqianfancodingplan',
+          'bce-test-key',
+          'https://qianfan.baidubce.com/v2/coding',
+        )
+      })
+      await waitFor(() => {
+        expect(mockSetupAdapter.onboarding.setApiKey).toHaveBeenCalledWith(
+          'baiduqianfancodingplan',
+          'bce-test-key',
+          'https://qianfan.baidubce.com/v2/coding',
+        )
+      })
+      await waitFor(() => {
+        expect(mockGetProviderModelCatalogResult).toHaveBeenCalledWith({
+          providerId: 'baiduqianfancodingplan',
+          apiKey: 'bce-test-key',
+          baseUrl: 'https://qianfan.baidubce.com/v2/coding',
         })
       })
     })

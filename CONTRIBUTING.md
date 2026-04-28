@@ -54,6 +54,8 @@ Before opening a provider PR:
 
 - Open or link an issue that identifies the provider, API docs, default base URL, API-key page, supported model IDs, and whether the API is native OpenAI-compatible.
 - Confirm the OpenClaw runtime provider id. Use that id in ClawMaster model refs (`provider/model`) unless there is already a documented alias.
+- If the vendor docs include an OpenClaw config snippet, copy the exact provider id, `baseUrl`, `api` mode, and default model into the issue before coding.
+- Test credentials may be used for local smoke checks, but never commit real keys, screenshots that reveal keys, terminal logs containing keys, or `.env` files.
 - Do not add dependencies for provider integration. Provider setup should use existing adapters, fetch helpers, and config writers.
 
 Provider UI source of truth:
@@ -71,12 +73,14 @@ Live model catalogs:
 - Add the provider default base URL to both `packages/web/src/shared/providerCatalog.ts` and `packages/backend/src/services/providerCatalogService.ts` when the Models page should fetch `/models` in desktop and web modes.
 - Keep catalog allowlists strict. Non-custom providers must only accept their documented host, protocol, port, and base path. The custom OpenAI-compatible provider is the only path that may accept arbitrary public hosts.
 - Add response filtering when a provider returns embeddings, image models, OCR models, moderation models, or other non-chat entries in the same catalog.
+- If `/models` returns a broad catalog or omits a documented default alias, keep the documented fallback `models` list in `PROVIDERS` and filter the live catalog to the provider's intended capability. For example, coding-plan providers should not surface unrelated image, OCR, embedding, or generic chat entries.
 - Keep frontend and backend catalog behavior equivalent; the backend service powers web mode, while the frontend helper powers Tauri mode.
 
 Validation and persistence:
 
 - Provider key validation is implemented in `packages/web/src/modules/setup/adapters.ts`.
 - OpenAI-compatible providers should work through the existing chat/completions probe and `/models` fallback. Do not add provider-specific HTTP code unless the provider is not compatible with the common flow.
+- Smoke-test the documented default model with `POST <baseUrl>/chat/completions` and, when catalog support is enabled, `GET <baseUrl>/models`. Record only status and sanitized findings in the issue or PR.
 - Saved provider config should include `apiKey`, `baseUrl`, `api` when needed, and the static fallback `models` list. The Models page uses that saved list when live catalog discovery is unavailable.
 - Default model refs must use the OpenClaw runtime provider id, for example `zai/glm-5.1`.
 
@@ -152,7 +156,7 @@ Every pull request must be tested before review:
 > [!WARNING]
 > PRs containing any of the following will be asked to remove them before merge:
 
-- **No screenshots or screen recordings** — post demos in [Discussions](https://github.com/openmaster-ai/clawmaster/discussions) instead.
+- **No committed screenshots or screen recordings** — UI PRs should include screenshots or short recordings in the PR body under **## Screenshots**, but those assets must not be committed to the repo.
 - **No test output logs** or captured terminal output pasted inline.
 - **No debug `console.log` calls** left in production code paths.
 - **No generated files**: `dist/`, `coverage/`, `*.tsbuildinfo`, `src-tauri/target/`.

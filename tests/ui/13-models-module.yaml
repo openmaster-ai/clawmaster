@@ -2,7 +2,7 @@ suite: models-module
 name: 模型配置功能
 description: |
   验证模型配置页面的完整功能：
-  提供商列表、赞助商优先级、添加提供商、ERNIE 文案与赠送额度、测试连接、凭证入口、API Key 脱敏、默认模型指示
+  提供商列表、赞助商优先级、百度千帆与 ERNIE 赞助商文案、添加提供商、测试连接、凭证入口、API Key 脱敏、默认模型指示
 
 preconditions:
   - dev server 已启动（{BASE_URL} 可访问）
@@ -56,14 +56,14 @@ cases:
     assertions:
       - 展开"添加提供商"面板
       - 面板顶部单独显示"金牌赞助"区块
-      - '“金牌赞助”区块包含 文心大模型'
+      - '“金牌赞助”区块包含 百度千帆 Coding Plan 与 文心大模型'
       - 赞助商区块与"推荐提供商"区块分开呈现
-      - 默认选中文心大模型
+      - 默认选中百度千帆 Coding Plan
       - 显示密码类型凭证输入框
       - 显示"验证并添加"按钮
       - 显示"取消"按钮
-      - 显示"获取 文心大模型 令牌 →"链接
-      - 显示"注册后可领取 100 万 Tokens，完善用户资料后再领取 100 万 Tokens。"
+      - 显示"获取 百度千帆 Coding Plan BCE API Key →"链接
+      - 显示"使用百度 BCE 千帆 Coding Plan 的 OpenAI 兼容代码模型端点。"
 
   - id: mod-03
     name: ERNIE 令牌入口与文案
@@ -72,6 +72,10 @@ cases:
         target: text("添加提供商")
       - action: wait
         duration: 300ms
+      - action: click
+        target: text("文心大模型")
+      - action: wait
+        duration: 200ms
       - action: screenshot
         name: models-ernie-token-shortcut
     assertions:
@@ -129,7 +133,7 @@ cases:
       - action: observe
         target: 提供商选择区域
     assertions:
-      - 默认显示主要提供商（文心大模型、OpenAI、Anthropic、Google 等）
+      - 默认显示主要提供商（百度千帆 Coding Plan、文心大模型、OpenAI、Anthropic 等）
       - 显示"更多 (N 个)"链接
       - 点击后展开全部提供商列表
       - 展开后显示 Ollama、DeepSeek、智谱 等全部选项
@@ -142,6 +146,10 @@ cases:
         target: text("添加提供商")
       - action: wait
         duration: 300ms
+      - action: click
+        target: text("文心大模型")
+      - action: wait
+        duration: 200ms
       - action: fill
         target: input[placeholder*="令牌"], input[placeholder*="Access Token"]
         value: invalid-test-token
@@ -161,6 +169,10 @@ cases:
         target: text("添加提供商")
       - action: wait
         duration: 300ms
+      - action: click
+        target: text("文心大模型")
+      - action: wait
+        duration: 200ms
       - action: fill
         target: input[placeholder*="令牌"], input[placeholder*="Access Token"]
         value: temporary-token
@@ -195,5 +207,5 @@ cases:
       - action: screenshot
         name: models-reopen-panel
     assertions:
-      - 重新打开后面板默认仍指向"文心大模型"
-      - 再次显示"获取 文心大模型 令牌 →"
+      - 重新打开后面板默认仍指向"百度千帆 Coding Plan"
+      - 再次显示"获取 百度千帆 Coding Plan BCE API Key →"

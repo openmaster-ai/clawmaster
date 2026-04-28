@@ -306,6 +306,7 @@ export default {
   "providers.tierFeatured": "Featured providers",
   "providers.tierFeaturedMore": "More providers ({{count}})",
   "providers.tierCompatibleAndLocal": "Compatible & local",
+  "providers.baiduQianfanCodingPlanNote": "Uses Baidu BCE Qianfan Coding Plan's OpenAI-compatible coding endpoint.",
   "providers.ernieQuotaNote": "Get 1,000,000 free tokens after registration, then another 1,000,000 after completing your profile.",
   "providers.ernieImageNote": "Uses the same Baidu AI Studio Access Token. Verification performs a real image generation request.",
   "providers.ernieImageGuide": "Use this provider for image generation, not as the primary agent chat model.",

@@ -306,6 +306,7 @@ export default {
   "providers.tierFeatured": "おすすめプロバイダー",
   "providers.tierFeaturedMore": "他のプロバイダー（{{count}}）",
   "providers.tierCompatibleAndLocal": "互換エンドポイント・ローカル",
+  "providers.baiduQianfanCodingPlanNote": "Baidu BCE Qianfan Coding Plan の OpenAI 互換コードモデルエンドポイントを使います。",
   "providers.ernieQuotaNote": "登録後に100万トークン、プロフィール情報の入力完了後にさらに100万トークンを受け取れます。",
   "providers.ernieImageNote": "ERNIE LLM API と同じ Baidu AI Studio アクセストークンを使います。検証では実際の画像生成リクエストを送信します。",
   "providers.ernieImageGuide": "このプロバイダーは画像生成用です。エージェントの主会話モデルには使わないでください。",
