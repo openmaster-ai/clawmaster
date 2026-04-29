@@ -13,6 +13,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/openmaster-ai/clawmaster/milestone/1"><img src="https://img.shields.io/badge/🎯_Next_Milestone-v0.4.0-6f42c1?style=for-the-badge" alt="下一个里程碑: v0.4.0" /></a>
+</p>
+
+<p align="center">
   <img src="https://raw.githubusercontent.com/openmaster-ai/brand/main/logos/clawmaster/static/amber.svg" width="28" alt="ClawMaster amber mark" />
   &nbsp;
   <img src="https://img.shields.io/badge/Brand-OpenMaster_Universe-F5A623?style=flat" alt="OpenMaster Universe Brand" />
@@ -35,8 +39,7 @@
   <a href="https://github.com/openmaster-ai/clawmaster/releases"><strong>📦 Releases</strong></a> &nbsp;·&nbsp;
   <a href="https://github.com/openmaster-ai/clawmaster/discussions"><strong>💬 Discussions</strong></a> &nbsp;·&nbsp;
   <a href="https://github.com/openmaster-ai/clawmaster/issues"><strong>🐛 Issues</strong></a> &nbsp;·&nbsp;
-  <a href="https://deepwiki.com/openmaster-ai/clawmaster"><strong>📘 Ask DeepWiki</strong></a> &nbsp;·&nbsp;
-  <a href="https://discord.gg/openclaw"><strong>Discord</strong></a>
+  <a href="https://deepwiki.com/openmaster-ai/clawmaster"><strong>📘 Ask DeepWiki</strong></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
   <a href="./README.md">English</a> &nbsp;·&nbsp; 中文 &nbsp;·&nbsp; <a href="./README_JP.md">日本語</a>
 </p>
@@ -59,7 +62,7 @@ clawmaster doctor            # 检查环境
 ```
 
 > [!NOTE]
-> 当前版本为 **v0.3.0**。安装命令：`npm i -g clawmaster`。
+> 当前版本为 **v0.3.1**。下一个里程碑是 [**v0.4.0**](https://github.com/openmaster-ai/clawmaster/milestone/1) —— 已经合并的功能会随发布一起落地。
 
 ### 桌面应用（Beta 测试版）
 
@@ -97,57 +100,21 @@ npm run tauri:dev            # 桌面应用
 3. 按需添加频道、插件、技能或 MCP 服务。
 4. 如需运行时观测，启用网关或可观测模块。
 
+### 选一条上手路径
+
+- 🧪 **动手实操** —— 跟着 [**clawmaster-workshop**](https://github.com/openmaster-ai/clawmaster-workshop) 练一遍 —— 三语（EN / 中文 / 日本語）任务按六大核心能力分组，还有把任务串成真实场景的日期化实验。想*动手做*的首选。
+- 🖼️ **图示导览** —— 看下面的[产品功能总览](#产品功能总览)，每张截图对应一个具体任务，不装就能看懂产品在做什么。
+
 ## 为什么是 ClawMaster
 
-大多数 OpenClaw 工具，重点都停留在”把配置配对”。ClawMaster 是你**真正走进日常生活的 OpenClaw 伙伴** —— 不仅帮助用户完成配置，更重要的是帮助普通、非技术用户，开始把 OpenClaw 实际用于日常工作与生活。
-
-这意味着 ClawMaster 不只是：
-- 更安全地编辑配置，
-- 更方便地连接模型和频道，
-- 更直观地观察运行状态，
-
-还要进一步做到：
-- 让上手过程更友好，
-- 把复杂能力包装成可理解、可执行的引导式流程，
-- 逐步补充更清晰的引导、教学与工作流支持，帮助用户完成真实的工作与生活目标。
-
-**一句话定位：** ClawMaster 是连接 OpenClaw 强大能力与日常可用性的桥梁。
-
-## ClawMaster vs. 纯 CLI
-
-| | 仅 OpenClaw CLI | ClawMaster |
-|---|---|---|
-| 初始安装 | 手动编辑 `~/.openclaw/openclaw.json` | 向导引导完成 |
-| 供应商与模型配置 | 编辑 JSON，重启 | 表单 UI，实时校验 |
-| 频道接入 | 查阅文档，手动配置 | 各平台逐步引导 |
-| 可观测性 | 主要依赖 CLI 与日志 | 基于 ClawProbe 的面板与运行态视图 |
-| 记忆管理 | `powermem` CLI | 管理 UI |
-| 日常使用引导 | 主要靠自己摸索 | 正在逐步增强引导式体验 |
-| 多 Profile | 手动管理文件 | Profile 切换器 |
-| 桌面应用 | 无 | 有 — 提供 `.dmg` / `.msi` / `.AppImage` |
-| 自托管 Web 控制台 | 无 | 有 — Express，任何 Node.js 环境均可运行 |
+大多数 OpenClaw 工具都停在“把配置配对”。ClawMaster 是你**真正走进日常生活的 OpenClaw 伙伴** —— 是连接 OpenClaw 强大能力与日常可用性的桥梁。它面向这样的用户：想让 OpenClaw 在日常生活里真的有用（而不只是配好），不想天天跟 JSON 和终端打交道，或在替团队、家人管理 OpenClaw。
 
 ## 适合谁
 
-**「我不想只是把 OpenClaw 配好，我想让它真的能帮我做事。」**  
-ClawMaster 的核心目标，是缩短“安装完成”到“真实产出”之间的距离。
-
-**「我不是技术人员，但我也想拥有强大的 AI 私人助理。」**  
-产品会越来越强调引导式安装、引导式使用、结果导向学习，而不是默认用户熟悉 JSON、命令行和基础设施。
-
-**「我在帮团队、家人或客户管理 OpenClaw。」**  
-一个地方完成频道配置、运行状态查看，也让其他人更容易真正上手。
-
-**「我也需要更专业的能力管理界面。」**  
-你仍然可以获得模型管理、可观测、记忆、会话、插件、技能和 MCP 的完整能力。
-
-## 现在已经能做什么
-
-- **安装与 Profile** —— 检测 OpenClaw、安装缺失组件、创建或切换 Profile，快速引导到可用环境。
-- **模型与供应商** —— 配置 OpenAI 兼容或各家专有端点，校验 API Key，设置默认模型。
-- **网关与频道** —— 启动网关，跟随飞书、微信、Discord、Slack、Telegram、WhatsApp 的逐步接入向导。
-- **插件、技能与 MCP** —— 启用 / 禁用能力，安装精选项目，添加 MCP 服务，导入 MCP 定义。
-- **会话、记忆与可观测** —— 查看会话，管理记忆后端，追踪 Token 用量和费用估算。
+- **「想让 OpenClaw 真的能帮我做事，不只是配好。」** —— 缩短“安装完成”到“真实产出”的距离。
+- **「我不是技术人员，但也想有强大的 AI 助理。」** —— 引导式安装、引导式使用，不要求你懂 JSON。
+- **「我在帮团队或家人管 OpenClaw。」** —— 一个地方搞定频道、运行态、上手流程。
+- **「我在搭高级智能体工作流。」** —— 模型、可观测、记忆、会话、插件、技能、MCP 一站式。
 
 ## 产品功能总览
 
@@ -177,7 +144,7 @@ ClawMaster 的核心目标，是缩短“安装完成”到“真实产出”之
     </td>
     <td align="center">
       <a href="./docs/screenshots/page-memory.png"><img src="./docs/screenshots/page-memory.png" alt="记忆工作区" /></a><br/>
-      <sub><b>记忆</b> · PowerMem 驱动的知识工作区</sub>
+      <sub><b>记忆</b> · PowerMem 运行时，支持 seekdb / SQLite 降级</sub>
     </td>
     <td align="center">
       <a href="./docs/screenshots/page-mcp.png"><img src="./docs/screenshots/page-mcp.png" alt="MCP 服务器" /></a><br/>
@@ -190,15 +157,34 @@ ClawMaster 的核心目标，是缩短“安装完成”到“真实产出”之
   </tr>
 </table>
 
+## 记忆亮点
+
+记忆是**能省钱**能力的主干。我们基于 [**PowerMem**](https://github.com/oceanbase/powermem)（[Python](https://github.com/oceanbase/powermem) · [TypeScript SDK](https://github.com/ob-labs/powermem-ts) · [OpenClaw 插件](https://github.com/ob-labs/memory-powermem)）构建，而不是自己重造：
+
+- **原生 OpenClaw 公民** —— PowerMem 自带 OpenClaw 记忆插件，智能体每一轮自动 recall / capture。
+- **智能抽取，而不是堆积 chunk** —— 把对话蒸馏成持久事实，并用艾宾浩斯衰减模型驱动回忆，与我们“建了也要养”的方向高度契合。
+- **多智能体隔离开箱即用** —— 按用户 / 智能体 / 工作区自动隔离，无需自己搭身份系统。
+- **数据库级持久化** —— 与 [OceanBase seekdb](https://github.com/oceanbase/seekdb) 搭配可做向量 + 全文 + SQL 混合检索，SQLite 作为跨平台兜底。
+- **开源、多语言 SDK** —— 不绑定单一运行时；从 JS 到 Python 到 Go 的语义一致。
+
+**已经上线**
+
+- 托管 PowerMem 运行时 + OpenClaw 桥接，覆盖 Web、后端和桌面 —— 智能体每一轮开箱即用地自动 recall / capture。
+- 本地工作区导入 —— 把 markdown / `memory/` 导入托管 PowerMem，有 seekdb 时用 seekdb，其他情况降级到 SQLite。
+- 首个端到端记忆驱动技能：每日 npm 包下载摘要，支持周期同比对比。
+- 记忆相关的可观测：按会话花费、定时费用摘要、models.dev 定价。
+
+**下一步（v0.4.0）**：完整的 seekdb 混合检索，以及自维护的 LLM Wiki 模块 —— 每次投入都会让 Wiki 页面自动交叉链接并积累，艾宾浩斯衰减与新鲜度加权让内容保持“活着”。具体进展见 [v0.4.0 里程碑](https://github.com/openmaster-ai/clawmaster/milestone/1)。
+
 ## 路线图
 
 六大核心能力 —— 每一项都从基础设施走向日常可用：
 
 | # | 能力 | 状态 | 已有 | 下一步 |
 |---|---|---|---|---|
-| 1 | **能接管** | 可用 | 引导式向导、6+ LLM 供应商并校验 Key、6 种频道（飞书 / 微信 / Discord / Slack / Telegram / WhatsApp）、Profile 切换 | 一键环境迁移（[#1](https://github.com/openmaster-ai/clawmaster/issues/1)）、Windows + WSL2 一等支持 |
+| 1 | **能接管** | 可用 | 引导式向导、6+ LLM 供应商并校验 Key、6 种频道（飞书 / 微信 / Discord / Slack / Telegram / WhatsApp）、Profile 切换 | 一键环境迁移、Windows + WSL2 一等支持 |
 | 2 | **能观测** | 可用 | 基于 ClawProbe 的面板、按会话的费用与 Token 追踪、网关健康监控 | 历史花费分析、异常告警、多 Profile 对比 |
-| 3 | **能省钱** | 进行中 | PowerMem UI + FTS5 本地搜索、记忆工作区管理、自动降级到 markdown grep | 完整 seekdb 向量检索（[#12](https://github.com/openmaster-ai/clawmaster/issues/12)）、LLM Wiki —— 持续积累的知识库（[#49](https://github.com/openmaster-ai/clawmaster/issues/49)） |
+| 3 | **能省钱** | 进行中 | 托管 PowerMem 运行时 + OpenClaw 桥接、本地工作区导入、首个记忆驱动技能 —— 详见[记忆亮点](#记忆亮点) | 完整 seekdb 混合检索、自维护 LLM Wiki —— 详见 [v0.4.0 里程碑](https://github.com/openmaster-ai/clawmaster/milestone/1) |
 | 4 | **能应用** | 进行中 | PaddleOCR 流水线（上传 → 解析 → 结构化 Markdown）、版面感知提取 | 拍照 → 闪卡自动生成、发票提取模板、更多场景优先的引导式工作流 |
 | 5 | **能构建** | 规划中 | 插件 / 技能安装与开关、MCP 服务管理、技能安全审计 | 可视化智能体编排器、LangChain Deep Agents 集成、对话式智能体构建 |
 | 6 | **能守护** | 规划中 | Skill Guard 安全扫描（维度 / 严重性 / 风险评分）、基础能力门控 | API Key 加密保险箱、按 Profile 的花费上限、团队部署 RBAC |
@@ -291,8 +277,8 @@ clawmaster/
 |---|---|
 | [OpenClaw](https://github.com/openclaw/openclaw) | 核心运行时与配置模型 |
 | [ClawProbe](https://github.com/openclaw/clawprobe) | 可观测守护进程 |
-| [PowerMem](https://github.com/openclaw/powermem) | 记忆后端 |
-| [seekdb](https://github.com/openclaw/seekdb) | 检索与搜索工作流 |
+| [PowerMem](https://github.com/oceanbase/powermem) · [TS SDK](https://github.com/ob-labs/powermem-ts) | 记忆后端 |
+| [OceanBase seekdb](https://github.com/oceanbase/seekdb) | 检索与搜索工作流 |
 | [Tauri](https://tauri.app) | 桌面应用框架 |
 | [React](https://react.dev) | 前端 UI |
 | [Vite](https://vitejs.dev) | 前端工具链 |
