@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { execNpmCommand, execNpmInstallGlobalFile, execShellCommand } from './execOpenclaw.js'
+import { execNpmCommand, execNpmInstallGlobalFile } from './execOpenclaw.js'
 import { expandUserPath } from './paths.js'
 
 /** Block npm arg injection; allow typical semver / dist-tag characters only */
@@ -68,16 +68,16 @@ function compareVersionDesc(a: string, b: string): number {
 
 const MAX_VERSIONS_LIST = 120
 
-export async function fetchOpenclawNpmMeta(): Promise<{
+export async function fetchNpmPackageMeta(packageName: string): Promise<{
   versions: string[]
   distTags: Record<string, string>
 }> {
   const [vRes, tRes] = await Promise.all([
-    execShellCommand('npm view openclaw versions --json'),
-    execShellCommand('npm view openclaw dist-tags --json'),
+    execNpmCommand(['view', packageName, 'versions', '--json']),
+    execNpmCommand(['view', packageName, 'dist-tags', '--json']),
   ])
   if (vRes.code !== 0) {
-    throw new Error(vRes.stderr || vRes.stdout || 'npm view openclaw versions failed')
+    throw new Error(vRes.stderr || vRes.stdout || `npm view ${packageName} versions failed`)
   }
   let versions = parseVersionsJson(vRes.stdout)
   versions = [...new Set(versions)].sort(compareVersionDesc)
@@ -87,6 +87,20 @@ export async function fetchOpenclawNpmMeta(): Promise<{
   const distTags =
     tRes.code === 0 ? parseDistTagsJson(tRes.stdout) : {}
   return { versions, distTags }
+}
+
+export async function fetchOpenclawNpmMeta(): Promise<{
+  versions: string[]
+  distTags: Record<string, string>
+}> {
+  return fetchNpmPackageMeta('openclaw')
+}
+
+export async function fetchClawmasterNpmMeta(): Promise<{
+  versions: string[]
+  distTags: Record<string, string>
+}> {
+  return fetchNpmPackageMeta('clawmaster')
 }
 
 export async function npmInstallOpenclawGlobal(versionSpec: string): Promise<{

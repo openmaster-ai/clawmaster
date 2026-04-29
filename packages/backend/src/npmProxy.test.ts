@@ -50,3 +50,17 @@ test('applyConfiguredNpmRegistryArgs does not duplicate an explicit --registry f
     )
   })
 })
+
+test('applyConfiguredNpmRegistryArgs appends the configured registry to npm view commands', () => {
+  withTempHome((homeDir) => {
+    writeClawmasterSettings(
+      { npmProxy: { enabled: true } },
+      { homeDir, settingsPath: path.join(homeDir, '.clawmaster', 'settings.json') }
+    )
+
+    assert.deepEqual(
+      applyConfiguredNpmRegistryArgs(['view', 'clawmaster', 'dist-tags', '--json']),
+      ['view', 'clawmaster', 'dist-tags', '--json', '--registry', 'https://registry.npmmirror.com']
+    )
+  })
+})

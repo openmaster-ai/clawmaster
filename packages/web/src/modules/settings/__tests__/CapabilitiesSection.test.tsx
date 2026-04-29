@@ -247,12 +247,12 @@ describe('CapabilitiesSection', () => {
 
     renderSection()
 
-    const checkbox = await screen.findByRole('switch', { name: '使用 npm 镜像' })
+    const mirrorSwitch = await screen.findByRole('switch', { name: '使用 npm 镜像' })
     await waitFor(() => {
-      expect(checkbox).toHaveAttribute('aria-checked', 'true')
+      expect(mirrorSwitch).toHaveAttribute('aria-checked', 'true')
     })
 
-    fireEvent.click(checkbox)
+    fireEvent.click(mirrorSwitch)
     expect(screen.getByRole('button', { name: '安装' })).not.toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: '安装' }))
 
@@ -295,12 +295,12 @@ describe('CapabilitiesSection', () => {
 
     renderSection()
 
-    const checkbox = await screen.findByRole('switch', { name: '使用 npm 镜像' })
+    const mirrorSwitch = await screen.findByRole('switch', { name: '使用 npm 镜像' })
     await waitFor(() => {
-      expect(checkbox).toHaveAttribute('aria-checked', 'true')
+      expect(mirrorSwitch).toHaveAttribute('aria-checked', 'true')
     })
 
-    fireEvent.click(checkbox)
+    fireEvent.click(mirrorSwitch)
     const installBtn = screen.getByRole('button', { name: '安装' })
     fireEvent.click(installBtn)
     expect(installBtn).toBeDisabled()

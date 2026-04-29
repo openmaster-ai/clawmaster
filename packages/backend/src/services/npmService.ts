@@ -1,9 +1,13 @@
 import { bootstrapOpenclawAfterInstall } from '../openclawBootstrap.js'
-import { fetchOpenclawNpmMeta, npmInstallOpenclawFromLocalFile, npmInstallOpenclawGlobal } from '../npmOpenclaw.js'
+import { fetchClawmasterNpmMeta, fetchOpenclawNpmMeta, npmInstallOpenclawFromLocalFile, npmInstallOpenclawGlobal } from '../npmOpenclaw.js'
 import { reinstallOpenclawWithBackup, runReinstallBackupStep, runReinstallUninstallStep } from '../reinstallOpenclaw.js'
 
 export async function getNpmOpenclawVersions() {
   return fetchOpenclawNpmMeta()
+}
+
+export async function getNpmClawmasterVersions() {
+  return fetchClawmasterNpmMeta()
 }
 
 export async function installOpenclaw(params: { version?: unknown; localPath?: unknown }) {

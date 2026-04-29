@@ -7,6 +7,7 @@ import type { GatewayStatus } from '@/lib/types'
 import { getGatewayStatusResult } from '@/shared/adapters/gateway'
 import { isWindowsHostPlatform } from '@/shared/hostPlatform'
 import { platformResults } from '@/shared/adapters/platformResults'
+import { checkClawmasterReleaseResult } from '@/shared/adapters/clawmasterReleases'
 import { getClawModules } from './moduleRegistry'
 import { CommandPalette, type CommandEntry } from './CommandPalette'
 import { getCommandDescriptors } from './commandRegistry'
@@ -63,9 +64,10 @@ interface LayoutProps {
 
 type UpdateBannerState =
   | { status: 'idle' | 'checking' | 'unavailable' | 'up-to-date' | 'error' }
-  | { status: 'available'; currentVersion: string; latestVersion: string }
+  | { status: 'available'; currentVersion: string; latestVersion: string; source: 'github' | 'npm' }
 
 const COMMAND_HINT_DISMISSED_KEY = 'clawmaster-command-palette-hint-dismissed'
+const CLAWMASTER_RELEASE_DISMISSED_PREFIX = 'clawmaster-release-dismissed:'
 const HASH_SCROLL_OBSERVER_TIMEOUT_MS = 10_000
 
 function isEditableEventTarget(target: EventTarget | null): boolean {
@@ -101,10 +103,8 @@ function decodeHashTargetId(hashValue: string): string | null {
   }
 }
 
-function normalizeVersion(version: string | undefined): string {
-  const raw = String(version ?? '').replace(/^v/i, '').trim()
-  const match = raw.match(/\d+\.\d+\.\d+[\w.-]*/)
-  return match ? match[0] : raw
+function clawmasterReleaseDismissedKey(version: string): string {
+  return `${CLAWMASTER_RELEASE_DISMISSED_PREFIX}${version}`
 }
 
 export default function Layout({ children }: LayoutProps) {
@@ -138,40 +138,54 @@ export default function Layout({ children }: LayoutProps) {
   useEffect(() => {
     let cancelled = false
 
-    async function checkForOpenclawUpdate() {
-      setUpdateBanner({ status: 'checking' })
-
+    async function detectHostPlatform() {
       const system = await platformResults.detectSystem()
       const detectedHostPlatform = system.data?.runtime?.hostPlatform
-      if (detectedHostPlatform) {
+      if (!cancelled && detectedHostPlatform) {
         setHostPlatform(detectedHostPlatform)
       }
-      const currentVersion = normalizeVersion(system.data?.openclaw.version)
-      if (!system.success || !system.data?.openclaw.installed || !currentVersion) {
-        if (!cancelled) setUpdateBanner({ status: 'unavailable' })
-        return
-      }
+    }
 
-      const versions = await platformResults.listOpenclawNpmVersions()
-      const latestVersion = normalizeVersion(
-        versions.data?.distTags.latest ?? versions.data?.versions[0]
-      )
+    void detectHostPlatform()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
-      if (!versions.success || !latestVersion) {
+  useEffect(() => {
+    let cancelled = false
+
+    async function checkForClawmasterUpdate() {
+      setUpdateBanner({ status: 'checking' })
+
+      const result = await checkClawmasterReleaseResult()
+      if (!result.success || !result.data?.latestVersion) {
         if (!cancelled) setUpdateBanner({ status: 'error' })
         return
       }
 
+      if (!result.data.hasUpdate) {
+        if (!cancelled) setUpdateBanner({ status: 'up-to-date' })
+        return
+      }
+
+      const dismissed =
+        localStorage.getItem(clawmasterReleaseDismissedKey(result.data.latestVersion)) === '1'
       if (!cancelled) {
         setUpdateBanner(
-          currentVersion === latestVersion
+          dismissed
             ? { status: 'up-to-date' }
-            : { status: 'available', currentVersion, latestVersion },
+            : {
+                status: 'available',
+                currentVersion: result.data.currentVersion,
+                latestVersion: result.data.latestVersion,
+                source: result.data.source,
+              },
         )
       }
     }
 
-    void checkForOpenclawUpdate()
+    void checkForClawmasterUpdate()
     return () => {
       cancelled = true
     }
@@ -182,6 +196,13 @@ export default function Layout({ children }: LayoutProps) {
       setUpdateBannerDismissed(false)
     }
   }, [updateBanner])
+
+  function dismissUpdateBanner() {
+    if (updateBanner.status === 'available') {
+      localStorage.setItem(clawmasterReleaseDismissedKey(updateBanner.latestVersion), '1')
+    }
+    setUpdateBannerDismissed(true)
+  }
 
   const modules = getClawModules()
   const navItems: NavItem[] = useMemo(() =>
@@ -493,11 +514,11 @@ export default function Layout({ children }: LayoutProps) {
                       {t('layout.update.available', { version: updateBanner.latestVersion })}
                     </p>
                   </div>
-                  <Link to="/settings#settings-update" className="button-secondary text-xs">
+                  <Link to="/settings#settings-clawmaster-releases" className="button-secondary text-xs">
                     {t('layout.update.action')}
                   </Link>
                   <button
-                    onClick={() => setUpdateBannerDismissed(true)}
+                    onClick={dismissUpdateBanner}
                     className="app-icon-button"
                     aria-label={t('layout.update.dismiss')}
                     title={t('layout.update.dismiss')}

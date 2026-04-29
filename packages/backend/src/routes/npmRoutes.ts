@@ -1,10 +1,19 @@
 import type express from 'express'
-import { bootstrapAfterInstall, getNpmOpenclawVersions, installOpenclaw, reinstallBackupStep, reinstallOpenclaw, reinstallUninstallStep } from '../services/npmService.js'
+import { bootstrapAfterInstall, getNpmClawmasterVersions, getNpmOpenclawVersions, installOpenclaw, reinstallBackupStep, reinstallOpenclaw, reinstallUninstallStep } from '../services/npmService.js'
 
 export function registerNpmRoutes(app: express.Express): void {
   app.get('/api/npm/openclaw-versions', async (_req, res) => {
     try {
       res.json(await getNpmOpenclawVersions())
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(502).type('text').send(msg)
+    }
+  })
+
+  app.get('/api/npm/clawmaster-versions', async (_req, res) => {
+    try {
+      res.json(await getNpmClawmasterVersions())
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error)
       res.status(502).type('text').send(msg)

@@ -7,7 +7,7 @@ import Layout from '../Layout'
 
 const mockGatewayStatus = vi.fn()
 const mockDetectSystem = vi.fn()
-const mockListVersions = vi.fn()
+const mockCheckClawmasterRelease = vi.fn()
 
 vi.mock('@/shared/adapters/gateway', () => ({
   getGatewayStatusResult: (...args: any[]) => mockGatewayStatus(...args),
@@ -16,8 +16,11 @@ vi.mock('@/shared/adapters/gateway', () => ({
 vi.mock('@/shared/adapters/platformResults', () => ({
   platformResults: {
     detectSystem: (...args: any[]) => mockDetectSystem(...args),
-    listOpenclawNpmVersions: (...args: any[]) => mockListVersions(...args),
   },
+}))
+
+vi.mock('@/shared/adapters/clawmasterReleases', () => ({
+  checkClawmasterReleaseResult: (...args: any[]) => mockCheckClawmasterRelease(...args),
 }))
 
 const scrollIntoViewMock = vi.fn()
@@ -107,11 +110,15 @@ describe('Layout', () => {
         runtime: { mode: 'native', hostPlatform: 'windows' },
       },
     })
-    mockListVersions.mockResolvedValue({
+    mockCheckClawmasterRelease.mockResolvedValue({
       success: true,
       data: {
-        versions: ['2026.4.2', '2026.4.1'],
-        distTags: { latest: '2026.4.2' },
+        currentVersion: '0.3.0',
+        latestVersion: '0.3.0',
+        hasUpdate: false,
+        source: 'github',
+        releases: [],
+        latestRelease: null,
       },
     })
   })
@@ -144,6 +151,34 @@ describe('Layout', () => {
 
     expect(screen.queryByText('用 Ctrl K 快速跳转')).not.toBeInTheDocument()
     expect(localStorage.getItem('clawmaster-command-palette-hint-dismissed')).toBe('1')
+  })
+
+  it('shows a ClawMaster release banner and persists dismissal by release version', async () => {
+    mockCheckClawmasterRelease.mockResolvedValue({
+      success: true,
+      data: {
+        currentVersion: '0.3.0',
+        latestVersion: '0.3.1',
+        hasUpdate: true,
+        source: 'github',
+        releases: [],
+        latestRelease: null,
+      },
+    })
+    await changeLanguage('en')
+
+    renderLayout('/settings')
+
+    expect(await screen.findByText('ClawMaster v0.3.1 is available.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Review update' })).toHaveAttribute(
+      'href',
+      '/settings#settings-clawmaster-releases',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss update notice' }))
+
+    expect(localStorage.getItem('clawmaster-release-dismissed:0.3.1')).toBe('1')
+    expect(screen.queryByText('ClawMaster v0.3.1 is available.')).not.toBeInTheDocument()
   })
 
   it('toggles dark mode and switches language from the header controls', async () => {

@@ -386,7 +386,7 @@ fn should_apply_npm_registry_proxy(args: &[String]) -> bool {
     let Some(subcommand) = args.first().map(|item| item.trim().to_ascii_lowercase()) else {
         return false;
     };
-    if subcommand != "install" && subcommand != "i" {
+    if subcommand != "install" && subcommand != "i" && subcommand != "view" {
         return false;
     }
     !args
@@ -6519,10 +6519,9 @@ fn cmp_openclaw_version_desc(a: &str, b: &str) -> std::cmp::Ordering {
     b.cmp(a)
 }
 
-/// List openclaw dist-tags and up to 120 versions from npm (newest first)
-#[tauri::command]
-fn list_openclaw_npm_versions() -> Result<OpenclawNpmVersionsDto, String> {
-    fn npm_stdout(args: &[&str]) -> Result<String, String> {
+fn list_npm_package_versions(package_name: &str) -> Result<OpenclawNpmVersionsDto, String> {
+    fn npm_stdout(args: &[String]) -> Result<String, String> {
+        let args = with_configured_npm_registry_args(args);
         let output = Command::new("npm")
             .args(args)
             .output()
@@ -6536,7 +6535,12 @@ fn list_openclaw_npm_versions() -> Result<OpenclawNpmVersionsDto, String> {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 
-    let v_raw = npm_stdout(&["view", "openclaw", "versions", "--json"])?;
+    let v_raw = npm_stdout(&[
+        "view".to_string(),
+        package_name.to_string(),
+        "versions".to_string(),
+        "--json".to_string(),
+    ])?;
     let parsed: serde_json::Value = serde_json::from_str(v_raw.trim())
         .map_err(|e| cmd_err_d("NPM_VERSIONS_JSON_PARSE_FAILED", e))?;
     let mut versions: Vec<String> = match parsed {
@@ -6554,7 +6558,12 @@ fn list_openclaw_npm_versions() -> Result<OpenclawNpmVersionsDto, String> {
         versions.truncate(MAX);
     }
 
-    let dist_tags = match npm_stdout(&["view", "openclaw", "dist-tags", "--json"]) {
+    let dist_tags = match npm_stdout(&[
+        "view".to_string(),
+        package_name.to_string(),
+        "dist-tags".to_string(),
+        "--json".to_string(),
+    ]) {
         Ok(t_raw) => {
             let t: serde_json::Value =
                 serde_json::from_str(t_raw.trim()).unwrap_or(serde_json::json!({}));
@@ -6573,6 +6582,18 @@ fn list_openclaw_npm_versions() -> Result<OpenclawNpmVersionsDto, String> {
         versions,
         dist_tags,
     })
+}
+
+/// List openclaw dist-tags and up to 120 versions from npm (newest first)
+#[tauri::command]
+fn list_openclaw_npm_versions() -> Result<OpenclawNpmVersionsDto, String> {
+    list_npm_package_versions("openclaw")
+}
+
+/// List clawmaster dist-tags and up to 120 versions from npm (newest first)
+#[tauri::command]
+fn list_clawmaster_npm_versions() -> Result<OpenclawNpmVersionsDto, String> {
+    list_npm_package_versions("clawmaster")
 }
 
 fn run_npm_install_openclaw_global(spec: &str) -> Result<NpmUninstallOutput, String> {
@@ -8737,6 +8758,7 @@ pub fn run() {
             get_clawmaster_npm_proxy,
             save_clawmaster_npm_proxy,
             uninstall_openclaw_cli,
+            list_clawmaster_npm_versions,
             list_openclaw_npm_versions,
             npm_install_openclaw_global,
             npm_install_openclaw_from_file,

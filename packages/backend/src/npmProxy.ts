@@ -1,6 +1,6 @@
 import { getClawmasterNpmProxyRegistryUrl } from './clawmasterSettings.js'
 
-const NPM_INSTALL_COMMANDS = new Set(['install', 'i'])
+const NPM_PROXY_COMMANDS = new Set(['install', 'i', 'view'])
 
 function hasRegistryOverride(args: string[]): boolean {
   return args.some((arg) => arg === '--registry' || arg.startsWith('--registry='))
@@ -8,7 +8,7 @@ function hasRegistryOverride(args: string[]): boolean {
 
 function shouldApplyRegistryProxy(args: string[]): boolean {
   const subcommand = args[0]?.trim().toLowerCase()
-  return Boolean(subcommand && NPM_INSTALL_COMMANDS.has(subcommand) && !hasRegistryOverride(args))
+  return Boolean(subcommand && NPM_PROXY_COMMANDS.has(subcommand) && !hasRegistryOverride(args))
 }
 
 export function applyConfiguredNpmRegistryArgs(args: string[]): string[] {

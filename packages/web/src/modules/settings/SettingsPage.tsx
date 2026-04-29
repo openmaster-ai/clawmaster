@@ -1,9 +1,15 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import { platform } from '@/adapters'
 import { platformResults } from '@/shared/adapters/platformResults'
 import { isTauri } from '@/shared/adapters/platform'
+import {
+  checkClawmasterReleaseResult,
+  selectInstallerAsset,
+  type ClawmasterReleaseCheck,
+} from '@/shared/adapters/clawmasterReleases'
+import { CLAWMASTER_VERSION } from '@/lib/appVersion'
 import {
   getLocalDataStatsResult,
   rebuildLocalDataResult,
@@ -1044,6 +1050,8 @@ export default function Settings() {
         </div>
       </section>
 
+      <ClawmasterReleaseSection />
+
       {/* 更新 */}
       <UpdateSection currentVersion={systemInfo?.openclaw.version} installed={!!systemInfo?.openclaw.installed} onUpdated={loadSystemInfo} />
 
@@ -1226,6 +1234,318 @@ async function fetchReleaseNotes(limit = 10): Promise<ReleaseNote[]> {
   } catch {
     return []
   }
+}
+
+function formatReleaseDate(value: string | null | undefined, locale: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+  }).format(date)
+}
+
+function parseReleaseInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = []
+  const pattern = /\[([^\]]+)]\((https?:\/\/[^)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*/g
+  let lastIndex = 0
+  let matchIndex = 0
+
+  for (const match of text.matchAll(pattern)) {
+    const start = match.index ?? 0
+    if (start > lastIndex) {
+      nodes.push(text.slice(lastIndex, start))
+    }
+
+    if (match[1] !== undefined && match[2] !== undefined) {
+      nodes.push(
+        <a
+          key={`${keyPrefix}-link-${matchIndex}`}
+          href={match[2]}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary underline decoration-primary/40 underline-offset-4 hover:text-primary/80"
+        >
+          {match[1]}
+        </a>,
+      )
+    } else if (match[3] !== undefined) {
+      nodes.push(
+        <code key={`${keyPrefix}-code-${matchIndex}`} className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[0.92em] text-foreground">
+          {match[3]}
+        </code>,
+      )
+    } else if (match[4] !== undefined) {
+      nodes.push(
+        <strong key={`${keyPrefix}-strong-${matchIndex}`} className="font-semibold text-foreground">
+          {match[4]}
+        </strong>,
+      )
+    }
+
+    lastIndex = start + match[0].length
+    matchIndex += 1
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex))
+  }
+
+  return nodes.length ? nodes : [text]
+}
+
+function renderReleaseMarkdown(markdown: string): ReactNode[] {
+  const lines = markdown.replace(/\r/g, '').split('\n')
+  const nodes: ReactNode[] = []
+  let index = 0
+
+  const isBlank = (value: string) => value.trim().length === 0
+  const isFence = (value: string) => /^```/.test(value.trim())
+  const isUnordered = (value: string) => /^[-*]\s+/.test(value.trim())
+  const isOrdered = (value: string) => /^\d+\.\s+/.test(value.trim())
+  const isQuote = (value: string) => /^>\s?/.test(value.trim())
+
+  while (index < lines.length) {
+    const line = lines[index] ?? ''
+    if (isBlank(line)) {
+      index += 1
+      continue
+    }
+
+    const headingMatch = line.match(/^(#{1,4})\s+(.*)$/)
+    if (headingMatch) {
+      const level = headingMatch[1].length
+      const content = headingMatch[2].trim()
+      const className =
+        level === 1
+          ? 'text-sm font-semibold text-foreground'
+          : level === 2
+            ? 'text-[13px] font-semibold text-foreground'
+            : 'text-xs font-semibold text-foreground'
+      nodes.push(
+        <p key={`heading-${index}`} className={className}>
+          {parseReleaseInlineMarkdown(content, `heading-${index}`)}
+        </p>,
+      )
+      index += 1
+      continue
+    }
+
+    if (isFence(line)) {
+      const codeLines: string[] = []
+      index += 1
+      while (index < lines.length && !isFence(lines[index] ?? '')) {
+        codeLines.push(lines[index] ?? '')
+        index += 1
+      }
+      if (index < lines.length) index += 1
+      nodes.push(
+        <pre key={`code-${index}`} className="overflow-x-auto rounded-xl border border-border/70 bg-background/80 p-3 text-xs leading-5 text-foreground">
+          <code>{codeLines.join('\n')}</code>
+        </pre>,
+      )
+      continue
+    }
+
+    if (isUnordered(line) || isOrdered(line)) {
+      const ordered = isOrdered(line)
+      const items: ReactNode[] = []
+      while (index < lines.length && (ordered ? isOrdered(lines[index] ?? '') : isUnordered(lines[index] ?? ''))) {
+        const item = (lines[index] ?? '').trim().replace(ordered ? /^\d+\.\s+/ : /^[-*]\s+/, '')
+        items.push(
+          <li key={`li-${index}`}>
+            {parseReleaseInlineMarkdown(item, `li-${index}`)}
+          </li>,
+        )
+        index += 1
+      }
+      const ListTag = ordered ? 'ol' : 'ul'
+      nodes.push(
+        <ListTag key={`list-${index}`} className={`${ordered ? 'list-decimal' : 'list-disc'} space-y-1 pl-5 text-xs leading-6 text-muted-foreground`}>
+          {items}
+        </ListTag>,
+      )
+      continue
+    }
+
+    if (isQuote(line)) {
+      const quoteLines: string[] = []
+      while (index < lines.length && isQuote(lines[index] ?? '')) {
+        quoteLines.push((lines[index] ?? '').trim().replace(/^>\s?/, ''))
+        index += 1
+      }
+      nodes.push(
+        <blockquote key={`quote-${index}`} className="border-l-2 border-primary/40 pl-3 text-xs leading-6 text-muted-foreground">
+          {quoteLines.map((item, quoteIndex) => (
+            <p key={`quote-${index}-${quoteIndex}`}>
+              {parseReleaseInlineMarkdown(item, `quote-${index}-${quoteIndex}`)}
+            </p>
+          ))}
+        </blockquote>,
+      )
+      continue
+    }
+
+    const paragraphLines: string[] = []
+    while (
+      index < lines.length &&
+      !isBlank(lines[index] ?? '') &&
+      !/^(#{1,4})\s+/.test(lines[index] ?? '') &&
+      !isFence(lines[index] ?? '') &&
+      !isUnordered(lines[index] ?? '') &&
+      !isOrdered(lines[index] ?? '') &&
+      !isQuote(lines[index] ?? '')
+    ) {
+      paragraphLines.push((lines[index] ?? '').trim())
+      index += 1
+    }
+    const paragraph = paragraphLines.join(' ')
+    nodes.push(
+      <p key={`paragraph-${index}`} className="text-xs leading-6 text-muted-foreground">
+        {parseReleaseInlineMarkdown(paragraph, `paragraph-${index}`)}
+      </p>,
+    )
+  }
+
+  return nodes
+}
+
+function ClawmasterReleaseSection() {
+  const { t, i18n } = useTranslation()
+  const [state, setState] = useState<'idle' | 'checking' | 'ready' | 'error'>('idle')
+  const [releaseCheck, setReleaseCheck] = useState<ClawmasterReleaseCheck | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const latestRelease = releaseCheck?.latestRelease ?? null
+  const latestVersion = releaseCheck?.latestVersion ?? ''
+  const installer = selectInstallerAsset(
+    latestRelease,
+    typeof navigator === 'undefined' ? undefined : navigator.platform,
+  )
+  const releaseUrl = latestRelease?.htmlUrl || 'https://github.com/openmaster-ai/clawmaster/releases'
+  const primaryUrl = installer?.url || releaseUrl
+  const releaseDate = formatReleaseDate(latestRelease?.publishedAt, i18n.resolvedLanguage ?? i18n.language)
+  const bodyPreview = latestRelease?.body.trim()
+    ? latestRelease.body.trim().slice(0, 700)
+    : ''
+
+  const handleCheck = useCallback(async () => {
+    setState('checking')
+    setError(null)
+    const result = await checkClawmasterReleaseResult()
+    if (!result.success || !result.data) {
+      setError(result.error ?? t('common.unknownError'))
+      setState('error')
+      return
+    }
+    setReleaseCheck(result.data)
+    setState('ready')
+  }, [t])
+
+  useEffect(() => {
+    void handleCheck()
+  }, [])
+
+  function openReleaseTarget(url: string) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  return (
+    <section id="settings-clawmaster-releases" className="surface-card">
+      <div className="section-heading">
+        <div>
+          <h3 className="section-title">{t('settings.clawmasterReleases')}</h3>
+          <p className="text-sm text-muted-foreground">{t('settings.clawmasterReleasesDesc')}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleCheck()}
+          disabled={state === 'checking'}
+          className="button-secondary"
+        >
+          {state === 'checking' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {state === 'checking' ? t('settings.checking') : t('common.refresh')}
+        </button>
+      </div>
+
+      <div className="space-y-4 text-sm">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-border/70 bg-muted/30 p-4">
+            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t('settings.currentLabel')}</p>
+            <p className="mt-2 font-mono text-base font-semibold">v{CLAWMASTER_VERSION}</p>
+          </div>
+          <div className="rounded-2xl border border-border/70 bg-muted/30 p-4">
+            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t('settings.clawmasterLatest')}</p>
+            <p className="mt-2 font-mono text-base font-semibold">
+              {latestVersion ? `v${latestVersion}` : t('common.notSet')}
+            </p>
+            {releaseDate ? <p className="mt-1 text-xs text-muted-foreground">{releaseDate}</p> : null}
+          </div>
+        </div>
+
+        {state === 'error' && error ? (
+          <div className="flex items-center gap-2 text-red-500">
+            <AlertCircle className="h-4 w-4" />
+            {error}
+          </div>
+        ) : null}
+
+        {state === 'ready' && releaseCheck ? (
+          <div className="inline-note space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {releaseCheck.hasUpdate ? (
+                <span className="inline-flex items-center gap-1 text-primary">
+                  <ArrowUpRight className="h-4 w-4" />
+                  {t('settings.clawmasterUpdateAvailable', { version: latestVersion })}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {t('settings.clawmasterUpToDate')}
+                </span>
+              )}
+              <span className="text-xs text-muted-foreground">
+                {releaseCheck.source === 'github'
+                  ? t('settings.clawmasterSourceGithub')
+                  : t('settings.clawmasterSourceNpm')}
+              </span>
+            </div>
+
+            {bodyPreview ? (
+              <div className="max-h-48 space-y-3 overflow-y-auto rounded-2xl border border-border/70 bg-background/60 p-4">
+                {renderReleaseMarkdown(`${bodyPreview}${latestRelease && latestRelease.body.length > bodyPreview.length ? '\n...' : ''}`)}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">{t('settings.clawmasterNpmFallbackDesc')}</p>
+            )}
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => openReleaseTarget(primaryUrl)}
+                className="button-primary"
+              >
+                <ArrowUpRight className="h-4 w-4" />
+                {installer ? t('settings.clawmasterOpenInstaller') : t('settings.clawmasterOpenReleases')}
+              </button>
+              {latestRelease?.htmlUrl && installer ? (
+                <button
+                  type="button"
+                  onClick={() => openReleaseTarget(latestRelease.htmlUrl)}
+                  className="button-secondary"
+                >
+                  <FileText className="h-4 w-4" />
+                  {t('settings.changelog')}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  )
 }
 
 function UpdateSection({
