@@ -1236,6 +1236,14 @@ async function fetchReleaseNotes(limit = 10): Promise<ReleaseNote[]> {
   }
 }
 
+function isBrowserFetchFailure(error?: string | null): boolean {
+  return (
+    error === 'Failed to fetch' ||
+    error === 'Load failed' ||
+    error === 'NetworkError when attempting to fetch resource.'
+  )
+}
+
 function formatReleaseDate(value: string | null | undefined, locale: string): string {
   if (!value) return ''
   const date = new Date(value)
@@ -1249,7 +1257,7 @@ function formatReleaseDate(value: string | null | undefined, locale: string): st
 
 function parseReleaseInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = []
-  const pattern = /\[([^\]]+)]\((https?:\/\/[^)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*/g
+  const pattern = /\[([^\]]+)]\((https?:\/\/[^)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*/g
   let lastIndex = 0
   let matchIndex = 0
 
@@ -1283,6 +1291,12 @@ function parseReleaseInlineMarkdown(text: string, keyPrefix: string): ReactNode[
           {match[4]}
         </strong>,
       )
+    } else if (match[5] !== undefined) {
+      nodes.push(
+        <em key={`${keyPrefix}-em-${matchIndex}`} className="italic">
+          {match[5]}
+        </em>,
+      )
     }
 
     lastIndex = start + match[0].length
@@ -1296,7 +1310,7 @@ function parseReleaseInlineMarkdown(text: string, keyPrefix: string): ReactNode[
   return nodes.length ? nodes : [text]
 }
 
-function renderReleaseMarkdown(markdown: string): ReactNode[] {
+function renderReleaseMarkdown(markdown: string, keyPrefix = 'release'): ReactNode[] {
   const lines = markdown.replace(/\r/g, '').split('\n')
   const nodes: ReactNode[] = []
   let index = 0
@@ -1324,10 +1338,11 @@ function renderReleaseMarkdown(markdown: string): ReactNode[] {
           : level === 2
             ? 'text-[13px] font-semibold text-foreground'
             : 'text-xs font-semibold text-foreground'
+      const Tag = `h${Math.min(level + 2, 6)}` as keyof JSX.IntrinsicElements
       nodes.push(
-        <p key={`heading-${index}`} className={className}>
-          {parseReleaseInlineMarkdown(content, `heading-${index}`)}
-        </p>,
+        <Tag key={`${keyPrefix}-heading-${index}`} className={className}>
+          {parseReleaseInlineMarkdown(content, `${keyPrefix}-heading-${index}`)}
+        </Tag>,
       )
       index += 1
       continue
@@ -1342,7 +1357,7 @@ function renderReleaseMarkdown(markdown: string): ReactNode[] {
       }
       if (index < lines.length) index += 1
       nodes.push(
-        <pre key={`code-${index}`} className="overflow-x-auto rounded-xl border border-border/70 bg-background/80 p-3 text-xs leading-5 text-foreground">
+        <pre key={`${keyPrefix}-code-${index}`} className="overflow-x-auto rounded-xl border border-border/70 bg-background/80 p-3 text-xs leading-5 text-foreground">
           <code>{codeLines.join('\n')}</code>
         </pre>,
       )
@@ -1355,15 +1370,15 @@ function renderReleaseMarkdown(markdown: string): ReactNode[] {
       while (index < lines.length && (ordered ? isOrdered(lines[index] ?? '') : isUnordered(lines[index] ?? ''))) {
         const item = (lines[index] ?? '').trim().replace(ordered ? /^\d+\.\s+/ : /^[-*]\s+/, '')
         items.push(
-          <li key={`li-${index}`}>
-            {parseReleaseInlineMarkdown(item, `li-${index}`)}
+          <li key={`${keyPrefix}-li-${index}`}>
+            {parseReleaseInlineMarkdown(item, `${keyPrefix}-li-${index}`)}
           </li>,
         )
         index += 1
       }
       const ListTag = ordered ? 'ol' : 'ul'
       nodes.push(
-        <ListTag key={`list-${index}`} className={`${ordered ? 'list-decimal' : 'list-disc'} space-y-1 pl-5 text-xs leading-6 text-muted-foreground`}>
+        <ListTag key={`${keyPrefix}-list-${index}`} className={`${ordered ? 'list-decimal' : 'list-disc'} space-y-1 pl-5 text-xs leading-6 text-muted-foreground`}>
           {items}
         </ListTag>,
       )
@@ -1377,10 +1392,10 @@ function renderReleaseMarkdown(markdown: string): ReactNode[] {
         index += 1
       }
       nodes.push(
-        <blockquote key={`quote-${index}`} className="border-l-2 border-primary/40 pl-3 text-xs leading-6 text-muted-foreground">
+        <blockquote key={`${keyPrefix}-quote-${index}`} className="border-l-2 border-primary/40 pl-3 text-xs leading-6 text-muted-foreground">
           {quoteLines.map((item, quoteIndex) => (
-            <p key={`quote-${index}-${quoteIndex}`}>
-              {parseReleaseInlineMarkdown(item, `quote-${index}-${quoteIndex}`)}
+            <p key={`${keyPrefix}-quote-${index}-${quoteIndex}`}>
+              {parseReleaseInlineMarkdown(item, `${keyPrefix}-quote-${index}-${quoteIndex}`)}
             </p>
           ))}
         </blockquote>,
@@ -1403,8 +1418,8 @@ function renderReleaseMarkdown(markdown: string): ReactNode[] {
     }
     const paragraph = paragraphLines.join(' ')
     nodes.push(
-      <p key={`paragraph-${index}`} className="text-xs leading-6 text-muted-foreground">
-        {parseReleaseInlineMarkdown(paragraph, `paragraph-${index}`)}
+      <p key={`${keyPrefix}-paragraph-${index}`} className="text-xs leading-6 text-muted-foreground">
+        {parseReleaseInlineMarkdown(paragraph, `${keyPrefix}-paragraph-${index}`)}
       </p>,
     )
   }
@@ -1590,7 +1605,11 @@ function UpdateSection({
       const upToDate = currentVersion && currentVersion.includes(latest)
       setState(upToDate ? 'up-to-date' : 'available')
     } else {
-      setError(result.error ?? t('common.unknownError'))
+      setError(
+        isBrowserFetchFailure(result.error)
+          ? t('settings.updateBackendUnavailable')
+          : result.error ?? t('common.unknownError')
+      )
       setState('error')
     }
   }, [currentVersion, t])
@@ -1630,29 +1649,31 @@ function UpdateSection({
   }, [handleCheck, location.hash, state, updateTask.status])
 
   return (
-    <section id="settings-update" className="surface-card">
-      <div className="section-heading">
-        <h3 className="section-title">{t('settings.update')}</h3>
-      </div>
-      <div className="space-y-3 text-sm">
-        {/* Current version */}
-        <div className="flex items-center justify-between">
-          <span>OpenClaw CLI</span>
-          <span className="text-muted-foreground font-mono">
-            {installed ? `v${currentVersion}` : t('common.notInstalled')}
-          </span>
+    <section id="settings-update" className="surface-card !p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h3 className="section-title text-lg">{t('settings.update')}</h3>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+            <span>OpenClaw CLI</span>
+            <span className="break-all font-mono text-muted-foreground">
+              {installed ? `v${currentVersion}` : t('common.notInstalled')}
+            </span>
+          </div>
         </div>
 
         {/* Check button (idle/error state) */}
         {(state === 'idle' || state === 'error') && updateTask.status === 'idle' && (
           <button
             onClick={handleCheck}
-            className="button-secondary"
+            className="button-secondary h-9 shrink-0 px-3 py-1.5"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             {t('settings.checkUpdate')}
           </button>
         )}
+      </div>
+
+      <div className="mt-3 space-y-2 text-sm">
 
         {/* Checking spinner */}
         {state === 'checking' && (
@@ -1680,9 +1701,9 @@ function UpdateSection({
 
         {/* Update available */}
         {(state === 'available' || state === 'up-to-date') && versions && updateTask.status === 'idle' && (
-          <div className="inline-note space-y-3">
+          <div className="space-y-3 rounded-xl border border-border/70 bg-muted/30 p-3">
             {/* Channel selector */}
-            <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+            <div className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
               <label className="text-muted-foreground">{t('settings.updateChannel')}</label>
               <select
                 value={channel}
@@ -1694,7 +1715,7 @@ function UpdateSection({
                   const upToDate = currentVersion && currentVersion.includes(ver)
                   setState(upToDate ? 'up-to-date' : 'available')
                 }}
-                className="control-select"
+                className="control-select h-9 py-1.5"
               >
                 <option value="stable">Stable</option>
                 <option value="beta">Beta</option>
@@ -1703,7 +1724,7 @@ function UpdateSection({
             </div>
 
             {/* Version selector */}
-            <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+            <div className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
               <label className="text-muted-foreground">{t('settings.targetVersion')}</label>
               <select
                 value={selectedVersion}
@@ -1712,7 +1733,7 @@ function UpdateSection({
                   const upToDate = currentVersion && currentVersion.includes(e.target.value)
                   setState(upToDate ? 'up-to-date' : 'available')
                 }}
-                className="control-select w-full font-mono"
+                className="control-select h-9 w-full py-1.5 font-mono"
               >
                 {recentVersions.map((v) => (
                   <option key={v} value={v}>
@@ -1726,7 +1747,7 @@ function UpdateSection({
             {!isUpToDate && selectedVersion && (
               <button
                 onClick={handleUpdate}
-                className="button-primary text-sm"
+                className="button-primary h-9 px-3 py-1.5 text-sm"
               >
                 {currentVersion && selectedVersion < currentVersion
                   ? t('settings.downgrade', { version: selectedVersion })
@@ -1735,9 +1756,9 @@ function UpdateSection({
             )}
 
             {/* Dist tags info */}
-            <div className="text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
               {Object.entries(versions.distTags).map(([tag, ver]) => (
-                <span key={tag} className="mr-3">
+                <span key={tag}>
                   <span className="font-medium">{tag}</span>: <span className="font-mono">{ver}</span>
                 </span>
               ))}
@@ -1772,9 +1793,9 @@ function UpdateSection({
                             </a>
                           )}
                         </div>
-                        <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed">
-                          {r.body.length > 500 ? r.body.slice(0, 500) + '...' : r.body}
-                        </pre>
+                        <div className="space-y-2 text-xs leading-6 text-muted-foreground">
+                          {renderReleaseMarkdown(r.body, `openclaw-release-${r.version}`)}
+                        </div>
                       </div>
                     ))}
                   </div>

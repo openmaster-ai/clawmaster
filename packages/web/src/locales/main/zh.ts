@@ -599,6 +599,7 @@ export default {
   "settings.checkUpdate": "检查更新",
   "settings.checking": "正在检查更新...",
   "settings.upToDate": "已是最新版本",
+  "settings.updateBackendUnavailable": "无法连接 ClawMaster 后端。请使用 npm run dev:web 启动，或打开桌面应用后重试。",
   "settings.targetVersion": "目标版本:",
   "settings.updateTo": "更新到 {{version}}",
   "settings.downgrade": "降级到 {{version}}",
