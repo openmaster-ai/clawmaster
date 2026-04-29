@@ -247,7 +247,7 @@ describe('CapabilitiesSection', () => {
 
     renderSection()
 
-    const checkbox = await screen.findByRole('checkbox')
+    const checkbox = await screen.findByRole('switch')
     await waitFor(() => {
       expect(checkbox).toBeChecked()
     })
@@ -295,7 +295,7 @@ describe('CapabilitiesSection', () => {
 
     renderSection()
 
-    const checkbox = await screen.findByRole('checkbox')
+    const checkbox = await screen.findByRole('switch')
     await waitFor(() => {
       expect(checkbox).toBeChecked()
     })
