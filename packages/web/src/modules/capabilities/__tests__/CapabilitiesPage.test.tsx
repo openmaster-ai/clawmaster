@@ -123,7 +123,7 @@ describe('CapabilitiesPage', () => {
     renderPage()
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Assistant Capabilities' })).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('1 capability sources failed to load')
+    expect(await screen.findByRole('alert')).toHaveTextContent('1 capability sources failed to load')
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
 
     const connectCard = screen.getByRole('heading', { level: 3, name: 'Connect external data' }).closest('section')

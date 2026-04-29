@@ -74,6 +74,12 @@ describe('Skills catalog', () => {
       category: 'productivity',
       installSource: 'bundled',
     })
+    expect(SKILL_CATALOG.find((skill) => skill.slug === 'package-download-tracker')).toMatchObject({
+      slug: 'package-download-tracker',
+      name: 'Package Download Tracker',
+      category: 'productivity',
+      installSource: 'bundled',
+    })
   })
 
   it('CATEGORY_ORDER covers all used categories', () => {

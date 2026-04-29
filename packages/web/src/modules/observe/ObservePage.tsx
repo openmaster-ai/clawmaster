@@ -5,6 +5,12 @@ import { platformResults } from '@/adapters'
 import { getSetupAdapter } from '@/modules/setup/adapters'
 import { setSkillEnabledResult } from '@/shared/adapters/clawhub'
 import { allSuccess2 } from '@/shared/adapters/resultHelpers'
+import {
+  getSessionDetail,
+  getSessions,
+  type SessionDetail,
+  type SessionInfo,
+} from '@/shared/adapters/sessions'
 import type { AdapterResult } from '@/shared/adapters/types'
 import { fail, ok } from '@/shared/adapters/types'
 import { InstallTask } from '@/shared/components/InstallTask'
@@ -19,7 +25,25 @@ type ObserveBundle = {
   status: ClawprobeStatusJson
   cost: ClawprobeCostJson
   config: ClawprobeConfigJson | null
+  latestSession: SessionInfo | null
+  latestSessionDetail: SessionDetail | null
 }
+
+type ObserveSessionSnapshot = {
+  key: string
+  model: string | null
+  provider: string | null
+  inputTokens: number
+  outputTokens: number
+  usedContextTokens: number
+  contextTokens: number
+  utilizationPct: number
+  estimatedUsd: number | null
+  updatedAtMs: number
+  isActive: boolean
+}
+
+const ACTIVE_SESSION_WINDOW_MS = 5 * 60 * 1000
 
 function severityClass(sev: string): string {
   if (sev === 'critical') return 'border-red-500/40 bg-red-500/5 text-red-900 dark:text-red-100'
@@ -27,8 +51,115 @@ function severityClass(sev: string): string {
   return 'border-blue-500/35 bg-blue-500/5 text-blue-950 dark:text-blue-100'
 }
 
+function normalizeTimestampMs(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0
+  return value < 1_000_000_000_000 ? value * 1000 : value
+}
+
+function sessionUpdatedAtMs(session: SessionInfo, now = Date.now()): number {
+  const explicit = normalizeTimestampMs(session.updatedAt)
+  if (explicit > 0) return explicit
+  if (session.ageMs > 0) return now - session.ageMs
+  return 0
+}
+
+function sessionTieBreakerKey(session: SessionInfo): string {
+  return session.key || session.sessionId || session.agentId
+}
+
+function selectLatestSession(sessions: SessionInfo[]): SessionInfo | null {
+  const now = Date.now()
+  return sessions.reduce<SessionInfo | null>((latest, session) => {
+    if (!latest) return session
+    const sessionTime = sessionUpdatedAtMs(session, now)
+    const latestTime = sessionUpdatedAtMs(latest, now)
+    if (sessionTime !== latestTime) return sessionTime > latestTime ? session : latest
+    return sessionTieBreakerKey(session).localeCompare(sessionTieBreakerKey(latest)) > 0
+      ? session
+      : latest
+  }, null)
+}
+
+function tokenPercentage(total: number, context: number): number {
+  if (context <= 0) return 0
+  return Math.min(Math.round((total / context) * 100), 100)
+}
+
+function firstPositiveNumber(...values: Array<number | null | undefined>): number {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value
+  }
+  return 0
+}
+
+function buildSessionSnapshot(
+  status: ClawprobeStatusJson,
+  latestSession: SessionInfo | null,
+  latestSessionDetail: SessionDetail | null
+): ObserveSessionSnapshot | null {
+  if (latestSession) {
+    const key = latestSession.key || latestSession.sessionId
+    const detail = latestSessionDetail
+    const contextTokens = firstPositiveNumber(
+      detail?.windowSize,
+      latestSession.contextTokens,
+      status.sessionKey === key ? status.windowSize : 0
+    )
+    const usedContextTokens = firstPositiveNumber(
+      detail?.contextTokens,
+      status.sessionKey === key ? status.sessionTokens : 0
+    )
+    return {
+      key,
+      model: detail?.model || latestSession.model || (status.sessionKey === key ? status.model : null),
+      provider: detail?.provider || latestSession.modelProvider || (status.sessionKey === key ? status.provider : null),
+      inputTokens: detail?.inputTokens ?? latestSession.inputTokens,
+      outputTokens: detail?.outputTokens ?? latestSession.outputTokens,
+      usedContextTokens,
+      contextTokens,
+      utilizationPct: tokenPercentage(usedContextTokens, contextTokens),
+      estimatedUsd: detail ? detail.estimatedUsd : null,
+      updatedAtMs: sessionUpdatedAtMs(latestSession),
+      isActive: status.sessionKey === key || (latestSession.ageMs > 0 && latestSession.ageMs < ACTIVE_SESSION_WINDOW_MS),
+    }
+  }
+
+  if (!status.sessionKey) return null
+  const detail = latestSessionDetail
+  const contextTokens = firstPositiveNumber(detail?.windowSize, status.windowSize)
+  const usedContextTokens = firstPositiveNumber(detail?.contextTokens, status.sessionTokens)
+  return {
+    key: status.sessionKey,
+    model: detail?.model || status.model,
+    provider: detail?.provider || status.provider,
+    inputTokens: detail?.inputTokens ?? status.inputTokens,
+    outputTokens: detail?.outputTokens ?? status.outputTokens,
+    usedContextTokens,
+    contextTokens,
+    utilizationPct: tokenPercentage(usedContextTokens, contextTokens) || status.utilizationPct,
+    estimatedUsd: detail ? detail.estimatedUsd : null,
+    updatedAtMs: normalizeTimestampMs(detail?.lastActiveAt ?? status.lastActiveAt),
+    isActive: status.isActive,
+  }
+}
+
+function formatDateTime(ms: number, language: string): string {
+  if (ms <= 0) return '-'
+  return new Date(ms).toLocaleString(language || undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatContextTokenValue(value: number): string {
+  return value > 0 ? value.toLocaleString() : '-'
+}
+
 export default function ObservePage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const [costPeriod, setCostPeriod] = useState<'day' | 'week' | 'month' | 'all'>('week')
   const [bootstrapBusy, setBootstrapBusy] = useState(false)
@@ -60,10 +191,28 @@ export default function ObservePage() {
     if (!core.success) {
       return fail(core.error ?? t('observe.loadFailed'))
     }
+    let latestSession: SessionInfo | null = null
+    let latestSessionDetail: SessionDetail | null = null
+    const status = core.data!.a
+    if (!status.installRequired) {
+      const sessionsResult = await getSessions()
+      if (sessionsResult.success && sessionsResult.data) {
+        latestSession = selectLatestSession(sessionsResult.data.sessions)
+      }
+      const detailKey = latestSession?.key || latestSession?.sessionId || status.sessionKey
+      if (detailKey) {
+        const detailResult = await getSessionDetail(detailKey, { agentId: latestSession?.agentId })
+        if (detailResult.success && detailResult.data) {
+          latestSessionDetail = detailResult.data
+        }
+      }
+    }
     return ok({
-      status: core.data!.a,
+      status,
       cost: core.data!.b,
       config: cf.success && cf.data ? cf.data : null,
+      latestSession,
+      latestSessionDetail,
     })
   }, [costPeriod, t])
 
@@ -194,6 +343,7 @@ export default function ObservePage() {
 
   const { status, cost, config } = data
   const maxDailyUsd = Math.max(...cost.daily.map((d) => d.usd), 0.01)
+  const sessionSnapshot = buildSessionSnapshot(status, data.latestSession, data.latestSessionDetail)
 
   return (
     <div className="page-shell page-shell-medium gap-8 pb-10">
@@ -301,31 +451,69 @@ export default function ObservePage() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-border p-4 space-y-3">
+        <div className="rounded-lg border border-border p-4 space-y-4">
           <div className="flex flex-wrap gap-2 justify-between items-center">
-            <span className="text-sm font-medium">{t('observe.contextUsage')}</span>
-            {status.model && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{t('observe.latestSession')}</span>
+              {sessionSnapshot?.isActive ? (
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                  {t('observe.activeSession')}
+                </span>
+              ) : null}
+            </div>
+            {sessionSnapshot?.model && (
               <span className="min-w-0 flex-1 text-right text-xs text-muted-foreground font-mono truncate">
-                {status.model}
+                {[sessionSnapshot.provider, sessionSnapshot.model].filter(Boolean).join(' / ')}
               </span>
             )}
           </div>
-          {status.sessionKey ? (
+          {sessionSnapshot ? (
             <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {t('observe.sessionCost')}
+                  </div>
+                  <div className="text-lg font-semibold">
+                    {sessionSnapshot.estimatedUsd === null
+                      ? t('observe.costUnavailable')
+                      : `$${sessionSnapshot.estimatedUsd.toFixed(4)}`}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {t('observe.inputOutputTokens')}
+                  </div>
+                  <div className="text-sm font-medium">
+                    {sessionSnapshot.inputTokens.toLocaleString()} / {sessionSnapshot.outputTokens.toLocaleString()}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {t('observe.lastActive')}
+                  </div>
+                  <div className="text-sm font-medium">{formatDateTime(sessionSnapshot.updatedAtMs, i18n.language)}</div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 justify-between items-center">
+                <span className="text-sm font-medium">{t('observe.contextUsage')}</span>
+                <span className="text-xs text-muted-foreground">{sessionSnapshot.utilizationPct}%</span>
+              </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${Math.min(100, status.utilizationPct)}%` }}
+                  style={{ width: `${sessionSnapshot.utilizationPct}%` }}
                 />
               </div>
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
-                  {status.sessionTokens.toLocaleString()} / {status.windowSize.toLocaleString()} tokens
+                  {formatContextTokenValue(sessionSnapshot.usedContextTokens)} / {formatContextTokenValue(sessionSnapshot.contextTokens)} {t('observe.tokens')}
                 </span>
-                <span>{status.utilizationPct}%</span>
+                <span>{t('observe.contextWindow')}</span>
               </div>
-              <p className="text-xs text-muted-foreground truncate" title={status.sessionKey}>
-                {t('observe.sessionPrefix')} {status.sessionKey}
+              <p className="text-xs text-muted-foreground truncate" title={sessionSnapshot.key}>
+                {t('observe.sessionPrefix')} {sessionSnapshot.key}
               </p>
             </>
           ) : (

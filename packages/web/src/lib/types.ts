@@ -77,6 +77,15 @@ export interface GatewayStatus {
   port: number
   uptime?: number
   connections?: number
+  watchdog?: {
+    enabled: boolean
+    state: 'disabled' | 'idle' | 'healthy' | 'checking' | 'restarting' | 'paused' | 'error'
+    intervalMs: number
+    restartCount: number
+    lastCheckAt?: string
+    lastRestartAt?: string
+    lastError?: string
+  }
 }
 
 /** Display fields for one account under a channel (common config shape) */
@@ -442,6 +451,177 @@ export interface ManagedMemoryImportStatusPayload {
   importedMemoryCount: number
   lastImportedAt: string | null
   lastRun: ManagedMemoryImportRunSummary | null
+}
+
+export type WikiPageType = 'entity' | 'concept' | 'source' | 'synthesis' | 'process'
+export type WikiFreshnessStatus = 'fresh' | 'aging' | 'stale'
+export type WikiLifecycleState = 'just_ingested' | 'updated' | 'evolved' | 'outdated'
+export type WikiIngestState = 'ingested' | 'updated' | 'skipped' | 'needs_confirmation'
+export type WikiLintSeverity = 'info' | 'warning' | 'error'
+
+export interface WikiStatusPayload {
+  profileKey: string
+  vaultRoot: string
+  rawRoot: string
+  pagesRoot: string
+  metaRoot: string
+  indexPath: string
+  logPath: string
+  schemaPath: string
+  freshnessPath: string
+  conflictsPath: string
+  pageCount: number
+  sourceCount: number
+  staleCount: number
+  conflictCount: number
+  memory: {
+    engine: string
+    storagePath: string
+  }
+}
+
+export interface WikiCitation {
+  title: string
+  sourcePath?: string
+  sourceUrl?: string
+}
+
+export interface WikiPageSummary {
+  id: string
+  title: string
+  type: WikiPageType
+  path: string
+  relativePath: string
+  snippet: string
+  sourceCount: number
+  freshnessStatus: WikiFreshnessStatus
+  freshnessScore: number
+  lifecycleState: WikiLifecycleState
+  createdAt: string
+  updatedAt: string
+  evolvedAt: string
+  evolveCheckedAt: string
+  evolveChangedAt: string
+  evolveChangeSummary: string
+  evolveSource: string
+  lastAccessedAt: string
+  links: string[]
+  backlinks: string[]
+  memoryIds: string[]
+}
+
+export interface WikiPageDetail extends WikiPageSummary {
+  content: string
+  frontmatter: Record<string, string>
+  citations: WikiCitation[]
+}
+
+export interface WikiSearchResult extends WikiPageSummary {
+  score: number
+  matchType: 'keyword' | 'semantic'
+}
+
+export interface WikiIngestInput {
+  title?: string
+  content?: string
+  sourceUrl?: string
+  sourcePath?: string
+  sourceType?: string
+  pageType?: WikiPageType
+  confirmUrlIngest?: boolean
+}
+
+export interface WikiIngestPayload {
+  state: WikiIngestState
+  confirmationRequired: boolean
+  message: string
+  page?: WikiPageSummary
+  memoryId?: string
+  pagesCreated: number
+  pagesUpdated: number
+  warnings: string[]
+  evolve?: WikiEvolvePayload
+}
+
+export interface WikiQueryPayload {
+  query: string
+  usedWiki: boolean
+  answer: string
+  results: WikiSearchResult[]
+  citations: WikiCitation[]
+  offerToSave: boolean
+}
+
+export type WikiAssistReason = 'explicit_wiki' | 'knowledge_question' | 'project_context' | 'not_relevant'
+
+export interface WikiAssistPayload extends WikiQueryPayload {
+  reason: WikiAssistReason
+}
+
+export interface WikiSynthesizeInput {
+  query: string
+  title?: string
+  limit?: number
+}
+
+export interface WikiSynthesizePayload {
+  title: string
+  query: string
+  page: WikiPageSummary
+  memoryId: string
+  pagesCreated: number
+  pagesUpdated: number
+  sourcePageIds: string[]
+  citations: WikiCitation[]
+  warnings: string[]
+  evolve?: WikiEvolvePayload
+}
+
+export interface WikiLintIssue {
+  id: string
+  severity: WikiLintSeverity
+  kind: 'orphan' | 'missing-link' | 'duplicate-title' | 'stale' | 'schema'
+  pageId?: string
+  title: string
+  detail: string
+}
+
+export interface WikiLintPayload {
+  checkedAt: string
+  issueCount: number
+  issues: WikiLintIssue[]
+}
+
+export interface WikiEvolvePayload {
+  evolvedAt: string
+  pageCount: number
+  staleCount: number
+  conflictCount: number
+  changedPageIds: string[]
+  related: Record<string, string[]>
+  warnings: string[]
+  freshness: Record<string, {
+    score: number
+    status: WikiFreshnessStatus
+    lastAccessedAt: string
+    updatedAt: string
+    checkedAt: string
+  }>
+}
+
+export type WikiLinkAction = 'ingest' | 'summarize_once' | 'current_conversation_only'
+
+export interface WikiLinkChoicePayload {
+  input: string
+  urls: string[]
+  requiresChoice: boolean
+  defaultAction: WikiLinkAction
+  actions: Array<{
+    id: WikiLinkAction
+    label: string
+    description: string
+  }>
+  message: string
 }
 
 export interface ChannelInfo {

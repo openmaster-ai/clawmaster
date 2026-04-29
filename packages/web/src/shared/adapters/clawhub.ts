@@ -13,6 +13,7 @@ const BUNDLED_SKILL_SLUGS = new Set([
   'content-draft',
   'ernie-image',
   'models-dev',
+  'package-download-tracker',
   'paddleocr-doc-parsing',
 ])
 

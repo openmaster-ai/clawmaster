@@ -85,7 +85,7 @@ function printHelp() {
 ClawMaster v${pkg.version}
 
 Usage:
-  clawmaster serve [--host 127.0.0.1] [--port ${DEFAULT_SERVICE_PORT}] [--daemon] [--token <token>] [--silent]
+  clawmaster serve [--host 127.0.0.1] [--port ${DEFAULT_SERVICE_PORT}] [--daemon] [--token <token>] [--silent] [--no-gateway-watchdog]
   clawmaster status [--url http://127.0.0.1:${DEFAULT_SERVICE_PORT}] [--token <token>]
   clawmaster stop
   clawmaster doctor
@@ -101,6 +101,7 @@ Commands:
 Notes:
   The service expects built backend and frontend assets.
   clawmaster serve protects the web UI with a service token by default.
+  clawmaster serve keeps the OpenClaw gateway running by default; pass --no-gateway-watchdog to opt out.
   clawmaster serve opens the web console in your default browser unless you pass --silent.
   For local source checkouts, run:
     npm run build:backend
@@ -285,6 +286,7 @@ export function formatServeReadyMessage({
   urls,
   token,
   browserRequested = false,
+  gatewayWatchdog = true,
   ready = true,
 }) {
   const lines = [
@@ -292,6 +294,7 @@ export function formatServeReadyMessage({
     formatServeStatusLine('web console:', urls.url),
     formatServeStatusLine('bind:', `${urls.bindHost}:${urls.port}`),
     formatServeStatusLine('token:', token),
+    formatServeStatusLine('gateway:', gatewayWatchdog ? 'safeguard enabled (auto-restart)' : 'safeguard disabled'),
   ]
   if (browserRequested) {
     lines.push(formatServeStatusLine(
@@ -474,6 +477,43 @@ async function fetchServiceInfo(baseUrl, options = {}) {
   throw lastError ?? new Error('unknown service probe failure')
 }
 
+async function fetchGatewayStatus(baseUrl, options = {}) {
+  const {
+    token = '',
+    timeoutMs = 10_000,
+  } = options
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(`${baseUrl}/api/gateway/status`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      signal: controller.signal,
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+    return await response.json()
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export function formatGatewayWatchdogStatus(watchdog) {
+  if (!watchdog || typeof watchdog !== 'object') {
+    return 'unknown'
+  }
+  if (watchdog.enabled !== true) {
+    return 'disabled'
+  }
+  const state = String(watchdog.state ?? 'unknown')
+  const restarts = Number.isFinite(Number(watchdog.restartCount))
+    ? Number(watchdog.restartCount)
+    : 0
+  const suffix = restarts === 1 ? '1 restart' : `${restarts} restarts`
+  return `${state}, auto-restart enabled, ${suffix}`
+}
+
 export async function waitForUrlReady(targetUrl, options = {}) {
   const {
     retries = SERVICE_READY_RETRIES,
@@ -600,6 +640,15 @@ async function runStatus(args) {
     console.log(`openclaw: ${data?.openclaw?.installed ? data.openclaw.version || 'installed' : 'not detected'}`)
     console.log(`config:   ${data?.openclaw?.configPath ?? 'unknown'}`)
     console.log(`runtime:  ${data?.runtime?.mode ?? 'unknown'}`)
+    try {
+      const gateway = await fetchGatewayStatus(baseUrl, { token })
+      if (typeof gateway?.running === 'boolean') {
+        console.log(`gateway:  ${gateway.running ? 'running' : 'stopped'}${gateway.port ? ` on port ${gateway.port}` : ''}`)
+        console.log(formatServeStatusLine('safeguard:', formatGatewayWatchdogStatus(gateway.watchdog)))
+      }
+    } catch {
+      // Older services do not expose gateway status; keep status compatible.
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`ClawMaster service is not reachable at ${baseUrl}: ${message}`)
@@ -643,6 +692,7 @@ export function buildServiceSpawnOptions({
   host,
   port,
   token,
+  gatewayWatchdog = true,
   stdoutLog,
   stderrLog,
   workingDir = process.cwd(),
@@ -661,6 +711,7 @@ export function buildServiceSpawnOptions({
     BACKEND_PORT: port,
     CLAWMASTER_FRONTEND_DIST: assets.frontendDist,
     CLAWMASTER_SERVICE_TOKEN: token,
+    CLAWMASTER_GATEWAY_WATCHDOG: gatewayWatchdog ? '1' : '0',
   }
   if (homeContext.platform === 'win32' && homeContext.overrideActive) {
     env.HOME = homeContext.homeDir
@@ -685,6 +736,7 @@ async function runServe(args) {
   const port = getBackendPort(args)
   const daemon = hasFlag(args, 'daemon')
   const silent = isServeSilent(args)
+  const gatewayWatchdog = !hasFlag(args, 'no-gateway-watchdog')
   const token = getServiceToken(args)
   const assets = resolveServiceAssets()
   const urls = resolveServiceUrls(host, port)
@@ -722,6 +774,7 @@ async function runServe(args) {
     host,
     port,
     token,
+    gatewayWatchdog,
     stdoutLog,
     stderrLog,
   })
@@ -785,6 +838,7 @@ async function runServe(args) {
       urls,
       token,
       browserRequested: !silent,
+      gatewayWatchdog,
       ready: true,
     }))
     if (!silent) {
@@ -820,6 +874,7 @@ async function runServe(args) {
     urls,
     token,
     browserRequested: !silent,
+    gatewayWatchdog,
     ready: false,
   }))
   if (!silent) {

@@ -42,6 +42,11 @@ const bundledSkills = [
     bundledRoot: path.join(resourcesRoot, 'bundled-skills', 'models-dev'),
   },
   {
+    id: 'package-download-tracker',
+    sourceRoot: path.join(repoRoot, 'bundled-skills', 'package-download-tracker'),
+    bundledRoot: path.join(resourcesRoot, 'bundled-skills', 'package-download-tracker'),
+  },
+  {
     id: 'paddleocr-doc-parsing',
     sourceRoot: path.join(repoRoot, 'bundled-skills', 'paddleocr-doc-parsing'),
     bundledRoot: path.join(resourcesRoot, 'bundled-skills', 'paddleocr-doc-parsing'),

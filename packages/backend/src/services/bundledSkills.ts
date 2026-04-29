@@ -25,6 +25,10 @@ const BUNDLED_SKILLS = {
     dirName: 'models-dev',
     envKey: 'CLAWMASTER_BUNDLED_MODELS_DEV_SKILL_ROOT',
   },
+  'package-download-tracker': {
+    dirName: 'package-download-tracker',
+    envKey: 'CLAWMASTER_BUNDLED_PACKAGE_DOWNLOAD_TRACKER_SKILL_ROOT',
+  },
   'paddleocr-doc-parsing': {
     dirName: 'paddleocr-doc-parsing',
     envKey: 'CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT',

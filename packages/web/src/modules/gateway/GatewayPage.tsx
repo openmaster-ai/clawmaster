@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ExternalLink, Play, RotateCw, ScrollText, Shield, Square } from 'lucide-react'
+import { ExternalLink, Play, RotateCw, ScrollText, Shield, ShieldCheck, Square } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { platform } from '@/adapters'
 import { platformResults } from '@/shared/adapters/platformResults'
@@ -93,6 +93,25 @@ export default function Gateway() {
   const gatewayBind = config?.gateway?.bind || 'loopback'
   const gatewayAuthMode = config?.gateway?.auth?.mode || 'token'
   const gatewayToken = config?.gateway?.auth?.token
+  const watchdog = status?.watchdog
+  const watchdogState = watchdog?.state ?? 'disabled'
+  const watchdogStateLabels: Record<string, string> = {
+    disabled: t('gateway.watchdogDisabled'),
+    idle: t('gateway.watchdogIdle'),
+    healthy: t('gateway.watchdogHealthy'),
+    checking: t('gateway.watchdogChecking'),
+    restarting: t('gateway.watchdogRestarting'),
+    paused: t('gateway.watchdogPaused'),
+    error: t('gateway.watchdogError'),
+  }
+  const watchdogStateLabel = watchdogStateLabels[watchdogState] ?? watchdogState
+  const watchdogSummary = !watchdog
+    ? t('gateway.safeguardUnavailable')
+    : watchdog.enabled
+      ? watchdog.state === 'paused'
+        ? t('gateway.safeguardPaused')
+        : t('gateway.safeguardEnabled')
+      : t('gateway.safeguardDisabled')
 
   return (
     <div className="page-shell page-shell-medium">
@@ -105,6 +124,7 @@ export default function Gateway() {
             <span>{status?.running ? t('dashboard.running') : t('dashboard.stopped')}</span>
             <span>{t('gateway.port')}: {gatewayPort}</span>
             <span>{t('gateway.auth')}: {gatewayAuthMode}</span>
+            <span>{t('gateway.safeguard')}: {watchdogSummary}</span>
           </div>
           <h1 className="page-title">{t('gateway.title')}</h1>
           <p className="page-subtitle">{t('gateway.editConfigHint')}</p>
@@ -176,6 +196,29 @@ export default function Gateway() {
                       <p className="mt-2 text-lg font-semibold text-foreground">{gatewayAuthMode}</p>
                     </div>
                   </div>
+
+                  <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className={`h-4 w-4 ${watchdog?.enabled ? 'text-emerald-500' : 'text-muted-foreground'}`} />
+                      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                        {t('gateway.safeguard')}
+                      </p>
+                    </div>
+                    <p className="mt-3 text-sm font-medium text-foreground">{watchdogSummary}</p>
+                    <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                      <div>
+                        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{t('gateway.safeguardState')}</p>
+                        <p className="mt-1 font-medium text-foreground">{watchdogStateLabel}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{t('gateway.safeguardRestarts')}</p>
+                        <p className="mt-1 font-mono font-medium text-foreground">{watchdog?.restartCount ?? 0}</p>
+                      </div>
+                    </div>
+                    {watchdog?.lastError ? (
+                      <p className="mt-3 text-xs leading-5 text-red-600 dark:text-red-400">{watchdog.lastError}</p>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 
@@ -229,7 +272,7 @@ export default function Gateway() {
             </div>
 
             <p className="text-xs leading-6 text-muted-foreground">
-              {status?.running ? t('gateway.openInBrowser') : t('gateway.editConfigHint')}
+              {watchdog?.enabled ? t('gateway.safeguardHelp') : status?.running ? t('gateway.openInBrowser') : t('gateway.editConfigHint')}
             </p>
           </>
         )}
@@ -258,7 +301,7 @@ export default function Gateway() {
               </div>
               {gatewayToken && (
                 <div className="rounded-[1.25rem] border border-border/70 bg-background/55 p-4">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Token</p>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{t('gateway.token')}</p>
                   <button onClick={copyToken} className="mt-3 w-fit text-sm font-medium text-primary hover:underline">{t('gateway.copyToken')}</button>
                 </div>
               )}

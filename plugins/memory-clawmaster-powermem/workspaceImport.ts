@@ -92,6 +92,17 @@ function fromForwardSlashes(value: string, windowsStyle: boolean): string {
   return windowsStyle ? value.replace(/\//g, '\\') : value
 }
 
+function joinTargetRuntimePath(root: string, child: string): string {
+  const normalizedRoot = root.trim()
+  if (/^[A-Za-z]:[\\/]/.test(normalizedRoot) || normalizedRoot.startsWith('\\\\')) {
+    return path.win32.join(normalizedRoot, child)
+  }
+  if (normalizedRoot.startsWith('/')) {
+    return path.posix.join(normalizedRoot, child)
+  }
+  return path.join(normalizedRoot, child)
+}
+
 function resolvePreferredPosixHomeForMountedManagedDataRoot(normalizedDataRoot: string): string | null {
   const homeDir = process.env['HOME']?.trim()
   if (!homeDir || !homeDir.startsWith('/home/')) {
@@ -142,12 +153,12 @@ function resolveOpenclawStateDirFromManagedDataRoot(dataRoot: string): string | 
 export function resolveOpenclawWorkspaceDir(context: ManagedMemoryContext = {}): string {
   const stateDir = process.env['OPENCLAW_STATE_DIR']?.trim()
   if (stateDir) {
-    return path.join(stateDir, 'workspace')
+    return joinTargetRuntimePath(stateDir, 'workspace')
   }
   const derivedStateDir =
     context.dataRootOverride ? resolveOpenclawStateDirFromManagedDataRoot(context.dataRootOverride) : null
   if (derivedStateDir) {
-    return path.join(derivedStateDir, 'workspace')
+    return joinTargetRuntimePath(derivedStateDir, 'workspace')
   }
   return path.join(process.env['HOME'] || process.cwd(), '.openclaw', 'workspace')
 }

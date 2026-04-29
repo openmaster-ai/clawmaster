@@ -77,6 +77,8 @@ export interface SessionDetail {
   inputTokens: number
   outputTokens: number
   totalTokens: number
+  contextTokens: number
+  windowSize: number
   estimatedUsd: number
   startedAt: number
   lastActiveAt: number
@@ -85,9 +87,14 @@ export interface SessionDetail {
   turns: TurnInfo[]
 }
 
-export function getSessionDetail(key: string): Promise<AdapterResult<SessionDetail>> {
+export function getSessionDetail(
+  key: string,
+  options: { agentId?: string } = {}
+): Promise<AdapterResult<SessionDetail>> {
   return wrapAsync(async () => {
-    const raw = await execCommand('clawprobe', ['session', key, '--json'])
+    const args = ['session', key, '--json']
+    if (options.agentId?.trim()) args.push('--agent', options.agentId.trim())
+    const raw = await execCommand('clawprobe', args)
     const data = JSON.parse(raw)
     return {
       sessionKey: data.sessionKey ?? key,
@@ -96,6 +103,8 @@ export function getSessionDetail(key: string): Promise<AdapterResult<SessionDeta
       inputTokens: data.inputTokens ?? 0,
       outputTokens: data.outputTokens ?? 0,
       totalTokens: data.totalTokens ?? 0,
+      contextTokens: data.contextTokens ?? data.context_tokens ?? data.sessionTokens ?? data.session_tokens ?? 0,
+      windowSize: data.windowSize ?? data.window_size ?? 0,
       estimatedUsd: data.estimatedUsd ?? 0,
       startedAt: data.startedAt ?? 0,
       lastActiveAt: data.lastActiveAt ?? 0,

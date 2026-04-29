@@ -157,4 +157,84 @@ describe('providerCatalog', () => {
       expect(request?.url).toBe('https://open.bigmodel.cn/api/paas/v4/models')
     })
   })
+
+  describe('zai catalog', () => {
+    it('buildProviderCatalogRequest targets the native GLM catalog endpoint with Bearer auth', () => {
+      const request = buildProviderCatalogRequest({
+        providerId: 'zai',
+        apiKey: 'zai-key',
+      })
+
+      expect(request).toEqual({
+        url: 'https://api.z.ai/api/paas/v4/models',
+        headers: { Authorization: 'Bearer zai-key' },
+      })
+    })
+
+    it('assertSafeProviderCatalogBaseUrl accepts the official Z.AI base URL', () => {
+      expect(() =>
+        assertSafeProviderCatalogBaseUrl('zai', 'https://api.z.ai/api/paas/v4'),
+      ).not.toThrow()
+    })
+
+    it('filters the native GLM catalog to text model ids', () => {
+      const result = normalizeProviderCatalogResponse('zai', {
+        data: [
+          { id: 'glm-5.1', name: 'GLM-5.1' },
+          { id: 'glm-4.6', name: 'GLM-4.6' },
+          { id: 'embedding-3', name: 'Embedding' },
+          { id: 'glm-image', name: 'GLM Image' },
+        ],
+      })
+
+      expect(result).toEqual([
+        { id: 'glm-5.1', name: 'GLM-5.1' },
+        { id: 'glm-4.6', name: 'GLM-4.6' },
+      ])
+    })
+  })
+
+  describe('Baidu Qianfan Coding Plan catalog', () => {
+    it('buildProviderCatalogRequest targets the BCE coding catalog endpoint with Bearer auth', () => {
+      const request = buildProviderCatalogRequest({
+        providerId: 'baiduqianfancodingplan',
+        apiKey: 'bce-test-key',
+      })
+
+      expect(request).toEqual({
+        url: 'https://qianfan.baidubce.com/v2/coding/models',
+        headers: { Authorization: 'Bearer bce-test-key' },
+      })
+    })
+
+    it('assertSafeProviderCatalogBaseUrl accepts only the official BCE coding base path', () => {
+      expect(() =>
+        assertSafeProviderCatalogBaseUrl('baiduqianfancodingplan', 'https://qianfan.baidubce.com/v2/coding'),
+      ).not.toThrow()
+      expect(() =>
+        assertSafeProviderCatalogBaseUrl('baiduqianfancodingplan', 'https://qianfan.baidubce.com/v2'),
+      ).toThrow(/path is not allowed/)
+      expect(() =>
+        assertSafeProviderCatalogBaseUrl('baiduqianfancodingplan', 'https://example.com/v2/coding'),
+      ).toThrow(/host is not allowed/)
+    })
+
+    it('filters the BCE catalog to coding models and keeps the documented default alias', () => {
+      const result = normalizeProviderCatalogResponse('baiduqianfancodingplan', {
+        data: [
+          { id: 'ernie-4.5-turbo-128k', name: 'ERNIE 4.5 Turbo' },
+          { id: 'qwen3-coder-480b-a35b-instruct', name: 'Qwen3 Coder 480B' },
+          { id: 'codellama-7b-instruct', name: 'Code Llama 7B' },
+          { id: 'qwen3-embedding-4b', name: 'Qwen3 Embedding' },
+          { id: 'stable-diffusion-xl', name: 'Stable Diffusion XL' },
+        ],
+      })
+
+      expect(result).toEqual([
+        { id: 'qianfan-code-latest', name: 'Qianfan Code Latest' },
+        { id: 'qwen3-coder-480b-a35b-instruct', name: 'Qwen3 Coder 480B' },
+        { id: 'codellama-7b-instruct', name: 'Code Llama 7B' },
+      ])
+    })
+  })
 })

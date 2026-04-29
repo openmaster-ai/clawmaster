@@ -21,6 +21,8 @@ const WEBDRIVER_SESSION_RETRY_DELAY_MS = 1_500
 const WEBDRIVER_SESSION_MAX_ATTEMPTS = 3
 const CAPABILITIES_TITLE_PATTERN = /(Capability Center|Assistant Capabilities|能力中心|助手能力|機能センター|アシスタント機能)/
 const MODELS_TITLE_PATTERN = /(Model Configuration|模型配置|モデル設定)/
+const BAIDU_QIANFAN_PROVIDER_PATTERN = /(Baidu Qianfan Coding Plan|百度千帆 Coding Plan)/
+const BAIDU_QIANFAN_NOTE_PATTERN = /(Baidu BCE Qianfan Coding Plan|百度 BCE 千帆 Coding Plan|OpenAI 互換コードモデル)/
 const ERNIE_PROVIDER_PATTERN = /(ERNIE LLM API|文心大模型|ERNIE大規模言語モデルAPI)/
 const ERNIE_QUOTA_NOTE_PATTERN = /(1,000,000 free tokens|100 万 Tokens|100万トークン)/
 const RETRYABLE_WEBDRIVER_SESSION_ERROR_PATTERNS = [
@@ -1204,22 +1206,22 @@ async function verifyDesktopModelsProviderSwitch(driver) {
   await driver.wait(until.elementLocated(By.id('models-add-provider')), NAVIGATION_TIMEOUT_MS)
   await driver.wait(async () => {
     const panel = await driver.findElement(By.id('models-add-provider'))
-    return (await panel.getAttribute('data-provider')) === 'baidu-aistudio'
+    return (await panel.getAttribute('data-provider')) === 'baiduqianfancodingplan'
   }, NAVIGATION_TIMEOUT_MS)
 
   let addProviderPanel = await driver.findElement(By.id('models-add-provider'))
   await scrollElementIntoView(driver, addProviderPanel)
 
   const panelText = await addProviderPanel.getText()
-  assert.match(panelText, ERNIE_PROVIDER_PATTERN)
-  assert.match(panelText, ERNIE_QUOTA_NOTE_PATTERN)
+  assert.match(panelText, BAIDU_QIANFAN_PROVIDER_PATTERN)
+  assert.match(panelText, BAIDU_QIANFAN_NOTE_PATTERN)
 
   const apiKeyInput = await addProviderPanel.findElement(By.id('models-provider-api-key'))
-  const erniePlaceholder = await apiKeyInput.getAttribute('placeholder')
-  assert.match(erniePlaceholder, ERNIE_PROVIDER_PATTERN)
+  const qianfanPlaceholder = await apiKeyInput.getAttribute('placeholder')
+  assert.match(qianfanPlaceholder, BAIDU_QIANFAN_PROVIDER_PATTERN)
 
   const providerNote = await addProviderPanel.findElements(By.css('#models-provider-note'))
-  assert.equal(providerNote.length, 1, 'ERNIE provider note should be visible')
+  assert.equal(providerNote.length, 1, 'Baidu Qianfan provider note should be visible')
 
   const openAiButton = await addProviderPanel.findElement(By.css('button[data-provider-id="openai"]'))
   await openAiButton.click()
@@ -1233,10 +1235,10 @@ async function verifyDesktopModelsProviderSwitch(driver) {
   const openAiInput = await addProviderPanel.findElement(By.id('models-provider-api-key'))
   const openAiPlaceholder = await openAiInput.getAttribute('placeholder')
   assert.match(openAiPlaceholder, /OpenAI/)
-  assert.notEqual(openAiPlaceholder, erniePlaceholder)
+  assert.notEqual(openAiPlaceholder, qianfanPlaceholder)
 
   const openAiNotes = await addProviderPanel.findElements(By.css('#models-provider-note'))
-  assert.equal(openAiNotes.length, 0, 'OpenAI provider should not show the ERNIE note')
+  assert.equal(openAiNotes.length, 0, 'OpenAI provider should not show the sponsor note')
 
   const ernieButton = await addProviderPanel.findElement(By.css('button[data-provider-id="baidu-aistudio"]'))
   await ernieButton.click()
@@ -1247,13 +1249,16 @@ async function verifyDesktopModelsProviderSwitch(driver) {
   }, NAVIGATION_TIMEOUT_MS)
 
   addProviderPanel = await driver.findElement(By.id('models-add-provider'))
+  const erniePanelText = await addProviderPanel.getText()
+  assert.match(erniePanelText, ERNIE_PROVIDER_PATTERN)
+  assert.match(erniePanelText, ERNIE_QUOTA_NOTE_PATTERN)
   const restoredNotes = await addProviderPanel.findElements(By.css('#models-provider-note'))
   assert.equal(restoredNotes.length, 1, 'ERNIE provider note should return after switching back')
 
   await captureDriverArtifacts(driver, 'desktop-models-provider-switch', {
     mode: 'webdriver',
     page: 'models',
-    placeholderBefore: erniePlaceholder,
+    placeholderBefore: qianfanPlaceholder,
     placeholderAfter: openAiPlaceholder,
   })
 

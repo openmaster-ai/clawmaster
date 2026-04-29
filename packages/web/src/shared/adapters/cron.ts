@@ -369,7 +369,7 @@ function buildCronJobArgs(draft: CronJobDraft, mode: 'create' | 'edit'): string[
 
   if (draft.announce) {
     args.push('--announce')
-  } else if (mode === 'edit') {
+  } else {
     args.push('--no-deliver')
   }
 

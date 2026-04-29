@@ -49,6 +49,7 @@ describe('moduleRegistry', () => {
     expect(ids).toContain('mcp')
     expect(ids).toContain('channels')
     expect(ids).toContain('memory')
+    expect(ids).toContain('wiki')
     expect(ids).toContain('sessions')
     expect(ids).toContain('models')
     expect(ids).toContain('ocr')
@@ -74,5 +75,10 @@ describe('moduleRegistry', () => {
     for (const m of modules) {
       expect(['main', 'manage', 'system', undefined]).toContain(m.group)
     }
+  })
+
+  it('places wiki immediately after memory in nav order', () => {
+    const ids = modules.map((m) => m.id)
+    expect(ids.indexOf('wiki')).toBe(ids.indexOf('memory') + 1)
   })
 })

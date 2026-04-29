@@ -337,6 +337,7 @@
   "skills.catalog.ernieImage.desc": "ERNIE-Image-specific guide for prompt shaping and choosing Baidu image arguments like size, seed, use_pe, steps, and guidance scale",
   "skills.catalog.modelsDev.desc": "General-purpose models.dev lookup skill for cached pricing, context limits, capability flags, and provider comparisons",
   "skills.catalog.clawprobeCostDigest.desc": "Bundled ClawProbe digest skill that refreshes models.dev pricing and generates day, week, or month spend summaries with top sessions and models",
+  "skills.catalog.packageDownloadTracker.desc": "Bundled npm and PyPI download tracker that uses stored observations for weekly or monthly trend analysis",
   "skills.catalog.imageGenerate.desc": "Guided image generation workflow skill for turning goals into prompts and runnable image tasks",
   "skills.catalog.clawvet.desc": "Skill security vetting tool that scans for injection attacks and supply chain risks",
   "skills.catalog.ontoskills.desc": "OWL 2 skill compiler that transforms skills into validated semantic web ontologies",
