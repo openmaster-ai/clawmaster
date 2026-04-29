@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import { platform } from '@/adapters'
@@ -1228,6 +1229,158 @@ async function fetchReleaseNotes(limit = 10): Promise<ReleaseNote[]> {
   }
 }
 
+function isBrowserFetchFailure(error?: string | null): boolean {
+  return (
+    error === 'Failed to fetch' ||
+    error === 'Load failed' ||
+    error === 'NetworkError when attempting to fetch resource.'
+  )
+}
+
+function renderReleaseInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = []
+  const pattern = /\[([^\]]+)]\((https?:\/\/[^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*/g
+  let lastIndex = 0
+  let matchIndex = 0
+
+  for (const match of text.matchAll(pattern)) {
+    const start = match.index ?? 0
+    if (start > lastIndex) {
+      nodes.push(text.slice(lastIndex, start))
+    }
+
+    if (match[1] !== undefined && match[2] !== undefined) {
+      nodes.push(
+        <a
+          key={`${keyPrefix}-link-${matchIndex}`}
+          href={match[2]}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary"
+        >
+          {match[1]}
+        </a>,
+      )
+    } else if (match[3] !== undefined) {
+      nodes.push(
+        <code
+          key={`${keyPrefix}-code-${matchIndex}`}
+          className="rounded-md bg-muted/70 px-1 py-0.5 font-mono text-[0.92em] text-foreground"
+        >
+          {match[3]}
+        </code>,
+      )
+    } else if (match[4] !== undefined) {
+      nodes.push(
+        <strong key={`${keyPrefix}-strong-${matchIndex}`} className="font-semibold text-foreground">
+          {match[4]}
+        </strong>,
+      )
+    } else if (match[5] !== undefined) {
+      nodes.push(
+        <em key={`${keyPrefix}-em-${matchIndex}`} className="italic">
+          {match[5]}
+        </em>,
+      )
+    }
+
+    lastIndex = start + match[0].length
+    matchIndex += 1
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex))
+  }
+
+  return nodes.length ? nodes : [text]
+}
+
+function renderReleaseMarkdown(markdown: string, keyPrefix: string): ReactNode[] {
+  const lines = markdown.replace(/\r/g, '').split('\n')
+  const nodes: ReactNode[] = []
+  let index = 0
+
+  while (index < lines.length) {
+    const line = lines[index] ?? ''
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      index += 1
+      continue
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/)
+    if (headingMatch) {
+      const level = headingMatch[1].length
+      const Tag = `h${Math.min(level + 2, 6)}` as keyof JSX.IntrinsicElements
+      const className =
+        level <= 2
+          ? 'mt-3 text-sm font-semibold text-foreground'
+          : 'mt-3 text-xs font-semibold uppercase text-foreground'
+      nodes.push(
+        <Tag key={`${keyPrefix}-heading-${index}`} className={className}>
+          {renderReleaseInlineMarkdown(headingMatch[2].trim(), `${keyPrefix}-heading-${index}`)}
+        </Tag>,
+      )
+      index += 1
+      continue
+    }
+
+    if (/^[-*+]\s+/.test(trimmed)) {
+      const items: string[] = []
+      while (index < lines.length && /^[-*+]\s+/.test((lines[index] ?? '').trim())) {
+        items.push((lines[index] ?? '').trim().replace(/^[-*+]\s+/, ''))
+        index += 1
+      }
+      nodes.push(
+        <ul key={`${keyPrefix}-ul-${index}`} className="ml-4 list-disc space-y-1">
+          {items.map((item, itemIndex) => (
+            <li key={`${keyPrefix}-ul-${index}-${itemIndex}`}>
+              {renderReleaseInlineMarkdown(item, `${keyPrefix}-ul-${index}-${itemIndex}`)}
+            </li>
+          ))}
+        </ul>,
+      )
+      continue
+    }
+
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const items: string[] = []
+      while (index < lines.length && /^\d+\.\s+/.test((lines[index] ?? '').trim())) {
+        items.push((lines[index] ?? '').trim().replace(/^\d+\.\s+/, ''))
+        index += 1
+      }
+      nodes.push(
+        <ol key={`${keyPrefix}-ol-${index}`} className="ml-4 list-decimal space-y-1">
+          {items.map((item, itemIndex) => (
+            <li key={`${keyPrefix}-ol-${index}-${itemIndex}`}>
+              {renderReleaseInlineMarkdown(item, `${keyPrefix}-ol-${index}-${itemIndex}`)}
+            </li>
+          ))}
+        </ol>,
+      )
+      continue
+    }
+
+    const paragraphLines = [trimmed]
+    index += 1
+    while (index < lines.length) {
+      const next = (lines[index] ?? '').trim()
+      if (!next || /^(#{1,6})\s+/.test(next) || /^[-*+]\s+/.test(next) || /^\d+\.\s+/.test(next)) break
+      paragraphLines.push(next)
+      index += 1
+    }
+
+    nodes.push(
+      <p key={`${keyPrefix}-p-${index}`}>
+        {renderReleaseInlineMarkdown(paragraphLines.join(' '), `${keyPrefix}-p-${index}`)}
+      </p>,
+    )
+  }
+
+  return nodes
+}
+
 function UpdateSection({
   currentVersion,
   installed,
@@ -1270,7 +1423,11 @@ function UpdateSection({
       const upToDate = currentVersion && currentVersion.includes(latest)
       setState(upToDate ? 'up-to-date' : 'available')
     } else {
-      setError(result.error ?? t('common.unknownError'))
+      setError(
+        isBrowserFetchFailure(result.error)
+          ? t('settings.updateBackendUnavailable')
+          : result.error ?? t('common.unknownError')
+      )
       setState('error')
     }
   }, [currentVersion, t])
@@ -1310,29 +1467,31 @@ function UpdateSection({
   }, [handleCheck, location.hash, state, updateTask.status])
 
   return (
-    <section id="settings-update" className="surface-card">
-      <div className="section-heading">
-        <h3 className="section-title">{t('settings.update')}</h3>
-      </div>
-      <div className="space-y-3 text-sm">
-        {/* Current version */}
-        <div className="flex items-center justify-between">
-          <span>OpenClaw CLI</span>
-          <span className="text-muted-foreground font-mono">
-            {installed ? `v${currentVersion}` : t('common.notInstalled')}
-          </span>
+    <section id="settings-update" className="surface-card !p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h3 className="section-title text-lg">{t('settings.update')}</h3>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+            <span>OpenClaw CLI</span>
+            <span className="break-all font-mono text-muted-foreground">
+              {installed ? `v${currentVersion}` : t('common.notInstalled')}
+            </span>
+          </div>
         </div>
 
         {/* Check button (idle/error state) */}
         {(state === 'idle' || state === 'error') && updateTask.status === 'idle' && (
           <button
             onClick={handleCheck}
-            className="button-secondary"
+            className="button-secondary h-9 shrink-0 px-3 py-1.5"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             {t('settings.checkUpdate')}
           </button>
         )}
+      </div>
+
+      <div className="mt-3 space-y-2 text-sm">
 
         {/* Checking spinner */}
         {state === 'checking' && (
@@ -1360,9 +1519,9 @@ function UpdateSection({
 
         {/* Update available */}
         {(state === 'available' || state === 'up-to-date') && versions && updateTask.status === 'idle' && (
-          <div className="inline-note space-y-3">
+          <div className="space-y-3 rounded-xl border border-border/70 bg-muted/30 p-3">
             {/* Channel selector */}
-            <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+            <div className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
               <label className="text-muted-foreground">{t('settings.updateChannel')}</label>
               <select
                 value={channel}
@@ -1374,7 +1533,7 @@ function UpdateSection({
                   const upToDate = currentVersion && currentVersion.includes(ver)
                   setState(upToDate ? 'up-to-date' : 'available')
                 }}
-                className="control-select"
+                className="control-select h-9 py-1.5"
               >
                 <option value="stable">Stable</option>
                 <option value="beta">Beta</option>
@@ -1383,7 +1542,7 @@ function UpdateSection({
             </div>
 
             {/* Version selector */}
-            <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+            <div className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
               <label className="text-muted-foreground">{t('settings.targetVersion')}</label>
               <select
                 value={selectedVersion}
@@ -1392,7 +1551,7 @@ function UpdateSection({
                   const upToDate = currentVersion && currentVersion.includes(e.target.value)
                   setState(upToDate ? 'up-to-date' : 'available')
                 }}
-                className="control-select w-full font-mono"
+                className="control-select h-9 w-full py-1.5 font-mono"
               >
                 {recentVersions.map((v) => (
                   <option key={v} value={v}>
@@ -1406,7 +1565,7 @@ function UpdateSection({
             {!isUpToDate && selectedVersion && (
               <button
                 onClick={handleUpdate}
-                className="button-primary text-sm"
+                className="button-primary h-9 px-3 py-1.5 text-sm"
               >
                 {currentVersion && selectedVersion < currentVersion
                   ? t('settings.downgrade', { version: selectedVersion })
@@ -1415,9 +1574,9 @@ function UpdateSection({
             )}
 
             {/* Dist tags info */}
-            <div className="text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
               {Object.entries(versions.distTags).map(([tag, ver]) => (
-                <span key={tag} className="mr-3">
+                <span key={tag}>
                   <span className="font-medium">{tag}</span>: <span className="font-mono">{ver}</span>
                 </span>
               ))}
@@ -1452,9 +1611,9 @@ function UpdateSection({
                             </a>
                           )}
                         </div>
-                        <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed">
-                          {r.body.length > 500 ? r.body.slice(0, 500) + '...' : r.body}
-                        </pre>
+                        <div className="space-y-2 text-xs leading-6 text-muted-foreground">
+                          {renderReleaseMarkdown(r.body, `release-${r.version}`)}
+                        </div>
                       </div>
                     ))}
                   </div>

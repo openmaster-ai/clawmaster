@@ -26,6 +26,7 @@ vi.mock('react-i18next', () => ({
         'settings.checkUpdate': 'Check for updates',
         'settings.checking': 'Checking...',
         'settings.upToDate': 'Up to date',
+        'settings.updateBackendUnavailable': 'Cannot reach the ClawMaster backend. Start the app with npm run dev:web or open the desktop app, then try again.',
         'settings.updateChannel': 'Channel:',
         'settings.targetVersion': 'Version:',
         'settings.updateTo': `Update to ${opts?.version ?? ''}`,
@@ -816,6 +817,23 @@ describe('UpdateSection', () => {
     })
   })
 
+  it('explains generic browser fetch failures during update checks', async () => {
+    mockListVersions.mockResolvedValue({
+      success: false,
+      error: 'Failed to fetch',
+    })
+    renderSettings()
+    await waitFor(() => screen.getByText('Check for updates'))
+    fireEvent.click(screen.getByText('Check for updates'))
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Cannot reach the ClawMaster backend. Start the app with npm run dev:web or open the desktop app, then try again.'
+        )
+      ).toBeInTheDocument()
+    })
+  })
+
   it('calls reinstallOpenclawGlobal when update clicked', async () => {
     mockListVersions.mockResolvedValue({
       success: true,
@@ -877,6 +895,40 @@ describe('UpdateSection', () => {
       expect(screen.getByText('latest')).toBeInTheDocument()
       expect(screen.getByText('2026.4.1')).toBeInTheDocument()
     })
+  })
+
+  it('renders release note markdown instead of raw markdown text', async () => {
+    mockListVersions.mockResolvedValue({
+      success: true,
+      data: {
+        versions: ['2026.4.1', '2026.3.28'],
+        distTags: { latest: '2026.4.1' },
+      },
+    })
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            tag_name: 'v2026.4.1',
+            name: 'v2026.4.1',
+            body: '## 2026.4.1\n\n### Highlights\n\n- Voice replies get `tts latest`\n- Plugin startup paths move faster',
+            published_at: '2026-04-27T00:00:00.000Z',
+            html_url: 'https://example.com/releases/2026.4.1',
+          },
+        ]),
+        { status: 200 },
+      ),
+    )
+
+    renderSettings()
+    await waitFor(() => screen.getByText('Check for updates'))
+    fireEvent.click(screen.getByText('Check for updates'))
+    await waitFor(() => screen.getByText('Release Notes'))
+    fireEvent.click(screen.getByText('Release Notes'))
+
+    expect(screen.getByRole('heading', { name: 'Highlights' })).toBeInTheDocument()
+    expect(screen.getByText('tts latest')).toBeInTheDocument()
+    expect(screen.queryByText('### Highlights')).not.toBeInTheDocument()
   })
 
   it('saves a named OpenClaw profile from settings', async () => {

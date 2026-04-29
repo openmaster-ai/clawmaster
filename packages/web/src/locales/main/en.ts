@@ -581,6 +581,7 @@ export default {
   "settings.checkUpdate": "Check for updates",
   "settings.checking": "Checking for updates...",
   "settings.upToDate": "You're on the latest version",
+  "settings.updateBackendUnavailable": "Cannot reach the ClawMaster backend. Start the app with npm run dev:web or open the desktop app, then try again.",
   "settings.targetVersion": "Target version:",
   "settings.updateTo": "Update to {{version}}",
   "settings.downgrade": "Downgrade to {{version}}",

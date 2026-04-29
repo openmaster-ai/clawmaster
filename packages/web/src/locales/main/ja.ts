@@ -581,6 +581,7 @@ export default {
   "settings.checkUpdate": "アップデートを確認",
   "settings.checking": "アップデートを確認中...",
   "settings.upToDate": "最新バージョンです",
+  "settings.updateBackendUnavailable": "ClawMaster バックエンドに接続できません。npm run dev:web で起動するか、デスクトップアプリを開いてから再試行してください。",
   "settings.targetVersion": "ターゲットバージョン:",
   "settings.updateTo": "{{version}} にアップデート",
   "settings.downgrade": "{{version}} にダウングレード",
