@@ -1,6 +1,6 @@
 {
   "name": "clawmaster",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "龙虾管理大师——OpenClaw 生态的六边形战士",
   "bin": {
     "clawmaster": "bin/clawmaster.mjs"
@@ -11,6 +11,7 @@
     "bundled-skills/clawprobe-cost-digest/",
     "bundled-skills/ernie-image/",
     "bundled-skills/models-dev/",
+    "bundled-skills/package-download-tracker/",
     "bundled-skills/paddleocr-doc-parsing/",
     "plugins/memory-clawmaster-powermem/",
     "plugins/openclaw-ernie-image/",

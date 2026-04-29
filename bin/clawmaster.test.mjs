@@ -159,6 +159,7 @@ test('formatServeReadyMessage clearly reports the console and bind addresses', (
   assert.match(message, /web console:\s+http:\/\/127\.0\.0\.1:16223/)
   assert.match(message, /bind:\s+0\.0\.0\.0:16223/)
   assert.match(message, /token:\s+secret-token/)
+  assert.match(message, /gateway:\s+safeguard enabled \(auto-restart\)/)
   assert.match(message, /browser:\s+opening the default browser/)
   assert.match(message, /next:\s+clawmaster status \| clawmaster stop/)
 })
@@ -174,8 +175,29 @@ test('formatServeReadyMessage describes deferred foreground browser launch witho
 
   assert.match(message, /ClawMaster service is starting\./)
   assert.match(message, /browser:\s+opening when the web console becomes reachable/)
+  assert.match(message, /gateway:\s+safeguard enabled \(auto-restart\)/)
   assert.match(message, /next:\s+Ctrl\+C to stop/)
   assert.doesNotMatch(message, /skipped/i)
+})
+
+test('formatServeReadyMessage reports when gateway safeguard is disabled', () => {
+  const message = cliModule.formatServeReadyMessage({
+    daemon: false,
+    urls: cliModule.resolveServiceUrls('127.0.0.1', '16223'),
+    token: 'secret-token',
+    gatewayWatchdog: false,
+  })
+
+  assert.match(message, /gateway:\s+safeguard disabled/)
+})
+
+test('formatGatewayWatchdogStatus summarizes watchdog state for CLI status', () => {
+  assert.equal(cliModule.formatGatewayWatchdogStatus(null), 'unknown')
+  assert.equal(cliModule.formatGatewayWatchdogStatus({ enabled: false }), 'disabled')
+  assert.equal(
+    cliModule.formatGatewayWatchdogStatus({ enabled: true, state: 'healthy', restartCount: 2 }),
+    'healthy, auto-restart enabled, 2 restarts',
+  )
 })
 
 test('resolveServiceStatePaths prefers an explicit Windows HOME override', () => {
@@ -375,6 +397,7 @@ test('buildServiceSpawnOptions preserves the caller working directory', () => {
   assert.equal(options.cwd, workingDir)
   assert.equal(options.env.CLAWMASTER_FRONTEND_DIST, '/tmp/frontend-dist')
   assert.equal(options.env.CLAWMASTER_SERVICE_TOKEN, 'secret-token')
+  assert.equal(options.env.CLAWMASTER_GATEWAY_WATCHDOG, '1')
   assert.equal(options.env.BACKEND_HOST, '127.0.0.1')
   assert.equal(options.env.BACKEND_PORT, '16223')
   assert.equal(options.windowsHide, true)
@@ -382,6 +405,21 @@ test('buildServiceSpawnOptions preserves the caller working directory', () => {
   closeSync(options.stdio[2])
 
   rmSync(tempHome, { recursive: true, force: true })
+})
+
+test('buildServiceSpawnOptions can disable the gateway watchdog for service env', () => {
+  const options = cliModule.buildServiceSpawnOptions({
+    assets: { frontendDist: '/tmp/frontend-dist' },
+    daemon: false,
+    host: '127.0.0.1',
+    port: '16223',
+    token: 'secret-token',
+    gatewayWatchdog: false,
+    stdoutLog: 'ignored.stdout.log',
+    stderrLog: 'ignored.stderr.log',
+  })
+
+  assert.equal(options.env.CLAWMASTER_GATEWAY_WATCHDOG, '0')
 })
 
 test('buildServiceSpawnOptions propagates a Windows HOME override to backend env', () => {
@@ -408,9 +446,65 @@ test('help documents serve silent mode and browser auto-open', async () => {
   const tempHome = createTempHome()
   try {
     const { stdout } = await runCli(['--help'], tempHome)
-    assert.match(stdout, /serve \[--host 127\.0\.0\.1] \[--port 16223] \[--daemon] \[--token <token>] \[--silent]/)
+    assert.match(stdout, /serve \[--host 127\.0\.0\.1] \[--port 16223] \[--daemon] \[--token <token>] \[--silent] \[--no-gateway-watchdog]/)
+    assert.match(stdout, /keeps the OpenClaw gateway running by default/i)
     assert.match(stdout, /opens the web console in your default browser unless you pass --silent/i)
   } finally {
+    rmSync(tempHome, { recursive: true, force: true })
+  }
+})
+
+test('status reports gateway safeguard state when the service exposes it', async () => {
+  const tempHome = createTempHome()
+  const token = 'local-service-token'
+  const server = createServer((req, res) => {
+    if (req.headers.authorization !== `Bearer ${token}`) {
+      res.writeHead(401, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'unauthorized' }))
+      return
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    if (req.url?.startsWith('/api/gateway/status')) {
+      res.end(JSON.stringify({
+        running: true,
+        port: 18789,
+        watchdog: {
+          enabled: true,
+          state: 'healthy',
+          restartCount: 2,
+        },
+      }))
+      return
+    }
+    res.end(JSON.stringify({
+      openclaw: { installed: true, version: '1.2.3', configPath: '/tmp/openclaw.json' },
+      runtime: { mode: 'native' },
+    }))
+  })
+
+  try {
+    await new Promise((resolve, reject) => {
+      server.listen(0, '127.0.0.1', (error) => (error ? reject(error) : resolve()))
+    })
+    const address = server.address()
+    assert.ok(address && typeof address === 'object')
+    const url = `http://127.0.0.1:${address.port}`
+
+    writeServiceState(tempHome, {
+      pid: process.pid,
+      url,
+      token,
+      startedAt: '2026-04-11T00:00:00.000Z',
+    })
+
+    const { stdout } = await runCli(['status'], tempHome)
+
+    assert.match(stdout, /gateway:\s+running on port 18789/)
+    assert.match(stdout, /safeguard:\s+healthy, auto-restart enabled, 2 restarts/)
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()))
+    })
     rmSync(tempHome, { recursive: true, force: true })
   }
 })

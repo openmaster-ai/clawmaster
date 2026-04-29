@@ -199,6 +199,26 @@ test('resolveOpenclawWorkspaceDir prefers WSL HOME when the managed data root is
   }
 })
 
+test('resolveOpenclawWorkspaceDir keeps Windows data root workspaces in Windows path style', () => {
+  const previousStateDir = process.env['OPENCLAW_STATE_DIR']
+  delete process.env['OPENCLAW_STATE_DIR']
+
+  try {
+    const workspaceDir = resolveOpenclawWorkspaceDir({
+      dataRootOverride: 'C:\\Users\\alice\\.clawmaster\\data\\named\\team-a',
+      engineOverride: 'powermem-sqlite',
+    })
+
+    assert.equal(workspaceDir, 'C:\\Users\\alice\\.openclaw-team-a\\workspace')
+  } finally {
+    if (previousStateDir === undefined) {
+      delete process.env['OPENCLAW_STATE_DIR']
+    } else {
+      process.env['OPENCLAW_STATE_DIR'] = previousStateDir
+    }
+  }
+})
+
 test('importOpenclawWorkspaceMemories reads named-profile workspace files from dataRootOverride without OPENCLAW_STATE_DIR', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-plugin-workspace-import-named-'))
   const previousStateDir = process.env['OPENCLAW_STATE_DIR']

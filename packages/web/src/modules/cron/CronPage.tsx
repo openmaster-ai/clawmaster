@@ -6,7 +6,12 @@ import { ExternalLink, Play, RefreshCw, SquarePen, TimerReset, Trash2 } from 'lu
 import { ActionBanner } from '@/shared/components/ActionBanner'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { LoadingState } from '@/shared/components/LoadingState'
-import { buildCostDigestDraft, isCostDigestPeriod } from '@/shared/cronCostDigests'
+import {
+  buildCostDigestDraft,
+  buildPackageDownloadDraft,
+  isCostDigestPeriod,
+  isPackageDownloadPeriod,
+} from '@/shared/cronCostDigests'
 import { getGatewayStatusResult } from '@/shared/adapters/gateway'
 import { getConfigResult } from '@/shared/adapters/openclaw'
 import {
@@ -274,7 +279,7 @@ export default function CronPage() {
 
     const template = searchParams.get('template')
     const period = searchParams.get('period')
-    if (template !== 'cost-digest' || !isCostDigestPeriod(period)) {
+    if (template !== 'cost-digest' && template !== 'package-downloads') {
       return
     }
 
@@ -282,16 +287,31 @@ export default function CronPage() {
       return
     }
 
+    const costDigestPeriod = isCostDigestPeriod(period) ? period : null
+    if (template === 'cost-digest' && !costDigestPeriod) {
+      return
+    }
+    const packageDownloadPeriod = isPackageDownloadPeriod(period) ? period : 'week'
+
     templateApplied.current = true
     setEditorMode('create')
     setEditingJobId(null)
-    setDraft(buildCostDigestDraft(period, t))
+    setDraft(
+      template === 'cost-digest'
+        ? buildCostDigestDraft(costDigestPeriod!, t)
+        : buildPackageDownloadDraft(packageDownloadPeriod, t),
+    )
     setEditorError(null)
     setFeedback({
       tone: 'info',
-      message: t('cron.templateLoadedCostDigest', {
-        period: t(`observe.period${period[0].toUpperCase()}${period.slice(1)}`),
-      }),
+      message:
+        template === 'cost-digest'
+          ? t('cron.templateLoadedCostDigest', {
+              period: t(`observe.period${costDigestPeriod![0].toUpperCase()}${costDigestPeriod!.slice(1)}`),
+            })
+          : t('cron.templateLoadedPackageDownloads', {
+              period: t(`observe.period${packageDownloadPeriod[0].toUpperCase()}${packageDownloadPeriod.slice(1)}`),
+            }),
     })
   }, [gatewayReady, gatewayResolved, searchParams, t])
 

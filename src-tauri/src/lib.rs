@@ -5996,6 +5996,7 @@ fn bundled_skill_dir_name(skill_id: &str) -> Option<&'static str> {
         "clawprobe-cost-digest" => Some("clawprobe-cost-digest"),
         "ernie-image" => Some("ernie-image"),
         "models-dev" => Some("models-dev"),
+        "package-download-tracker" => Some("package-download-tracker"),
         "paddleocr-doc-parsing" => Some("paddleocr-doc-parsing"),
         _ => None,
     }
@@ -6007,17 +6008,19 @@ fn bundled_skill_env_key(skill_id: &str) -> Option<&'static str> {
         "clawprobe-cost-digest" => Some("CLAWMASTER_BUNDLED_CLAWPROBE_COST_DIGEST_SKILL_ROOT"),
         "ernie-image" => Some("CLAWMASTER_BUNDLED_ERNIE_IMAGE_SKILL_ROOT"),
         "models-dev" => Some("CLAWMASTER_BUNDLED_MODELS_DEV_SKILL_ROOT"),
+        "package-download-tracker" => Some("CLAWMASTER_BUNDLED_PACKAGE_DOWNLOAD_TRACKER_SKILL_ROOT"),
         "paddleocr-doc-parsing" => Some("CLAWMASTER_BUNDLED_PADDLEOCR_DOC_PARSING_SKILL_ROOT"),
         _ => None,
     }
 }
 
-fn bundled_skill_ids() -> [&'static str; 5] {
+fn bundled_skill_ids() -> [&'static str; 6] {
     [
         "content-draft",
         "clawprobe-cost-digest",
         "ernie-image",
         "models-dev",
+        "package-download-tracker",
         "paddleocr-doc-parsing",
     ]
 }
@@ -8825,6 +8828,17 @@ pub fn run() {
                     std::env::set_var(
                         "CLAWMASTER_BUNDLED_MODELS_DEV_SKILL_ROOT",
                         models_dev_skill_root.to_string_lossy().to_string(),
+                    );
+                }
+                let package_download_tracker_skill_root = resource_dir
+                    .join("bundled-skills")
+                    .join("package-download-tracker");
+                if package_download_tracker_skill_root.join("SKILL.md").exists() {
+                    std::env::set_var(
+                        "CLAWMASTER_BUNDLED_PACKAGE_DOWNLOAD_TRACKER_SKILL_ROOT",
+                        package_download_tracker_skill_root
+                            .to_string_lossy()
+                            .to_string(),
                     );
                 }
                 let paddleocr_skill_root = resource_dir

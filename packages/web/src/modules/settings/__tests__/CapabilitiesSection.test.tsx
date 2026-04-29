@@ -247,9 +247,9 @@ describe('CapabilitiesSection', () => {
 
     renderSection()
 
-    const checkbox = await screen.findByRole('switch')
+    const checkbox = await screen.findByRole('switch', { name: '使用 npm 镜像' })
     await waitFor(() => {
-      expect(checkbox).toBeChecked()
+      expect(checkbox).toHaveAttribute('aria-checked', 'true')
     })
 
     fireEvent.click(checkbox)
@@ -295,9 +295,9 @@ describe('CapabilitiesSection', () => {
 
     renderSection()
 
-    const checkbox = await screen.findByRole('switch')
+    const checkbox = await screen.findByRole('switch', { name: '使用 npm 镜像' })
     await waitFor(() => {
-      expect(checkbox).toBeChecked()
+      expect(checkbox).toHaveAttribute('aria-checked', 'true')
     })
 
     fireEvent.click(checkbox)

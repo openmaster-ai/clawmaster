@@ -16,6 +16,8 @@ test('isBundledSkillSlug recognizes bundled skill ids case-insensitively', () =>
   assert.equal(isBundledSkillSlug('ERNIE-IMAGE'), true)
   assert.equal(isBundledSkillSlug('models-dev'), true)
   assert.equal(isBundledSkillSlug('MODELS-DEV'), true)
+  assert.equal(isBundledSkillSlug('package-download-tracker'), true)
+  assert.equal(isBundledSkillSlug('PACKAGE-DOWNLOAD-TRACKER'), true)
   assert.equal(isBundledSkillSlug('paddleocr-doc-parsing'), true)
   assert.equal(isBundledSkillSlug('PADDLEOCR-DOC-PARSING'), true)
   assert.equal(isBundledSkillSlug('image-generate'), false)
@@ -188,6 +190,35 @@ test('installBundledSkill copies the bundled models.dev skill into the active wo
   )
 })
 
+test('installBundledSkill copies the bundled package download tracker skill into the active workspace', () => {
+  const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-bundled-skill-src-'))
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-bundled-skill-data-'))
+  fs.mkdirSync(path.join(sourceRoot, 'scripts'), { recursive: true })
+  fs.writeFileSync(path.join(sourceRoot, 'SKILL.md'), '# Package Download Tracker\n', 'utf8')
+  fs.writeFileSync(path.join(sourceRoot, '_meta.json'), '{"slug":"package-download-tracker","version":"1.0.0"}\n', 'utf8')
+  fs.writeFileSync(path.join(sourceRoot, 'scripts', 'track-downloads.mjs'), 'console.log("track")\n', 'utf8')
+
+  const result = installBundledSkill('package-download-tracker', {
+    dataDir,
+    env: {
+      ...process.env,
+      CLAWMASTER_BUNDLED_PACKAGE_DOWNLOAD_TRACKER_SKILL_ROOT: sourceRoot,
+    },
+  })
+
+  const installDir = path.join(dataDir, 'workspace', 'skills', 'package-download-tracker')
+  assert.equal(result.installDir, installDir)
+  assert.equal(fs.readFileSync(path.join(installDir, 'SKILL.md'), 'utf8'), '# Package Download Tracker\n')
+  assert.equal(
+    fs.readFileSync(path.join(installDir, '_meta.json'), 'utf8'),
+    '{"slug":"package-download-tracker","version":"1.0.0"}\n',
+  )
+  assert.equal(
+    fs.readFileSync(path.join(installDir, 'scripts', 'track-downloads.mjs'), 'utf8'),
+    'console.log("track")\n',
+  )
+})
+
 test('installBundledSkill uses WSL copy commands for Linux runtime data dirs on Windows', () => {
   const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawmaster-bundled-skill-src-'))
   fs.mkdirSync(path.join(sourceRoot, 'scripts'), { recursive: true })
@@ -325,7 +356,7 @@ test('syncInstalledBundledSkills refreshes WSL-installed bundled skills with a W
   })
 
   assert.deepEqual(synced, ['content-draft'])
-  assert.equal(wslScripts.filter(({ script }) => script.startsWith('test -e ')).length, 5)
+  assert.equal(wslScripts.filter(({ script }) => script.startsWith('test -e ')).length, 6)
   assert.equal(wslScripts.filter(({ script }) => script.startsWith('cat ')).length, 1)
   const copyScript = wslScripts.find(({ script }) => /cp -a/.test(script))
   assert.ok(copyScript)
@@ -355,6 +386,19 @@ test('bundled models.dev skill explicitly instructs agents to read the skill and
   assert.match(skillBody, /Do not call `models-dev` as if it were a built-in tool\./)
   assert.match(skillBody, /First use `read` to load this `SKILL\.md`\./)
   assert.match(skillBody, /Then use `exec` to run the bundled Node scripts with `node`\./)
+})
+
+test('bundled package download tracker skill explicitly instructs agents to read the skill and exec the script', () => {
+  const skillPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../../bundled-skills/package-download-tracker/SKILL.md',
+  )
+  const skillBody = fs.readFileSync(skillPath, 'utf8')
+
+  assert.match(skillBody, /Do not call `package-download-tracker` as if it were a built-in tool\./)
+  assert.match(skillBody, /First use `read` to load this `SKILL\.md`\./)
+  assert.match(skillBody, /Then use `exec` to run the bundled Node script with `node`\./)
+  assert.match(skillBody, /--load-memory --save-memory/)
 })
 
 test('bundled PaddleOCR skill explicitly instructs agents to read the skill and exec the script', () => {

@@ -95,7 +95,7 @@ export interface OnboardingState {
 }
 
 export const DEFAULT_ONBOARDING_STATE: OnboardingState = {
-  provider: 'baidu-aistudio',
+  provider: 'baiduqianfancodingplan',
   apiKey: '',
   customBaseUrl: '',
   model: '',
@@ -228,6 +228,33 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     ],
     defaultModel: 'deepseek-chat',
   },
+  zai: {
+    label: 'GLM (Z.AI)',
+    labelByLocale: {
+      zh: '智谱 GLM',
+      en: 'GLM (Z.AI)',
+      ja: 'GLM (Z.AI)',
+    },
+    api: 'openai-completions',
+    keyUrl: 'https://z.ai/manage-apikey/apikey-list',
+    baseUrl: 'https://api.z.ai/api/paas/v4',
+    models: [
+      { id: 'glm-5.1', name: 'GLM-5.1' },
+      { id: 'glm-5', name: 'GLM-5' },
+      { id: 'glm-5-turbo', name: 'GLM-5 Turbo' },
+      { id: 'glm-5v-turbo', name: 'GLM-5V Turbo' },
+      { id: 'glm-4.7', name: 'GLM-4.7' },
+      { id: 'glm-4.7-flash', name: 'GLM-4.7 Flash' },
+      { id: 'glm-4.7-flashx', name: 'GLM-4.7 FlashX' },
+      { id: 'glm-4.6', name: 'GLM-4.6' },
+      { id: 'glm-4.6v', name: 'GLM-4.6V' },
+      { id: 'glm-4.5', name: 'GLM-4.5' },
+      { id: 'glm-4.5-air', name: 'GLM-4.5 Air' },
+      { id: 'glm-4.5-flash', name: 'GLM-4.5 Flash' },
+      { id: 'glm-4.5v', name: 'GLM-4.5V' },
+    ],
+    defaultModel: 'glm-5.1',
+  },
   minimax: {
     label: 'MiniMax',
     keyUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
@@ -307,6 +334,30 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
       { id: 'ernie-char-8k', name: 'ERNIE Character 8K' },
     ],
     defaultModel: 'ernie-5.0-thinking-preview',
+  },
+  baiduqianfancodingplan: {
+    label: 'Baidu Qianfan Coding Plan',
+    labelByLocale: {
+      zh: '百度千帆 Coding Plan',
+      en: 'Baidu Qianfan Coding Plan',
+      ja: 'Baidu Qianfan Coding Plan',
+    },
+    api: 'openai-completions',
+    keyUrl: 'https://cloud.baidu.com/doc/qianfan/s/Rmn2ms2nm',
+    credentialLabel: 'BCE API Key',
+    credentialLabelByLocale: {
+      zh: 'BCE API Key',
+      en: 'BCE API Key',
+      ja: 'BCE APIキー',
+    },
+    noteKey: 'providers.baiduQianfanCodingPlanNote',
+    baseUrl: 'https://qianfan.baidubce.com/v2/coding',
+    models: [
+      { id: 'qianfan-code-latest', name: 'Qianfan Code Latest' },
+      { id: 'qwen3-coder-480b-a35b-instruct', name: 'Qwen3 Coder 480B A35B Instruct' },
+      { id: 'qwen3-coder-30b-a3b-instruct', name: 'Qwen3 Coder 30B A3B Instruct' },
+    ],
+    defaultModel: 'qianfan-code-latest',
   },
   'baidu-aistudio-image': {
     label: 'ERNIE-Image',
@@ -494,7 +545,7 @@ export const TEXT_PROVIDER_TIERS: readonly ProviderTier[] = [
   {
     id: 'sponsors',
     labelKey: 'providers.tierInvitedSponsors',
-    members: ['baidu-aistudio'],
+    members: ['baiduqianfancodingplan', 'baidu-aistudio'],
   },
   {
     id: 'featured',
@@ -504,6 +555,7 @@ export const TEXT_PROVIDER_TIERS: readonly ProviderTier[] = [
       'anthropic',
       'google',
       'deepseek',
+      'zai',
       'kimi-coding',
       'minimax',
       'siliconflow',
@@ -542,6 +594,7 @@ export const PRIMARY_PROVIDERS = TEXT_PROVIDER_TIERS.flatMap((tier) => [
 export const PRIMARY_IMAGE_PROVIDERS = ['baidu-aistudio-image', 'google-image', 'openai-image'] as const
 
 export const PROVIDER_BADGES: Partial<Record<keyof typeof PROVIDERS, ProviderBadgeTone>> = {
+  baiduqianfancodingplan: 'golden-sponsor',
   'baidu-aistudio': 'golden-sponsor',
   'baidu-aistudio-image': 'golden-sponsor',
 }

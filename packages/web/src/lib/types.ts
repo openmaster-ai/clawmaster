@@ -77,6 +77,15 @@ export interface GatewayStatus {
   port: number
   uptime?: number
   connections?: number
+  watchdog?: {
+    enabled: boolean
+    state: 'disabled' | 'idle' | 'healthy' | 'checking' | 'restarting' | 'paused' | 'error'
+    intervalMs: number
+    restartCount: number
+    lastCheckAt?: string
+    lastRestartAt?: string
+    lastError?: string
+  }
 }
 
 /** Display fields for one account under a channel (common config shape) */

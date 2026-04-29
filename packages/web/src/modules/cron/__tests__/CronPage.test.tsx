@@ -232,6 +232,38 @@ describe('CronPage', () => {
     )
   })
 
+  it('opens the create dialog with a prefilled package download tracker template', async () => {
+    renderPage(['/cron?template=package-downloads&period=week'])
+
+    expect(await screen.findByRole('dialog', { name: 'Create Cron Job' })).toBeInTheDocument()
+    expect(screen.getByText('Loaded the Week package download tracker template. Edit package names in the prompt, choose delivery, and save the job.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Name')).toHaveValue('Weekly Package Download Tracker')
+    expect(screen.getByLabelText('Cron expression')).toHaveValue('0 8 * * *')
+    expect(screen.getByLabelText('Timezone')).toHaveValue(getPreferredCostDigestTimezone())
+    expect(screen.getByLabelText('Session')).toHaveValue('isolated')
+    expect(screen.getByLabelText('Agent')).toHaveValue('main')
+
+    const message = screen.getByLabelText('Message') as HTMLTextAreaElement
+    expect(message.value).toContain('track weekly package download trends across recent historical observations')
+    expect(message.value).toContain('Edit the sample package names in this prompt before saving')
+    expect(message.value).toContain('npm packages `clawmaster, powermem`')
+    expect(message.value).toContain('PyPI packages `powermem`')
+    expect(message.value).toContain('Internally prefer stored history before broad registry lookups')
+    expect(message.value).toContain('keep the history updated')
+    expect(message.value).toContain('use a table with at least two week columns')
+    expect(message.value).toContain('Current week and Previous week')
+    expect(message.value).toContain('summarize recent and longer-term trends')
+    expect(message.value).toContain('If a previous-week value is unavailable, mark the change as unavailable too')
+    expect(message.value).toContain('only show a percentage when the previous-week column contains the numeric baseline')
+    expect(message.value).toContain('Call out only npm/PyPI registry or data-quality issues')
+    expect(message.value).toContain('do not mention memory, stored snapshots, cache, script commands, or other internal mechanics')
+    expect(message.value).not.toContain('PowerMem')
+    expect(message.value).not.toContain('memory-aware')
+    expect(message.value).not.toContain('node ${SKILL_DIR}')
+    expect(message.value).not.toContain('track-downloads.mjs')
+    expect(message.value).not.toContain('--load-memory')
+  })
+
   it('shows gateway-required state and disables create when the gateway is down', async () => {
     mockGetGatewayStatus.mockResolvedValueOnce({
       success: true,

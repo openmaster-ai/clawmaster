@@ -2,6 +2,7 @@ import type { TFunction } from 'i18next'
 import type { CronJobDraft } from '@/shared/adapters/cron'
 
 export type CostDigestPeriod = 'day' | 'week' | 'month'
+export type PackageDownloadPeriod = 'week' | 'month'
 
 type CostDigestTemplateMeta = {
   period: CostDigestPeriod
@@ -47,6 +48,10 @@ export function isCostDigestPeriod(value: string | null | undefined): value is C
   return value === 'day' || value === 'week' || value === 'month'
 }
 
+export function isPackageDownloadPeriod(value: string | null | undefined): value is PackageDownloadPeriod {
+  return value === 'week' || value === 'month'
+}
+
 export function getCostDigestTemplates(t: TFunction) {
   return COST_DIGEST_TEMPLATES.map((template) => ({
     ...template,
@@ -76,6 +81,28 @@ export function buildCostDigestDraft(period: CostDigestPeriod, t: TFunction): Cr
     channel: '',
     to: '',
     message: t(`observe.digestDraft.${period}.prompt`),
+    systemEvent: '',
+    enabled: true,
+  }
+}
+
+export function buildPackageDownloadDraft(period: PackageDownloadPeriod, t: TFunction): CronJobDraft {
+  return {
+    name: t(`cron.packageDownloadsDraft.${period}.name`),
+    description: t(`cron.packageDownloadsDraft.${period}.description`),
+    scheduleType: 'cron',
+    cron: '0 8 * * *',
+    every: '',
+    at: '',
+    tz: getPreferredCostDigestTimezone(),
+    session: 'isolated',
+    sessionKey: '',
+    model: '',
+    agent: 'main',
+    announce: false,
+    channel: '',
+    to: '',
+    message: t(`cron.packageDownloadsDraft.${period}.prompt`),
     systemEvent: '',
     enabled: true,
   }

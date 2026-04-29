@@ -135,6 +135,15 @@ export const SKILL_CATALOG: CatalogSkill[] = [
     sourceUrl: 'https://github.com/openmaster-ai/clawmaster',
   },
   {
+    slug: 'package-download-tracker',
+    name: 'Package Download Tracker',
+    descriptionKey: 'skills.catalog.packageDownloadTracker.desc',
+    category: 'productivity',
+    skillKey: 'package-download-tracker',
+    installSource: 'bundled',
+    sourceUrl: 'https://github.com/openmaster-ai/clawmaster/issues/111',
+  },
+  {
     slug: 'image-generate',
     name: 'Image Generate',
     descriptionKey: 'skills.catalog.imageGenerate.desc',
