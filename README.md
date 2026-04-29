@@ -106,12 +106,24 @@ Requires Node.js 20+. Tauri desktop builds also need Rust — see [tauri.app/sta
 
 Most OpenClaw tooling stops at configuration. ClawMaster is your **OpenClaw companion for real life** — a bridge between OpenClaw's power and everyday usability. It's for people who want OpenClaw to actually work in their daily life (not just be correctly configured), who don't want to live in JSON and terminals, and who manage OpenClaw for a team or family.
 
-## Who It Is For
+## Memory Highlights
 
-- **"I want OpenClaw useful in real life, not just configured."** — closes the gap between install and outcome.
-- **"I'm non-technical but want a powerful AI assistant."** — guided setup, guided usage, no JSON required.
-- **"I manage OpenClaw for my team or family."** — one place for channels, runtime state, and onboarding.
-- **"I'm building advanced agent workflows."** — provider management, observability, memory, sessions, plugins, skills, and MCP in one place.
+Memory is the backbone of the **Save** capability. We build on [**PowerMem**](https://github.com/oceanbase/powermem) ([Python](https://github.com/oceanbase/powermem) · [TypeScript SDK](https://github.com/ob-labs/powermem-ts) · [OpenClaw plugin](https://github.com/ob-labs/memory-powermem)) instead of rolling our own:
+
+- **Native OpenClaw citizen** — PowerMem already ships an OpenClaw memory plugin, so agent turns get auto-recall / auto-capture for free.
+- **Smart extraction, not chunk dumping** — distills conversations into durable facts with Ebbinghaus-style decay and recall, which matches our "build but also maintain" direction.
+- **Multi-agent isolation built in** — scopes per user / agent / workspace without us reinventing identity plumbing.
+- **Database-grade durability** — pairs with [OceanBase seekdb](https://github.com/oceanbase/seekdb) for hybrid vector + full-text + SQL, with SQLite as a cross-platform fallback.
+- **Open source with cross-language SDKs** — we're not locked into one runtime; consistent semantics from JS to Python to Go.
+
+**Shipped**
+
+- Managed PowerMem runtime with an OpenClaw bridge across web, backend, and desktop — agent turns get auto-recall and auto-capture out of the box.
+- Local workspace import that pulls markdown / `memory/` into managed PowerMem, using seekdb where available and SQLite as a fallback.
+- First end-to-end memory-backed skill: a daily package download digest with period-over-period deltas.
+- Memory-adjacent observability — per-session spend, scheduled cost digests, and models.dev pricing.
+
+**Next (v0.4.0)**: full seekdb hybrid retrieval and a self-maintaining LLM Wiki module — persistent wiki pages that compound with every ingest, with Ebbinghaus decay and freshness-weighted ranking keeping content alive. See the [v0.4.0 milestone](https://github.com/openmaster-ai/clawmaster/milestone/1) for tracked work.
 
 ## Product Tour
 
@@ -154,24 +166,12 @@ Most OpenClaw tooling stops at configuration. ClawMaster is your **OpenClaw comp
   </tr>
 </table>
 
-## Memory Highlights
+## Who It Is For
 
-Memory is the backbone of the **Save** capability. We build on [**PowerMem**](https://github.com/oceanbase/powermem) ([Python](https://github.com/oceanbase/powermem) · [TypeScript SDK](https://github.com/ob-labs/powermem-ts) · [OpenClaw plugin](https://github.com/ob-labs/memory-powermem)) instead of rolling our own:
-
-- **Native OpenClaw citizen** — PowerMem already ships an OpenClaw memory plugin, so agent turns get auto-recall / auto-capture for free.
-- **Smart extraction, not chunk dumping** — distills conversations into durable facts with Ebbinghaus-style decay and recall, which matches our "build but also maintain" direction.
-- **Multi-agent isolation built in** — scopes per user / agent / workspace without us reinventing identity plumbing.
-- **Database-grade durability** — pairs with [OceanBase seekdb](https://github.com/oceanbase/seekdb) for hybrid vector + full-text + SQL, with SQLite as a cross-platform fallback.
-- **Open source with cross-language SDKs** — we're not locked into one runtime; consistent semantics from JS to Python to Go.
-
-**Shipped**
-
-- Managed PowerMem runtime with an OpenClaw bridge across web, backend, and desktop — agent turns get auto-recall and auto-capture out of the box.
-- Local workspace import that pulls markdown / `memory/` into managed PowerMem, using seekdb where available and SQLite as a fallback.
-- First end-to-end memory-backed skill: a daily package download digest with period-over-period deltas.
-- Memory-adjacent observability — per-session spend, scheduled cost digests, and models.dev pricing.
-
-**Next (v0.4.0)**: full seekdb hybrid retrieval and a self-maintaining LLM Wiki module — persistent wiki pages that compound with every ingest, with Ebbinghaus decay and freshness-weighted ranking keeping content alive. See the [v0.4.0 milestone](https://github.com/openmaster-ai/clawmaster/milestone/1) for tracked work.
+- **"I want OpenClaw useful in real life, not just configured."** — closes the gap between install and outcome.
+- **"I'm non-technical but want a powerful AI assistant."** — guided setup, guided usage, no JSON required.
+- **"I manage OpenClaw for my team or family."** — one place for channels, runtime state, and onboarding.
+- **"I'm building advanced agent workflows."** — provider management, observability, memory, sessions, plugins, skills, and MCP in one place.
 
 ## Roadmap
 

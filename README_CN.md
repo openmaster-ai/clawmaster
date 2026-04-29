@@ -106,12 +106,24 @@ npm run tauri:dev            # 桌面应用
 
 大多数 OpenClaw 工具都停在“把配置配对”。ClawMaster 是你**真正走进日常生活的 OpenClaw 伙伴** —— 是连接 OpenClaw 强大能力与日常可用性的桥梁。它面向这样的用户：想让 OpenClaw 在日常生活里真的有用（而不只是配好），不想天天跟 JSON 和终端打交道，或在替团队、家人管理 OpenClaw。
 
-## 适合谁
+## 记忆亮点
 
-- **「想让 OpenClaw 真的能帮我做事，不只是配好。」** —— 缩短“安装完成”到“真实产出”的距离。
-- **「我不是技术人员，但也想有强大的 AI 助理。」** —— 引导式安装、引导式使用，不要求你懂 JSON。
-- **「我在帮团队或家人管 OpenClaw。」** —— 一个地方搞定频道、运行态、上手流程。
-- **「我在搭高级智能体工作流。」** —— 模型、可观测、记忆、会话、插件、技能、MCP 一站式。
+记忆是**能省钱**能力的主干。我们基于 [**PowerMem**](https://github.com/oceanbase/powermem)（[Python](https://github.com/oceanbase/powermem) · [TypeScript SDK](https://github.com/ob-labs/powermem-ts) · [OpenClaw 插件](https://github.com/ob-labs/memory-powermem)）构建，而不是自己重造：
+
+- **原生 OpenClaw 公民** —— PowerMem 自带 OpenClaw 记忆插件，智能体每一轮自动 recall / capture。
+- **智能抽取，而不是堆积 chunk** —— 把对话蒸馏成持久事实，并用艾宾浩斯衰减模型驱动回忆，与我们“建了也要养”的方向高度契合。
+- **多智能体隔离开箱即用** —— 按用户 / 智能体 / 工作区自动隔离，无需自己搭身份系统。
+- **数据库级持久化** —— 与 [OceanBase seekdb](https://github.com/oceanbase/seekdb) 搭配可做向量 + 全文 + SQL 混合检索，SQLite 作为跨平台兜底。
+- **开源、多语言 SDK** —— 不绑定单一运行时；从 JS 到 Python 到 Go 的语义一致。
+
+**已经上线**
+
+- 托管 PowerMem 运行时 + OpenClaw 桥接，覆盖 Web、后端和桌面 —— 智能体每一轮开箱即用地自动 recall / capture。
+- 本地工作区导入 —— 把 markdown / `memory/` 导入托管 PowerMem，有 seekdb 时用 seekdb，其他情况降级到 SQLite。
+- 首个端到端记忆驱动技能：每日 npm 包下载摘要，支持周期同比对比。
+- 记忆相关的可观测：按会话花费、定时费用摘要、models.dev 定价。
+
+**下一步（v0.4.0）**：完整的 seekdb 混合检索，以及自维护的 LLM Wiki 模块 —— 每次投入都会让 Wiki 页面自动交叉链接并积累，艾宾浩斯衰减与新鲜度加权让内容保持“活着”。具体进展见 [v0.4.0 里程碑](https://github.com/openmaster-ai/clawmaster/milestone/1)。
 
 ## 产品功能总览
 
@@ -154,24 +166,12 @@ npm run tauri:dev            # 桌面应用
   </tr>
 </table>
 
-## 记忆亮点
+## 适合谁
 
-记忆是**能省钱**能力的主干。我们基于 [**PowerMem**](https://github.com/oceanbase/powermem)（[Python](https://github.com/oceanbase/powermem) · [TypeScript SDK](https://github.com/ob-labs/powermem-ts) · [OpenClaw 插件](https://github.com/ob-labs/memory-powermem)）构建，而不是自己重造：
-
-- **原生 OpenClaw 公民** —— PowerMem 自带 OpenClaw 记忆插件，智能体每一轮自动 recall / capture。
-- **智能抽取，而不是堆积 chunk** —— 把对话蒸馏成持久事实，并用艾宾浩斯衰减模型驱动回忆，与我们“建了也要养”的方向高度契合。
-- **多智能体隔离开箱即用** —— 按用户 / 智能体 / 工作区自动隔离，无需自己搭身份系统。
-- **数据库级持久化** —— 与 [OceanBase seekdb](https://github.com/oceanbase/seekdb) 搭配可做向量 + 全文 + SQL 混合检索，SQLite 作为跨平台兜底。
-- **开源、多语言 SDK** —— 不绑定单一运行时；从 JS 到 Python 到 Go 的语义一致。
-
-**已经上线**
-
-- 托管 PowerMem 运行时 + OpenClaw 桥接，覆盖 Web、后端和桌面 —— 智能体每一轮开箱即用地自动 recall / capture。
-- 本地工作区导入 —— 把 markdown / `memory/` 导入托管 PowerMem，有 seekdb 时用 seekdb，其他情况降级到 SQLite。
-- 首个端到端记忆驱动技能：每日 npm 包下载摘要，支持周期同比对比。
-- 记忆相关的可观测：按会话花费、定时费用摘要、models.dev 定价。
-
-**下一步（v0.4.0）**：完整的 seekdb 混合检索，以及自维护的 LLM Wiki 模块 —— 每次投入都会让 Wiki 页面自动交叉链接并积累，艾宾浩斯衰减与新鲜度加权让内容保持“活着”。具体进展见 [v0.4.0 里程碑](https://github.com/openmaster-ai/clawmaster/milestone/1)。
+- **「想让 OpenClaw 真的能帮我做事，不只是配好。」** —— 缩短“安装完成”到“真实产出”的距离。
+- **「我不是技术人员，但也想有强大的 AI 助理。」** —— 引导式安装、引导式使用，不要求你懂 JSON。
+- **「我在帮团队或家人管 OpenClaw。」** —— 一个地方搞定频道、运行态、上手流程。
+- **「我在搭高级智能体工作流。」** —— 模型、可观测、记忆、会话、插件、技能、MCP 一站式。
 
 ## 路线图
 
