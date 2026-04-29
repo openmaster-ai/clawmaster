@@ -1,5 +1,7 @@
+import fs from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { Type } from '@sinclair/typebox'
 import type {
   OpenClawPluginApi,
@@ -16,6 +18,7 @@ import {
   searchManagedMemories,
   type ManagedMemoryEngine,
   type ManagedMemoryContext,
+  type ManagedMemorySearchHit,
 } from './runtime.js'
 import {
   getManagedMemoryImportStatus,
@@ -37,6 +40,7 @@ type ManagedPluginConfig = {
 
 const DEFAULT_RECALL_LIMIT = 5
 const DEFAULT_RECALL_SCORE_THRESHOLD = 0
+const WIKI_LINK_CHOICE_TTL_MS = 30 * 60 * 1000
 
 export function defaultManagedEngineForTest(
   platform = process.platform,
@@ -274,7 +278,561 @@ function resolveCliScope(
 
 const MEMORY_RECALL_GUIDANCE =
   '## Long-term memory (PowerMem)\n' +
-  'When answering about prior preferences, stable facts, or earlier decisions, use memory_recall first or consult any injected <relevant-memories>.\n'
+  'When answering about prior preferences, stable facts, or earlier decisions, use memory_recall first or consult any injected <relevant-memories>.\n' +
+  '## Wiki knowledge\n' +
+  'For questions that mention "wiki", "knowledge base", "what do we know", docs, research, decisions, or project context, treat the local OpenClaw Wiki as the first-choice knowledge source.\n' +
+  'Consult injected <relevant-wiki> before using external tools. If no local Wiki context is injected or the local Wiki has no match, say that directly and ask whether to search externally, ingest a source, or use DeepWiki.\n' +
+  'Do not call DeepWiki or repository-wiki tools for a generic "wiki" question unless the user explicitly says "DeepWiki", names a GitHub repository wiki, or asks for external repository documentation.\n' +
+  'If you use Wiki knowledge, make that value visible to the user with a compact "Wiki used" note that names page/source labels, freshness, and any health warning. Do not expose internal XML tags.\n' +
+  'If your answer combines multiple Wiki sources into a reusable conclusion, offer to save or update a Wiki synthesis. Never write Wiki knowledge silently.\n'
+
+function isWikiRelevantQuestion(query: string): boolean {
+  const text = query.trim().toLowerCase()
+  if (text.length < 5) return false
+  return [
+    'wiki',
+    'knowledge',
+    'knowledge base',
+    'what do we know',
+    'known about',
+    'research',
+    'decision',
+    'docs',
+    'document',
+    'article',
+    'source',
+    'citation',
+    'project context',
+    'codebase context',
+    'prior',
+    'previous',
+    'earlier',
+  ].some((token) => text.includes(token))
+}
+
+export function extractStandaloneHttpUrlForTest(input: string): string | undefined {
+  const text = input.trim()
+  const match = text.match(/^<?(https?:\/\/[^\s<>]+)>?$/i)
+  if (!match) return undefined
+
+  try {
+    const url = new URL(match[1]!)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
+    return url.href
+  } catch {
+    return undefined
+  }
+}
+
+export function buildWikiLinkChoiceReplyForTest(url: string): string {
+  return [
+    `I found this link: ${url}`,
+    '',
+    'How should I use it?',
+    '',
+    '1. Ingest into Wiki - fetch it, store source provenance, update PowerMem records, and regenerate Wiki markdown.',
+    '2. Summarize once - read it for this turn only without saving it to Wiki.',
+    '3. Use only in this conversation - keep the URL as context and do not fetch or save it.',
+    '',
+    'Reply with 1, 2, or 3.',
+  ].join('\n')
+}
+
+export type WikiLinkChoiceSelection = 'ingest' | 'summarize_once' | 'current_conversation_only'
+
+export function parseWikiLinkChoiceForTest(input: string): WikiLinkChoiceSelection | undefined {
+  const text = input.trim().toLowerCase()
+  if (text === '1' || text === 'ingest' || text === 'ingest into wiki') return 'ingest'
+  if (text === '2' || text === 'summarize' || text === 'summarize once') return 'summarize_once'
+  if (
+    text === '3' ||
+    text === 'conversation' ||
+    text === 'current conversation' ||
+    text === 'use only in this conversation'
+  ) {
+    return 'current_conversation_only'
+  }
+  return undefined
+}
+
+function slugifyWikiValue(value: string): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+  return slug || 'untitled-source'
+}
+
+function wikiPageIdForUrl(url: string, title?: string): string {
+  const titleSlug = title?.trim() ? slugifyWikiValue(title) : ''
+  if (titleSlug) return `sources-${titleSlug}`
+  try {
+    const parsed = new URL(url)
+    return `sources-${slugifyWikiValue(`${parsed.hostname}${parsed.pathname}`)}`
+  } catch {
+    return `sources-${slugifyWikiValue(url)}`
+  }
+}
+
+function resolveWikiPageIdForUrl(url: string, title: string | undefined, existing: ManagedMemorySearchHit[]): string {
+  const previous = existing.find((item) => provenanceString(item.metadata, 'sourceUrl') === url)
+  return previous ? metadataString(previous.metadata, 'pageId') || wikiPageIdForUrl(url, title) : wikiPageIdForUrl(url, title)
+}
+
+export function resolveWikiPageIdForUrlForTest(
+  url: string,
+  title: string | undefined,
+  existing: ManagedMemorySearchHit[],
+): string {
+  return resolveWikiPageIdForUrl(url, title, existing)
+}
+
+async function findWikiUrlMemoryHits(input: {
+  url: string
+  scope: { userId?: string; agentId?: string }
+  managedContext: ManagedMemoryContext
+}): Promise<ManagedMemorySearchHit[]> {
+  const [listed, searched] = await Promise.all([
+    listManagedMemoriesByScope(input.scope, input.managedContext),
+    searchManagedMemories(
+      input.url,
+      withManagedScope(input.scope, { limit: 10 }),
+      input.managedContext,
+    ).catch(() => []),
+  ])
+  const byId = new Map<string, ManagedMemorySearchHit>()
+  for (const item of searched) {
+    byId.set(item.memoryId, item)
+  }
+  for (const item of listed) {
+    if (provenanceString(item.metadata, 'sourceUrl') !== input.url) continue
+    byId.set(item.memoryId, item)
+  }
+  return [...byId.values()].sort((left, right) => {
+    const leftExact = provenanceString(left.metadata, 'sourceUrl') === input.url ? 1 : 0
+    const rightExact = provenanceString(right.metadata, 'sourceUrl') === input.url ? 1 : 0
+    return rightExact - leftExact
+  })
+}
+
+async function listManagedMemoriesByScope(
+  scope: { userId?: string; agentId?: string },
+  managedContext: ManagedMemoryContext,
+): Promise<ManagedMemorySearchHit[]> {
+  const memories: ManagedMemorySearchHit[] = []
+  const limit = 100
+  for (let offset = 0; offset < 10_000; offset += limit) {
+    const page = await listManagedMemories(
+      withManagedScope(scope, { limit, offset }),
+      managedContext,
+    ).catch(() => ({ memories: [], total: memories.length }))
+    for (const item of page.memories) {
+      memories.push({
+        memoryId: item.memoryId,
+        content: item.content,
+        userId: item.userId,
+        agentId: item.agentId,
+        metadata: item.metadata,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      })
+    }
+    if (page.memories.length === 0 || offset + page.memories.length >= page.total) break
+  }
+  return memories
+}
+
+export async function findWikiUrlMemoryHitsForTest(input: {
+  url: string
+  scope: { userId?: string; agentId?: string }
+  managedContext: ManagedMemoryContext
+}): Promise<ManagedMemorySearchHit[]> {
+  return findWikiUrlMemoryHits(input)
+}
+
+function stripHtmlForWiki(html: string): { title?: string; text: string } {
+  const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim()
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+  return { title, text }
+}
+
+function summarizeFetchedWikiText(title: string, text: string): string[] {
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 40 && !item.includes('{') && !item.includes('}'))
+  const unique: string[] = []
+  for (const sentence of sentences) {
+    if (unique.some((item) => item === sentence)) continue
+    unique.push(sentence.slice(0, 260))
+    if (unique.length >= 4) break
+  }
+  return unique.length > 0 ? unique : [`${title}: ${text.slice(0, 260)}`]
+}
+
+function wikiFrontmatterString(value: string): string {
+  return JSON.stringify(value.replace(/\n/g, ' '))
+}
+
+export function buildWikiSourceMarkdownForTest(input: {
+  pageId: string
+  title: string
+  sourceUrl: string
+  content: string
+  memoryId?: string
+  createdAt?: string
+  updatedAt: string
+}): string {
+  const summary = summarizeFetchedWikiText(input.title, input.content)
+  const createdAt = input.createdAt ?? input.updatedAt
+  const frontmatter = [
+    '---',
+    `id: ${wikiFrontmatterString(input.pageId)}`,
+    `title: ${wikiFrontmatterString(input.title)}`,
+    'type: source',
+    'sourceType: url',
+    `sourceUrl: ${wikiFrontmatterString(input.sourceUrl)}`,
+    `createdAt: ${wikiFrontmatterString(createdAt)}`,
+    `updatedAt: ${wikiFrontmatterString(input.updatedAt)}`,
+    `memoryId: ${wikiFrontmatterString(input.memoryId ?? '')}`,
+    'freshnessStatus: fresh',
+    '---',
+  ].join('\n')
+
+  return [
+    frontmatter,
+    '',
+    `# ${input.title}`,
+    '',
+    `Source URL: ${input.sourceUrl}`,
+    '',
+    '## Key Extract',
+    '',
+    ...summary.map((item) => `- ${item}`),
+    '',
+    '## Raw Text',
+    '',
+    input.content.slice(0, 12000),
+    '',
+  ].join('\n')
+}
+
+async function readWikiMarkdownCreatedAt(filePath: string): Promise<string | undefined> {
+  try {
+    const raw = await fs.readFile(filePath, 'utf8')
+    const match = raw.match(/^createdAt:\s*(.+)$/m)
+    if (!match?.[1]) return undefined
+    const value = match[1].trim()
+    try {
+      const parsed = JSON.parse(value) as unknown
+      return typeof parsed === 'string' && parsed.trim() ? parsed.trim() : undefined
+    } catch {
+      return value.trim() || undefined
+    }
+  } catch {
+    return undefined
+  }
+}
+
+async function fetchWikiUrlContent(url: string): Promise<{ title: string; content: string; warnings: string[] }> {
+  const warnings: string[] = []
+  const response = await fetch(url, {
+    headers: {
+      'user-agent': 'OpenClaw Wiki Link Choice/1.0',
+      accept: 'text/html,text/plain;q=0.9,*/*;q=0.8',
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`URL fetch failed with HTTP ${response.status}`)
+  }
+
+  const raw = await response.text()
+  const contentType = response.headers.get('content-type') ?? ''
+  const parsed = contentType.includes('html') ? stripHtmlForWiki(raw) : { text: raw.trim(), title: undefined }
+  const title = parsed.title || (() => {
+    try {
+      const parsedUrl = new URL(url)
+      return basename(parsedUrl.pathname) || parsedUrl.hostname
+    } catch {
+      return 'Wiki Source'
+    }
+  })()
+  const content = parsed.text || `Source URL: ${url}`
+  if (content === `Source URL: ${url}`) warnings.push('empty_content')
+  return { title: title.slice(0, 120), content, warnings }
+}
+
+async function ensureWikiVaultStructure(vaultRoot: string): Promise<void> {
+  await Promise.all([
+    fs.mkdir(join(vaultRoot, 'raw'), { recursive: true }),
+    fs.mkdir(join(vaultRoot, 'pages', 'entities'), { recursive: true }),
+    fs.mkdir(join(vaultRoot, 'pages', 'concepts'), { recursive: true }),
+    fs.mkdir(join(vaultRoot, 'pages', 'sources'), { recursive: true }),
+    fs.mkdir(join(vaultRoot, 'pages', 'synthesis'), { recursive: true }),
+    fs.mkdir(join(vaultRoot, 'pages', 'processes'), { recursive: true }),
+    fs.mkdir(join(vaultRoot, '.meta'), { recursive: true }),
+  ])
+}
+
+async function readJsonObjectFile(filePath: string): Promise<Record<string, unknown>> {
+  try {
+    const raw = await fs.readFile(filePath, 'utf8')
+    const parsed = JSON.parse(raw) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
+async function readJsonArrayFile(filePath: string): Promise<unknown[]> {
+  try {
+    const raw = await fs.readFile(filePath, 'utf8')
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+async function writeWikiMetaFiles(vaultRoot: string, pageId: string, updatedAt: string): Promise<void> {
+  const freshnessPath = join(vaultRoot, '.meta', 'freshness.json')
+  const conflictsPath = join(vaultRoot, '.meta', 'conflicts.json')
+  const freshness = await readJsonObjectFile(freshnessPath)
+  freshness[pageId] = { score: 1, status: 'fresh', updatedAt, lastAccessedAt: updatedAt }
+  const conflicts = await readJsonArrayFile(conflictsPath)
+
+  await Promise.all([
+    fs.writeFile(
+      freshnessPath,
+      `${JSON.stringify(freshness, null, 2)}\n`,
+      'utf8',
+    ),
+    fs.writeFile(conflictsPath, `${JSON.stringify(conflicts, null, 2)}\n`, 'utf8'),
+    fs.writeFile(
+      join(vaultRoot, 'SCHEMA.md'),
+      '# Wiki Schema\n\nPowerMem is the source of truth. Markdown pages are generated article surfaces.\n',
+      'utf8',
+    ),
+  ])
+}
+
+export async function writeWikiMetaFilesForTest(vaultRoot: string, pageId: string, updatedAt: string): Promise<void> {
+  await writeWikiMetaFiles(vaultRoot, pageId, updatedAt)
+}
+
+function resolveWikiVaultRoot(managedContext: ManagedMemoryContext): string {
+  return join(resolveOpenclawWorkspaceDir(managedContext), '..', 'wiki')
+}
+
+export function resolveWikiVaultRootForTest(managedContext: ManagedMemoryContext): string {
+  return resolveWikiVaultRoot(managedContext)
+}
+
+async function updateWikiIndexFile(vaultRoot: string, title: string, pageId: string): Promise<void> {
+  const indexPath = join(vaultRoot, 'index.md')
+  const entry = `- [[${title}]] (${pageId})`
+  let existing = '# Wiki Index\n'
+  try {
+    existing = await fs.readFile(indexPath, 'utf8')
+  } catch {
+    // A new vault has no index yet.
+  }
+  const withoutExisting = existing
+    .split('\n')
+    .filter((line) => !line.includes(`(${pageId})`))
+    .join('\n')
+    .trimEnd()
+  await fs.writeFile(indexPath, `${withoutExisting || '# Wiki Index'}\n\n${entry}\n`, 'utf8')
+}
+
+async function ingestWikiUrlFromPlugin(input: {
+  url: string
+  scope: { userId?: string; agentId?: string }
+  managedContext: ManagedMemoryContext
+  vaultRoot?: string
+}): Promise<{ title: string; pageId: string; memoryId: string; pagePath: string; warnings: string[] }> {
+  const vaultRoot = input.vaultRoot ?? resolveWikiVaultRoot(input.managedContext)
+  const fetched = await fetchWikiUrlContent(input.url)
+  const updatedAt = new Date().toISOString()
+  const sourceFingerprint = createHash('sha256').update(input.url).digest('hex')
+
+  await ensureWikiVaultStructure(vaultRoot)
+
+  const existing = await findWikiUrlMemoryHits(input)
+  const pageId = resolveWikiPageIdForUrl(input.url, fetched.title, existing)
+  const pageSlug = pageId.replace(/^sources-/, '')
+  const rawPath = join(vaultRoot, 'raw', `${pageSlug}.md`)
+  const pagePath = join(vaultRoot, 'pages', 'sources', `${pageSlug}.md`)
+  const createdAt = await readWikiMarkdownCreatedAt(pagePath) ?? updatedAt
+  for (const item of existing) {
+    if (
+      metadataString(item.metadata, 'pageId') === pageId ||
+      provenanceString(item.metadata, 'sourceUrl') === input.url
+    ) {
+      await deleteManagedMemory(item.memoryId, input.managedContext)
+    }
+  }
+
+  const memory = await addManagedMemory(
+    {
+      content: fetched.content.slice(0, 12000),
+      ...withManagedScope(input.scope),
+      metadata: {
+        scope: 'wiki',
+        sourceType: 'url',
+        durability: 'derived',
+        category: 'source',
+        pageId,
+        sectionId: `${pageId}#raw-text`,
+        freshnessStatus: 'fresh',
+        lintStatus: 'unchecked',
+        quality: 0.8,
+        provenance: {
+          sourceType: 'url',
+          sourceUrl: input.url,
+          title: fetched.title,
+          sourceFingerprint,
+          ingestedBy: 'openclaw-webui-link-choice',
+        },
+      },
+    },
+    input.managedContext,
+  )
+
+  const markdown = buildWikiSourceMarkdownForTest({
+    pageId,
+    title: fetched.title,
+    sourceUrl: input.url,
+    content: fetched.content,
+    memoryId: memory.memoryId,
+    createdAt,
+    updatedAt,
+  })
+  await Promise.all([
+    fs.writeFile(rawPath, markdown, 'utf8'),
+    fs.writeFile(pagePath, markdown, 'utf8'),
+    updateWikiIndexFile(vaultRoot, fetched.title, pageId),
+    fs.appendFile(join(vaultRoot, 'log.md'), `- ${updatedAt}: Ingested [[${fetched.title}]] from ${input.url}\n`, 'utf8'),
+    writeWikiMetaFiles(vaultRoot, pageId, updatedAt),
+  ])
+
+  return {
+    title: fetched.title,
+    pageId,
+    memoryId: memory.memoryId,
+    pagePath,
+    warnings: fetched.warnings,
+  }
+}
+
+async function summarizeWikiUrlOnce(url: string): Promise<{ title: string; bullets: string[]; warnings: string[] }> {
+  const fetched = await fetchWikiUrlContent(url)
+  return {
+    title: fetched.title,
+    bullets: summarizeFetchedWikiText(fetched.title, fetched.content),
+    warnings: fetched.warnings,
+  }
+}
+
+function metadataString(metadata: Record<string, unknown>, key: string): string {
+  const value = metadata[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function provenanceString(metadata: Record<string, unknown>, key: string): string {
+  const provenance = metadata.provenance
+  if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance)) return ''
+  const value = (provenance as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function nestedMetadataString(metadata: Record<string, unknown>, objectKey: string, valueKey: string): string {
+  const value = metadata[objectKey]
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return ''
+  const nested = (value as Record<string, unknown>)[valueKey]
+  return typeof nested === 'string' ? nested.trim() : ''
+}
+
+function isWikiMemory(item: ManagedMemorySearchHit): boolean {
+  return metadataString(item.metadata, 'scope') === 'wiki' || Boolean(metadataString(item.metadata, 'pageId'))
+}
+
+function wikiFreshnessLabel(item: ManagedMemorySearchHit): string {
+  return metadataString(item.metadata, 'freshnessStatus') || nestedMetadataString(item.metadata, 'freshness', 'status') || 'unknown'
+}
+
+function formatWikiMemory(item: ManagedMemorySearchHit, index: number): string {
+  const pageId = metadataString(item.metadata, 'pageId') || item.memoryId
+  const sourceType = metadataString(item.metadata, 'sourceType') || provenanceString(item.metadata, 'sourceType') || 'wiki'
+  const sourceUrl = provenanceString(item.metadata, 'sourceUrl')
+  const sourcePath = provenanceString(item.metadata, 'sourcePath')
+  const source = sourceUrl || sourcePath || pageId
+  const freshness = wikiFreshnessLabel(item)
+  const score = item.score === undefined ? '' : `, score ${Math.round(item.score * 100)}%`
+  const content = item.content.replace(/\s+/g, ' ').trim()
+  return `${index + 1}. [${pageId}] (${sourceType}, freshness ${freshness}${score}) ${content}${source ? `\n   Source: ${source}` : ''}`
+}
+
+function formatPlainMemory(item: ManagedMemorySearchHit): string {
+  return `- ${item.content.replace(/\s+/g, ' ').trim()}`
+}
+
+function formatWikiAwarenessInstruction(wikiItems: ManagedMemorySearchHit[]): string {
+  const pageIds = [...new Set(wikiItems.map((item) => metadataString(item.metadata, 'pageId') || item.memoryId))]
+  const freshnesses = [...new Set(wikiItems.map(wikiFreshnessLabel))]
+  const sourceCount = new Set(wikiItems.map((item) => provenanceString(item.metadata, 'sourceUrl') || provenanceString(item.metadata, 'sourcePath') || metadataString(item.metadata, 'pageId') || item.memoryId)).size
+  return [
+    `Wiki signal: ${pageIds.length} page(s), ${sourceCount} source(s), freshness ${freshnesses.join('/') || 'unknown'}.`,
+    'Local OpenClaw Wiki is the first-choice source for this request. Use these pages before external search or DeepWiki.',
+    'If these pages materially shape your answer, include a short user-visible line like: "Wiki used: 2 pages, freshness aging. Sources: [page-id], [page-id]."',
+    'Treat stale freshness or conflicts as Wiki health signals: mention them briefly so the user understands the knowledge base is maintained over time.',
+    'If you synthesize across multiple pages into reusable knowledge, offer to save/update a Wiki synthesis; do not auto-save.',
+  ].join('\n')
+}
+
+export function buildAutoRecallContextForTest(
+  query: string,
+  results: ManagedMemorySearchHit[],
+  limit = DEFAULT_RECALL_LIMIT,
+): { prependContext?: string; wikiCount: number; memoryCount: number } {
+  const wikiItems = isWikiRelevantQuestion(query)
+    ? results.filter(isWikiMemory).slice(0, limit)
+    : []
+  const memoryItems = results.filter((item) => !isWikiMemory(item)).slice(0, limit)
+  const sections: string[] = []
+
+  if (wikiItems.length > 0) {
+    sections.push(
+      `<relevant-wiki>\nThe following Wiki pages or sections may be relevant. Cite page/source labels when using them:\n${formatWikiAwarenessInstruction(wikiItems)}\n${wikiItems.map(formatWikiMemory).join('\n')}\n</relevant-wiki>`,
+    )
+  }
+  if (memoryItems.length > 0) {
+    sections.push(
+      `<relevant-memories>\nThe following memories may be relevant to this conversation:\n${memoryItems.map(formatPlainMemory).join('\n')}\n</relevant-memories>`,
+    )
+  }
+
+  return {
+    ...(sections.length > 0 ? { prependContext: sections.join('\n\n') } : {}),
+    wikiCount: wikiItems.length,
+    memoryCount: memoryItems.length,
+  }
+}
 
 const plugin = {
   id: 'memory-clawmaster-powermem',
@@ -294,6 +852,9 @@ const plugin = {
     api.logger.info(
       `memory-clawmaster-powermem: plugin registered (dataRoot: ${cfg.dataRoot}, engine: ${cfg.engine}, user: ${describeScopeValue(scope.userId)}, agent: ${describeScopeValue(scope.agentId)})`,
     )
+    const pendingWikiLinks = new Map<string, { url: string; createdAt: number }>()
+    const dispatchKey = (event: { sessionKey?: string; senderId?: string; channel?: string }) =>
+      event.sessionKey || [event.channel, event.senderId].filter(Boolean).join(':') || 'default'
 
     api.registerTool(
       {
@@ -360,6 +921,84 @@ const plugin = {
       },
       { name: 'memory_recall' },
     )
+
+    api.on('before_dispatch', async (event: unknown) => {
+      const e = event as { content?: string; body?: string; sessionKey?: string; senderId?: string; channel?: string }
+      const text = typeof e.content === 'string' ? e.content : typeof e.body === 'string' ? e.body : ''
+      const key = dispatchKey(e)
+      const pending = pendingWikiLinks.get(key)
+      if (pending && Date.now() - pending.createdAt > WIKI_LINK_CHOICE_TTL_MS) {
+        pendingWikiLinks.delete(key)
+      }
+
+      const choice = parseWikiLinkChoiceForTest(text)
+      if (choice && pendingWikiLinks.has(key)) {
+        const link = pendingWikiLinks.get(key)!
+        pendingWikiLinks.delete(key)
+
+        if (choice === 'current_conversation_only') {
+          return {
+            handled: true,
+            text: `Okay. I will keep ${link.url} only in this conversation. I did not fetch it or save it to Wiki.`,
+          }
+        }
+
+        if (choice === 'summarize_once') {
+          try {
+            const summary = await summarizeWikiUrlOnce(link.url)
+            return {
+              handled: true,
+              text: [
+                `Fetched for this turn only: ${summary.title}`,
+                '',
+                ...summary.bullets.map((item) => `- ${item}`),
+                '',
+                'No Wiki records or markdown pages were created.',
+                ...(summary.warnings.length > 0 ? [`Warnings: ${summary.warnings.join(', ')}`] : []),
+              ].join('\n'),
+            }
+          } catch (error) {
+            return {
+              handled: true,
+              text: `I could not summarize ${link.url}: ${error instanceof Error ? error.message : String(error)}`,
+            }
+          }
+        }
+
+        try {
+          const ingested = await ingestWikiUrlFromPlugin({
+            url: link.url,
+            scope,
+            managedContext,
+          })
+          return {
+            handled: true,
+            text: [
+              `Ingested into Wiki: ${ingested.title}`,
+              '',
+              `- Page: [${ingested.pageId}]`,
+              `- Memory: ${ingested.memoryId}`,
+              `- Markdown: ${ingested.pagePath}`,
+              ...(ingested.warnings.length > 0 ? [`- Warnings: ${ingested.warnings.join(', ')}`] : []),
+            ].join('\n'),
+          }
+        } catch (error) {
+          return {
+            handled: true,
+            text: `I could not ingest ${link.url} into Wiki: ${error instanceof Error ? error.message : String(error)}`,
+          }
+        }
+      }
+
+      const url = extractStandaloneHttpUrlForTest(text)
+      if (!url) return
+
+      pendingWikiLinks.set(key, { url, createdAt: Date.now() })
+      return {
+        handled: true,
+        text: buildWikiLinkChoiceReplyForTest(url),
+      }
+    })
 
     api.registerTool(
       {
@@ -818,14 +1457,13 @@ const plugin = {
             managedContext,
           ))
             .filter((item) => (item.score ?? 0) >= cfg.recallScoreThreshold)
-            .slice(0, cfg.recallLimit)
 
-          const memoryContext = results.length > 0 ? results.map((item) => `- ${item.content}`).join('\n') : ''
+          const recallContext = buildAutoRecallContextForTest(query, results, cfg.recallLimit)
           return {
             prependSystemContext: MEMORY_RECALL_GUIDANCE,
-            ...(memoryContext
+            ...(recallContext.prependContext
               ? {
-                  prependContext: `<relevant-memories>\nThe following memories may be relevant to this conversation:\n${memoryContext}\n</relevant-memories>`,
+                  prependContext: recallContext.prependContext,
                 }
               : {}),
           }
@@ -872,7 +1510,7 @@ const plugin = {
           const sanitized = texts
             .map((item) => item.trim())
             .filter((item) => item.length >= 10)
-            .filter((item) => !item.includes('<relevant-memories>') && !(item.startsWith('<') && item.includes('</')))
+            .filter((item) => !item.includes('<relevant-memories>') && !item.includes('<relevant-wiki>') && !(item.startsWith('<') && item.includes('</')))
           if (sanitized.length === 0) return
 
           const combined = sanitized.join('\n\n')

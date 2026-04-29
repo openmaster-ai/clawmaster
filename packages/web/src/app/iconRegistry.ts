@@ -1,6 +1,7 @@
 import {
   ArrowUpCircle,
   BarChart3,
+  BookOpen,
   BookOpenText,
   BookText,
   Bot,
@@ -40,6 +41,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'settings-2': Settings2,
   'file-text': FileText,
   'book-text': BookText,
+  'book-open': BookOpen,
   'book-open-text': BookOpenText,
   'scroll-text': ScrollText,
   wrench: Wrench,
