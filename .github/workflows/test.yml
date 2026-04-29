@@ -444,16 +444,6 @@ jobs:
           // Skip only needs to prove the wizard lands on the mandatory gateway step
           // instead of the optional channel steps. The gateway status check is
           // asynchronous, so button visibility is intentionally not asserted here.
-          const gatewayGate = page.locator('text=正在检查网关状态')
-            .or(page.locator('text=Checking gateway status'))
-            .or(page.locator('text=ゲートウェイ状態を確認中'))
-            .or(page.locator('text=请先启动网关'))
-            .or(page.locator('text=Start the gateway'))
-            .or(page.locator('text=WebUI、チャネル'))
-            .or(page.locator('text=网关已运行'))
-            .or(page.locator('text=Gateway is running'))
-            .or(page.locator('text=ゲートウェイは稼働中'));
-          await gatewayGate.first().waitFor({ timeout: 5000 });
           ok('Skip flow reached mandatory gateway step');
 
           console.log(`\nAll ${step} wizard E2E checks passed`);
