@@ -17,6 +17,7 @@
   &nbsp;
   <img src="https://img.shields.io/badge/Brand-OpenMaster_Universe-F5A623?style=flat" alt="OpenMaster Universe Brand" />
   <img src="https://img.shields.io/badge/Product-ClawMaster-111111?style=flat" alt="ClawMaster" />
+  <a href="https://github.com/openmaster-ai/clawmaster-workshop"><img src="https://img.shields.io/badge/Workshop-hands--on-0A7EA4?style=flat" alt="Workshop" /></a>
 </p>
 
 <p align="center">
@@ -27,6 +28,7 @@
 
 <p align="center">
   <a href="https://github.com/openmaster-ai/clawmaster/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/openmaster-ai/clawmaster/build.yml?branch=main" alt="Build" /></a>
+  <a href="https://github.com/openmaster-ai/clawmaster/milestone/1"><img src="https://img.shields.io/badge/milestone-v0.4.0-6f42c1" alt="Next milestone: v0.4.0" /></a>
   <a href="https://github.com/openmaster-ai/clawmaster/stargazers"><img src="https://img.shields.io/github/stars/openmaster-ai/clawmaster?style=social" alt="Stars" /></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="Apache 2.0" />
 </p>
@@ -35,8 +37,7 @@
   <a href="https://github.com/openmaster-ai/clawmaster/releases"><strong>📦 Releases</strong></a> &nbsp;·&nbsp;
   <a href="https://github.com/openmaster-ai/clawmaster/discussions"><strong>💬 Discussions</strong></a> &nbsp;·&nbsp;
   <a href="https://github.com/openmaster-ai/clawmaster/issues"><strong>🐛 Issues</strong></a> &nbsp;·&nbsp;
-  <a href="https://deepwiki.com/openmaster-ai/clawmaster"><strong>📘 Ask DeepWiki</strong></a> &nbsp;·&nbsp;
-  <a href="https://discord.gg/openclaw"><strong>Discord</strong></a>
+  <a href="https://deepwiki.com/openmaster-ai/clawmaster"><strong>📘 Ask DeepWiki</strong></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
   English &nbsp;·&nbsp; <a href="./README_CN.md">中文</a> &nbsp;·&nbsp; <a href="./README_JP.md">日本語</a>
 </p>
@@ -59,7 +60,7 @@ clawmaster doctor            # verify your environment
 ```
 
 > [!NOTE]
-> The current release is **v0.3.0**. Install with `npm i -g clawmaster`.
+> The current release is **v0.3.1**. The next milestone is [**v0.4.0**](https://github.com/openmaster-ai/clawmaster/milestone/1) — already shipping features land there as they merge.
 
 ### Desktop App (Beta)
 
@@ -97,57 +98,33 @@ Requires Node.js 20+. Tauri desktop builds also need Rust — see [tauri.app/sta
 3. Add channels, plugins, skills, or MCP servers as needed.
 4. Enable gateway or observability when you need runtime inspection.
 
+### Pick your learning path
+
+- 🧪 **Hands-on** — run through [**clawmaster-workshop**](https://github.com/openmaster-ai/clawmaster-workshop) — trilingual (EN / 中文 / 日本語) tasks grouped by the six core capabilities, plus dated labs that chain tasks into real scenarios. Best if you want to *do* the thing.
+- 🖼️ **Pictured walkthrough** — skim the [Product Tour](#product-tour) below. Each screenshot maps to a concrete task, so you can understand what the product does without installing anything.
+
 ## Why ClawMaster
 
-Most OpenClaw tooling stops at configuration. ClawMaster is your **OpenClaw companion for real life** — it goes beyond setup to help normal, non-technical users actually make practical use of OpenClaw as a digital personal assistant.
+Most OpenClaw tooling stops at configuration. ClawMaster is your **OpenClaw companion for real life** — a bridge between OpenClaw's power and everyday usability. It's for people who want OpenClaw to actually work in their daily life (not just be correctly configured), who don't want to live in JSON and terminals, and who manage OpenClaw for a team or family.
 
-That means ClawMaster is not only for:
-- editing config safely,
-- connecting models and channels,
-- monitoring runtime health,
+## Memory Highlights
 
-but also for:
-- making setup approachable,
-- turning advanced agent capability into guided workflows,
-- and gradually adding more guided learning and workflow support for real daily work and life goals.
+Memory is the backbone of the **Save** capability. We build on [**PowerMem**](https://github.com/oceanbase/powermem) ([Python](https://github.com/oceanbase/powermem) · [TypeScript SDK](https://github.com/ob-labs/powermem-ts) · [OpenClaw plugin](https://github.com/ob-labs/memory-powermem)) instead of rolling our own:
 
-**Positioning:** ClawMaster is the bridge between OpenClaw's power and everyday usability.
+- **Native OpenClaw citizen** — PowerMem already ships an OpenClaw memory plugin, so agent turns get auto-recall / auto-capture for free.
+- **Smart extraction, not chunk dumping** — distills conversations into durable facts with Ebbinghaus-style decay and recall, which matches our "build but also maintain" direction.
+- **Multi-agent isolation built in** — scopes per user / agent / workspace without us reinventing identity plumbing.
+- **Database-grade durability** — pairs with [OceanBase seekdb](https://github.com/oceanbase/seekdb) for hybrid vector + full-text + SQL, with SQLite as a cross-platform fallback.
+- **Open source with cross-language SDKs** — we're not locked into one runtime; consistent semantics from JS to Python to Go.
 
-## ClawMaster vs. CLI Only
+**Shipped**
 
-| | OpenClaw CLI alone | ClawMaster |
-|---|---|---|
-| Initial setup | Hand-edit `~/.openclaw/openclaw.json` | Guided wizard |
-| Provider & model config | Edit JSON, restart | Form UI with live validation |
-| Channel setup | Read docs, edit config | Step-by-step guides per platform |
-| Observability | Mostly CLI and logs | ClawProbe-backed dashboard and runtime views |
-| Memory management | `powermem` CLI | Management UI |
-| Daily-use enablement | Mostly DIY | Product UX that is moving toward more guided use |
-| Multiple profiles | Manual file juggling | Profile switcher |
-| Desktop app | No | Yes — ships as `.dmg` / `.msi` / `.AppImage` |
-| Self-hosted web console | No | Yes — Express, runs anywhere Node.js runs |
+- Managed PowerMem runtime with an OpenClaw bridge across web, backend, and desktop — agent turns get auto-recall and auto-capture out of the box.
+- Local workspace import that pulls markdown / `memory/` into managed PowerMem, using seekdb where available and SQLite as a fallback.
+- First end-to-end memory-backed skill: a daily package download digest with period-over-period deltas.
+- Memory-adjacent observability — per-session spend, scheduled cost digests, and models.dev pricing.
 
-## Who It Is For
-
-**"I want OpenClaw to be useful in my real life, not just correctly configured."**  
-ClawMaster is designed to reduce the gap between installation and actual outcomes.
-
-**"I'm non-technical, but I still want a powerful AI personal assistant."**  
-The product is moving toward guided setup, guided usage, and outcome-oriented learning instead of assuming comfort with JSON, terminals, or infra concepts.
-
-**"I manage OpenClaw for my team or family."**  
-One place to configure channels, inspect runtime state, and make the stack easier for others to adopt.
-
-**"I'm building advanced agent workflows."**  
-You still get provider management, observability, memory tooling, sessions, plugins, skills, and MCP in one place.
-
-## What You Can Do Today
-
-- **Setup and profiles** — Detect OpenClaw, install missing pieces, create or switch profiles, bootstrap a local environment.
-- **Models and providers** — Configure OpenAI-compatible and provider-specific endpoints, validate API keys, set runtime defaults.
-- **Gateway and channels** — Bring up the gateway, follow guided setup for Feishu, WeChat, Discord, Slack, Telegram, and WhatsApp.
-- **Plugins, skills, and MCP** — Enable or disable capabilities, install curated items, add MCP servers, import MCP definitions.
-- **Sessions, memory, and observability** — Inspect sessions, manage memory backends, track token usage and estimated spend.
+**Next (v0.4.0)**: full seekdb hybrid retrieval and a self-maintaining LLM Wiki module — persistent wiki pages that compound with every ingest, with Ebbinghaus decay and freshness-weighted ranking keeping content alive. See the [v0.4.0 milestone](https://github.com/openmaster-ai/clawmaster/milestone/1) for tracked work.
 
 ## Product Tour
 
@@ -177,7 +154,7 @@ You still get provider management, observability, memory tooling, sessions, plug
     </td>
     <td align="center">
       <a href="./docs/screenshots/page-memory.png"><img src="./docs/screenshots/page-memory.png" alt="Memory workspace" /></a><br/>
-      <sub><b>Memory</b> · PowerMem-backed knowledge workspace</sub>
+      <sub><b>Memory</b> · PowerMem runtime with seekdb / SQLite fallback</sub>
     </td>
     <td align="center">
       <a href="./docs/screenshots/page-mcp.png"><img src="./docs/screenshots/page-mcp.png" alt="MCP servers page" /></a><br/>
@@ -190,6 +167,13 @@ You still get provider management, observability, memory tooling, sessions, plug
   </tr>
 </table>
 
+## Who It Is For
+
+- **"I want OpenClaw useful in real life, not just configured."** — closes the gap between install and outcome.
+- **"I'm non-technical but want a powerful AI assistant."** — guided setup, guided usage, no JSON required.
+- **"I manage OpenClaw for my team or family."** — one place for channels, runtime state, and onboarding.
+- **"I'm building advanced agent workflows."** — provider management, observability, memory, sessions, plugins, skills, and MCP in one place.
+
 ## Roadmap
 
 Six core capabilities — each moves from infrastructure toward real daily use:
@@ -198,7 +182,7 @@ Six core capabilities — each moves from infrastructure toward real daily use:
 |---|---|---|---|---|
 | 1 | **Setup** | Available | Guided wizard, 6+ LLM providers with key validation, 6 channel types (Feishu / WeChat / Discord / Slack / Telegram / WhatsApp), profile switching | One-click environment migration ([#1](https://github.com/openmaster-ai/clawmaster/issues/1)), Windows + WSL2 first-class support |
 | 2 | **Observe** | Available | ClawProbe-backed dashboard, per-session cost and token tracking, gateway health monitoring | Historical spend analytics, anomaly alerts, multi-profile comparison |
-| 3 | **Save** | In progress | PowerMem UI with FTS5 local search, memory workspace management, graceful fallback to markdown grep | Full seekdb vector retrieval ([#12](https://github.com/openmaster-ai/clawmaster/issues/12)), LLM Wiki — persistent knowledge base that compounds over time ([#49](https://github.com/openmaster-ai/clawmaster/issues/49)) |
+| 3 | **Save** | In progress | Managed PowerMem runtime + OpenClaw bridge, local workspace import, first memory-backed skill — see [Memory Highlights](#memory-highlights) | Full seekdb hybrid retrieval, self-maintaining LLM Wiki — see [v0.4.0 milestone](https://github.com/openmaster-ai/clawmaster/milestone/1) |
 | 4 | **Apply** | In progress | PaddleOCR pipeline (upload → parse → structured markdown), layout-aware extraction | Photo → flashcard automation, invoice extraction templates, more scenario-first guided workflows |
 | 5 | **Build** | Planned | Plugin/skill install and toggle, MCP server management, skill security auditing | Visual agent composer for skill chaining, LangChain Deep Agents integration, conversational agent builder |
 | 6 | **Guard** | Planned | Skill Guard security scanning (dimension/severity/risk scoring), basic capability gating | API key vault (encrypted at rest), per-profile spend caps, RBAC for team deployments |
@@ -294,8 +278,8 @@ Community: [GitHub Discussions](https://github.com/openmaster-ai/clawmaster/disc
 |---|---|
 | [OpenClaw](https://github.com/openclaw/openclaw) | Core runtime and configuration model |
 | [ClawProbe](https://github.com/openclaw/clawprobe) | Observability daemon |
-| [PowerMem](https://github.com/openclaw/powermem) | Memory backend |
-| [seekdb](https://github.com/openclaw/seekdb) | Retrieval and search workflows |
+| [PowerMem](https://github.com/oceanbase/powermem) · [TS SDK](https://github.com/ob-labs/powermem-ts) | Memory backend |
+| [OceanBase seekdb](https://github.com/oceanbase/seekdb) | Retrieval and search workflows |
 | [Tauri](https://tauri.app) | Desktop app framework |
 | [React](https://react.dev) | Frontend UI |
 | [Vite](https://vitejs.dev) | Frontend toolchain |
