@@ -29,6 +29,7 @@ import type {
   WikiSynthesizePayload,
 } from '@/lib/types'
 import {
+  wikiDeepEvolveResult,
   wikiEvolveResult,
   wikiIngestResult,
   wikiLintResult,
@@ -532,6 +533,19 @@ export default function WikiPage() {
     setActionLoading(null)
   }
 
+  async function handleDeepEvolve() {
+    setActionLoading('deep-evolve')
+    setError(null)
+    const result = await wikiDeepEvolveResult()
+    if (result.success && result.data) {
+      setEvolveResult(result.data)
+      await loadWiki()
+    } else {
+      setError(result.error || t('wiki.deepEvolveFailed'))
+    }
+    setActionLoading(null)
+  }
+
   const stats = useMemo(() => [
     { label: t('wiki.statPages'), value: String(status?.pageCount ?? 0), icon: FileText },
     { label: t('wiki.statSources'), value: String(status?.sourceCount ?? 0), icon: Link2 },
@@ -726,7 +740,7 @@ export default function WikiPage() {
             </div>
             {queryResult ? (
               <div className="rounded-lg border border-border bg-background/70 p-3 text-sm">
-                <p className="whitespace-pre-wrap text-muted-foreground">{queryResult.answer}</p>
+                <MarkdownPreview content={queryResult.answer} onOpenLink={(target) => void openPage(target)} />
                 {queryResult.offerToSave ? (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <p className="text-xs text-primary">{t('wiki.offerToSave')}</p>
@@ -801,6 +815,10 @@ export default function WikiPage() {
               <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm" onClick={() => void handleEvolve()}>
                 {actionLoading === 'evolve' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
                 {t('wiki.runEvolve')}
+              </button>
+              <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm" onClick={() => void handleDeepEvolve()}>
+                {actionLoading === 'deep-evolve' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {t('wiki.runDeepEvolve')}
               </button>
             </div>
             {lintResult ? (

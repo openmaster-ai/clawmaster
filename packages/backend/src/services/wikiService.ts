@@ -16,6 +16,12 @@ import {
   type OpenclawProfileContext,
   type OpenclawProfileSelection,
 } from '../openclawProfile.js'
+import {
+  wikiLlmComplete,
+  wikiLlmCompleteStructured,
+  wikiLlmEnabled,
+  type WikiLlmMessage,
+} from './wikiLlm.js'
 
 export type WikiPageType = 'entity' | 'concept' | 'source' | 'synthesis' | 'process'
 export type WikiFreshnessStatus = 'fresh' | 'aging' | 'stale'
@@ -121,6 +127,7 @@ export interface WikiQueryPayload {
   results: WikiSearchResult[]
   citations: WikiCitation[]
   offerToSave: boolean
+  warnings?: string[]
 }
 
 export type WikiAssistReason = 'explicit_wiki' | 'knowledge_question' | 'project_context' | 'not_relevant'
@@ -151,7 +158,7 @@ export interface WikiSynthesizePayload {
 export interface WikiLintIssue {
   id: string
   severity: WikiLintSeverity
-  kind: 'orphan' | 'missing-link' | 'duplicate-title' | 'stale' | 'schema'
+  kind: 'orphan' | 'missing-link' | 'duplicate-title' | 'stale' | 'schema' | 'contradiction'
   pageId?: string
   title: string
   detail: string
@@ -161,9 +168,11 @@ export interface WikiLintPayload {
   checkedAt: string
   issueCount: number
   issues: WikiLintIssue[]
+  warnings?: string[]
 }
 
 export interface WikiEvolvePayload {
+  mode: 'mechanical' | 'deep'
   evolvedAt: string
   pageCount: number
   staleCount: number
@@ -210,8 +219,18 @@ interface WikiPaths {
 
 interface WikiIngestStateEntry {
   fingerprint: string
-  pageId: string
-  memoryId: string
+  pageId?: string
+  memoryId?: string
+  primaryPageId: string
+  primaryMemoryId?: string
+  derivedPageIds: string[]
+  memoryIds: string[]
+  derivedPages: Array<{
+    pageId: string
+    memoryId?: string
+    pageType: WikiPageType
+    sourceFingerprint: string
+  }>
   updatedAt: string
 }
 
@@ -225,6 +244,22 @@ interface ParsedPage {
   relativePath: string
   frontmatter: Record<string, string>
   body: string
+}
+
+interface WikiDerivedSuggestion {
+  name: string
+  kind: 'entity' | 'concept'
+  summary: string
+  confidence: number
+  existingTitle?: string
+}
+
+interface WikiDerivedResult {
+  pageId: string
+  pageType: WikiPageType
+  memoryId?: string
+  sourceFingerprint: string
+  created: boolean
 }
 
 type WikiFreshnessMeta = Record<string, {
@@ -245,9 +280,169 @@ const PAGE_DIRS: Record<WikiPageType, string> = {
 
 const WIKI_STATE_FILE = 'ingest-state.json'
 const DEFAULT_FRESHNESS_SCORE = 1
+const GENERATED_BLOCK_PREFIX = 'CLAWMASTER-GENERATED'
+const DERIVED_PAGE_CONFIDENCE_THRESHOLD = 0.72
+const MAX_INGEST_LLM_CHARS = 12_000
+const MAX_DEEP_EVOLVE_PAGES = 5
+const MAX_CONTRADICTION_PAIRS = 10
+const WIKI_SCHEMA_TEMPLATE = `# Wiki Schema
+
+This vault stores durable, citation-aware wiki knowledge for OpenClaw and ClawMaster workflows.
+
+## Layout
+
+- \`raw/\`: original imported artifacts or fetched source payloads when stored later
+- \`pages/sources/\`: imported source notes and source-linked summaries
+- \`pages/entities/\`: people, orgs, tools, and products enriched from sources
+- \`pages/concepts/\`: patterns, ideas, and reusable techniques enriched from sources
+- \`pages/synthesis/\`: durable synthesized answers created from source pages
+- \`pages/processes/\`: process docs and operating procedures
+- \`.meta/freshness.json\`: computed freshness state
+- \`.meta/conflicts.json\`: lint issues considered wiki conflicts
+- \`.meta/ingest-state.json\`: source-to-page provenance for incremental re-ingest
+
+## Required frontmatter
+
+- \`id\`: stable page id
+- \`title\`: human-readable page title
+- \`type\`: one of entity, concept, source, synthesis, process
+- \`createdAt\`, \`updatedAt\`
+- \`freshnessScore\`, \`freshnessStatus\`
+- \`memoryId\`: managed memory backing record id when present
+
+## Generated provenance
+
+- \`generatedFromSourceIds\`: pipe-delimited source page ids whose generated blocks contribute to the page
+- Generated blocks use HTML comments of the form \`<!-- CLAWMASTER-GENERATED:<key>:START -->\`
+- Re-ingest replaces or removes only the generated block for the matching source page id
+
+## Linking and citations
+
+- Use \`[[Wiki Links]]\` for page references
+- Source pages should preserve provenance via \`sourceUrl\` and \`sourcePath\`
+- Synthesis pages should cite source pages with \`[[Page Title]]\` links
+
+## Maintenance
+
+- Mechanical evolve recalculates freshness, related pages, and structural health
+- Deep evolve is opt-in and may revise stale pages with LLM review
+- Lint checks structure first, then optional contradiction checks across related pages
+`
 
 function nowIso(): string {
   return new Date().toISOString()
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function blockIdForSource(sourcePageId: string): string {
+  return `${GENERATED_BLOCK_PREFIX}:${sourcePageId}`
+}
+
+function generatedBlockMarkers(blockId: string): { start: string; end: string } {
+  return {
+    start: `<!-- ${blockId}:START -->`,
+    end: `<!-- ${blockId}:END -->`,
+  }
+}
+
+function upsertGeneratedBlock(body: string, blockId: string, blockContent: string): string {
+  const normalized = body.trim()
+  const { start, end } = generatedBlockMarkers(blockId)
+  const pattern = new RegExp(`\\n?${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}\\n?`, 'g')
+  const replacement = blockContent.trim()
+    ? `\n\n${start}\n${blockContent.trim()}\n${end}\n`
+    : '\n'
+  const updated = normalized.match(pattern)
+    ? normalized.replace(pattern, replacement)
+    : replacement.trim()
+      ? `${normalized}${replacement}`
+      : normalized
+  return updated
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function removeGeneratedBlock(body: string, blockId: string): string {
+  return upsertGeneratedBlock(body, blockId, '')
+}
+
+function parsePipeList(value: string | undefined): string[] {
+  return (value ?? '')
+    .split('|')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function serializePipeList(values: string[]): string {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].join('|')
+}
+
+function buildSourceLinksBlock(links: string[]): string {
+  if (links.length === 0) return ''
+  return [
+    '## Extracted Wiki Links',
+    '',
+    ...links.map((link) => `- [[${link}]]`),
+  ].join('\n')
+}
+
+function buildDerivedContributionBlock(sourceTitle: string, summary: string): string {
+  return [
+    `### From [[${sourceTitle}]]`,
+    '',
+    summary.trim(),
+  ].join('\n')
+}
+
+function generatedDerivedPageIntro(pageType: WikiPageType): string {
+  return `This ${pageType} page aggregates generated wiki notes tied to imported sources.`
+}
+
+function ensureContributionSection(body: string): string {
+  return body.includes('## Source Contributions')
+    ? body
+    : `${body.trim()}\n\n## Source Contributions`
+}
+
+function stripHeading(title: string, body: string): string {
+  const trimmed = body.trimStart()
+  const heading = `# ${title}`.trim()
+  return trimmed.startsWith(heading) ? trimmed.slice(heading.length).trimStart() : body.trim()
+}
+
+function stripMarkdownSection(body: string, sectionTitle: string): string {
+  const escaped = escapeRegExp(sectionTitle)
+  return body.replace(new RegExp(`(?:^|\\n)## ${escaped}\\s*\\n[\\s\\S]*?(?=\\n##\\s|\\n#\\s|$)`, 'g'), '\n')
+}
+
+function sanitizeWikiBody(title: string, body: string): string {
+  const withoutHeading = stripHeading(title, body)
+  const withoutGeneratedBlocks = withoutHeading
+    .replace(/<!--\s*CLAWMASTER-GENERATED:[\s\S]*?:START\s*-->/g, '\n')
+    .replace(/<!--\s*CLAWMASTER-GENERATED:[\s\S]*?:END\s*-->/g, '\n')
+    .replace(/<!--[\s\S]*?-->/g, '\n')
+  return ['Extracted Wiki Links', 'Sources']
+    .reduce((content, sectionTitle) => stripMarkdownSection(content, sectionTitle), withoutGeneratedBlocks)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function pruneEmptyContributionSection(body: string): string {
+  return body
+    .replace(/\n## Source Contributions(?:\s*\n*)?$/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function sanitizeContentForSynthesis(page: WikiPageDetail): string {
+  return sanitizeWikiBody(page.title, page.content)
 }
 
 function getProfileKey(profileSelection: OpenclawProfileSelection): string {
@@ -327,8 +522,12 @@ export async function ensureWikiVault(context: WikiServiceContext = {}): Promise
   )
   await writeIfMissing(
     paths.schemaPath,
-    '# Wiki Schema\n\nPages use YAML frontmatter with id, title, type, source, freshness, and provenance fields.\n',
+    `${WIKI_SCHEMA_TEMPLATE}\n`,
   )
+  const existingSchema = await fs.readFile(paths.schemaPath, 'utf8').catch(() => '')
+  if (existingSchema.trim() === '# Wiki Schema\n\nPages use YAML frontmatter with id, title, type, source, freshness, and provenance fields.'.trim()) {
+    await fs.writeFile(paths.schemaPath, `${WIKI_SCHEMA_TEMPLATE}\n`, 'utf8')
+  }
   await writeIfMissing(paths.freshnessPath, '{}\n')
   await writeIfMissing(paths.conflictsPath, '[]\n')
   await writeIfMissing(statePath(paths), `${JSON.stringify({ version: 1, sources: {} }, null, 2)}\n`)
@@ -630,9 +829,53 @@ async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
 
 async function readIngestState(paths: WikiPaths): Promise<WikiIngestStateFile> {
   const parsed = await readJsonFile<WikiIngestStateFile>(statePath(paths), { version: 1, sources: {} })
+  const normalizedSources = Object.fromEntries(
+    Object.entries(parsed.sources && typeof parsed.sources === 'object' ? parsed.sources : {}).map(([key, value]) => {
+      const entry: Record<string, unknown> = isRecord(value) ? value : {}
+      const primaryPageId = typeof entry.primaryPageId === 'string'
+        ? entry.primaryPageId
+        : typeof entry.pageId === 'string'
+          ? entry.pageId
+          : ''
+      const primaryMemoryId = typeof entry.primaryMemoryId === 'string'
+        ? entry.primaryMemoryId
+        : typeof entry.memoryId === 'string'
+          ? entry.memoryId
+          : undefined
+      const derivedPages = Array.isArray(entry.derivedPages)
+        ? entry.derivedPages
+          .filter(isRecord)
+          .map((page: Record<string, unknown>) => ({
+            pageId: typeof page.pageId === 'string' ? page.pageId : '',
+            memoryId: typeof page.memoryId === 'string' ? page.memoryId : undefined,
+            pageType: (page.pageType as WikiPageType | undefined) ?? 'source',
+            sourceFingerprint: typeof page.sourceFingerprint === 'string' ? page.sourceFingerprint : '',
+          }))
+          .filter((page) => page.pageId)
+        : []
+      return [
+        key,
+        {
+          fingerprint: typeof entry.fingerprint === 'string' ? entry.fingerprint : '',
+          pageId: typeof entry.pageId === 'string' ? entry.pageId : primaryPageId,
+          memoryId: typeof entry.memoryId === 'string' ? entry.memoryId : primaryMemoryId,
+          primaryPageId,
+          primaryMemoryId,
+          derivedPageIds: Array.isArray(entry.derivedPageIds)
+            ? entry.derivedPageIds.filter((item: unknown): item is string => typeof item === 'string' && item.trim().length > 0)
+            : derivedPages.map((page) => page.pageId),
+          memoryIds: Array.isArray(entry.memoryIds)
+            ? entry.memoryIds.filter((item: unknown): item is string => typeof item === 'string' && item.trim().length > 0)
+            : [primaryMemoryId, ...derivedPages.map((page) => page.memoryId)].filter((item): item is string => Boolean(item)),
+          derivedPages,
+          updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : nowIso(),
+        } satisfies WikiIngestStateEntry,
+      ]
+    }),
+  )
   return {
     version: 1,
-    sources: parsed.sources && typeof parsed.sources === 'object' ? parsed.sources : {},
+    sources: normalizedSources,
   }
 }
 
@@ -718,7 +961,7 @@ function summarizeParsedPages(pages: ParsedPage[], query = '', freshnessMeta: Wi
       type,
       path: page.filePath,
       relativePath: page.relativePath,
-      snippet: makeSnippet(page.body.replace(/^# .+$/m, ''), query),
+      snippet: makeSnippet(sanitizeWikiBody(title, page.body), query),
       sourceCount: countSources(page.frontmatter, page.body),
       freshnessStatus: resolvedFreshness,
       freshnessScore: score,
@@ -816,6 +1059,241 @@ function renderGeneratedWikiPage(input: {
     return `${index + 1}. [[${page.title}]] - ${source}`
   })
   return `${fm}\n# ${input.title}\n\n${input.content.trim()}\n\n## Sources\n\n${sourceLines.join('\n')}\n`
+}
+
+async function syncPageManagedMemory(
+  pagePath: string,
+  context: WikiServiceContext,
+): Promise<string | undefined> {
+  const raw = await fs.readFile(pagePath, 'utf8')
+  const parsed = parseFrontmatter(raw)
+  const previousMemoryId = parsed.frontmatter.memoryId || undefined
+  const pageId = parsed.frontmatter.id || slugify(parsed.frontmatter.title || path.basename(pagePath, '.md'))
+  const pageType = (parsed.frontmatter.type as WikiPageType | undefined) ?? 'source'
+  const created = await addManagedMemory(
+    {
+      content: parsed.body,
+      metadata: {
+        sourceType: parsed.frontmatter.sourceType || (pageType === 'synthesis' ? 'synthesis' : 'wiki-generated'),
+        scope: 'wiki',
+        durability: 'durable',
+        category: pageType === 'process' ? 'procedure' : pageType === 'synthesis' ? 'synthesis' : 'reference',
+        provenance: {
+          sourceType: parsed.frontmatter.sourceType || (pageType === 'synthesis' ? 'synthesis' : 'wiki-generated'),
+          sourcePath: parsed.frontmatter.sourcePath,
+          sourceUrl: parsed.frontmatter.sourceUrl,
+          sourceFingerprint: parsed.frontmatter.fingerprint,
+          sourcePageIds: parsePipeList(parsed.frontmatter.generatedFromSourceIds),
+          importedAt: nowIso(),
+          createdBy: parsed.frontmatter.evolveSource?.includes('llm') ? 'wiki-llm' : 'wiki-service',
+        },
+        quality: {
+          confidence: pageType === 'synthesis' ? 0.78 : 0.74,
+          recallPriority: pageType === 'source' ? 0.7 : 0.82,
+        },
+        pageId,
+        sectionId: 'body',
+        freshness: {
+          score: parseNumber(parsed.frontmatter.freshnessScore, DEFAULT_FRESHNESS_SCORE),
+          status: (parsed.frontmatter.freshnessStatus as WikiFreshnessStatus | undefined) ?? 'fresh',
+          updatedAt: parsed.frontmatter.updatedAt || nowIso(),
+        },
+        lint: {
+          status: 'unchecked',
+        },
+      },
+    },
+    managedContext(context),
+  )
+  if (previousMemoryId && previousMemoryId !== created.memoryId) {
+    await deleteManagedMemory(previousMemoryId, managedContext(context)).catch(() => undefined)
+  }
+  const nextFrontmatter = {
+    ...parsed.frontmatter,
+    memoryId: created.memoryId,
+  }
+  await fs.writeFile(pagePath, renderMarkdownWithFrontmatter(nextFrontmatter, parsed.body), 'utf8')
+  return created.memoryId
+}
+
+function buildWikiLlmMessages(system: string, user: string): WikiLlmMessage[] {
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ]
+}
+
+async function extractDerivedSuggestions(
+  input: {
+    title: string
+    content: string
+    sourcePageId: string
+    existingTitles: string[]
+  },
+  context: WikiServiceContext,
+): Promise<WikiDerivedSuggestion[]> {
+  if (!wikiLlmEnabled(context) || input.content.length > MAX_INGEST_LLM_CHARS) return []
+  const schema = {
+    items: [
+      {
+        name: 'string',
+        kind: 'entity | concept',
+        summary: 'string',
+        confidence: 'number',
+        existingTitle: 'string | optional',
+      },
+    ],
+  }
+  const response = await wikiLlmCompleteStructured<{ items?: WikiDerivedSuggestion[] }>(
+    buildWikiLlmMessages(
+      'Extract durable entity and concept pages from wiki sources. Prefer concise, factual summaries and only include items that deserve their own page.',
+      [
+        `Source title: ${input.title}`,
+        `Source page id: ${input.sourcePageId}`,
+        '',
+        'Existing wiki titles:',
+        input.existingTitles.slice(0, 150).join(', '),
+        '',
+        'Source content:',
+        input.content.slice(0, MAX_INGEST_LLM_CHARS),
+      ].join('\n'),
+    ),
+    schema,
+    { maxTokens: 1400, temperature: 0.1 },
+    context,
+  )
+  return (response.items ?? [])
+    .filter((item) => item && (item.kind === 'entity' || item.kind === 'concept'))
+    .map((item) => ({
+      name: item.name?.trim() ?? '',
+      kind: item.kind,
+      summary: item.summary?.trim() ?? '',
+      confidence: Math.max(0, Math.min(1, Number.isFinite(Number(item.confidence)) ? Number(item.confidence) : 0)),
+      existingTitle: item.existingTitle?.trim() || undefined,
+    }))
+    .filter((item) => item.name && item.summary && item.confidence >= DERIVED_PAGE_CONFIDENCE_THRESHOLD)
+}
+
+function derivedPagePath(paths: WikiPaths, pageType: WikiPageType, title: string): string {
+  return path.join(paths.pagesRoot, PAGE_DIRS[pageType], `${slugify(title)}.md`)
+}
+
+async function upsertDerivedPage(
+  paths: WikiPaths,
+  sourcePage: { id: string; title: string; sourceUrl?: string; sourcePath?: string },
+  item: WikiDerivedSuggestion,
+  pages: WikiPageSummary[],
+  context: WikiServiceContext,
+): Promise<WikiDerivedResult> {
+  const targetTitle = item.existingTitle || item.name
+  const existing = pages.find((page) => page.type === item.kind && page.title.toLowerCase() === targetTitle.toLowerCase())
+  const pageType: WikiPageType = item.kind
+  const pageId = existing?.id ?? `${PAGE_DIRS[pageType]}-${slugify(item.name)}`
+  const pagePath = existing?.path ?? derivedPagePath(paths, pageType, item.name)
+  const blockId = blockIdForSource(sourcePage.id)
+  const sourceFingerprint = fingerprintSource({
+    title: item.name,
+    content: item.summary,
+    sourcePath: sourcePage.id,
+  })
+  const contribution = buildDerivedContributionBlock(sourcePage.title, item.summary)
+  const existingRaw = await fs.readFile(pagePath, 'utf8').catch(() => '')
+  const existingParsed = existingRaw ? parseFrontmatter(existingRaw) : null
+  const currentSourceIds = parsePipeList(existingParsed?.frontmatter.generatedFromSourceIds)
+  const nextSourceIds = serializePipeList([...currentSourceIds, sourcePage.id])
+  const nextBody = existingParsed
+    ? upsertGeneratedBlock(
+        ensureContributionSection(stripHeading(existingParsed.frontmatter.title || item.name, existingParsed.body)),
+        blockId,
+        contribution,
+      )
+    : upsertGeneratedBlock(
+        [
+          generatedDerivedPageIntro(pageType),
+          '',
+          '## Source Contributions',
+        ].join('\n'),
+        blockId,
+        contribution,
+      )
+  const nextFrontmatter = existingParsed
+    ? {
+        ...existingParsed.frontmatter,
+        title: existingParsed.frontmatter.title || item.name,
+        type: existingParsed.frontmatter.type || pageType,
+        generatedFromSourceIds: nextSourceIds,
+        updatedAt: nowIso(),
+        fingerprint: sourceFingerprint,
+      }
+    : {
+        id: pageId,
+        title: item.name,
+        type: pageType,
+        sourceType: 'wiki-generated',
+        sourceTitle: item.name,
+        generatedFromSourceIds: nextSourceIds,
+        sourceUrl: sourcePage.sourceUrl,
+        sourcePath: sourcePage.sourcePath,
+        fingerprint: sourceFingerprint,
+        durability: 'durable',
+        category: 'reference',
+        freshnessScore: DEFAULT_FRESHNESS_SCORE,
+        freshnessStatus: 'fresh',
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      }
+  await fs.writeFile(pagePath, renderMarkdownWithFrontmatter(nextFrontmatter, nextBody), 'utf8')
+  const memoryId = await syncPageManagedMemory(pagePath, context)
+  return {
+    pageId,
+    pageType,
+    memoryId,
+    sourceFingerprint,
+    created: !existing,
+  }
+}
+
+async function cleanupRemovedDerivedPages(
+  previous: WikiIngestStateEntry | undefined,
+  nextPageIds: Set<string>,
+  sourcePageId: string,
+  context: WikiServiceContext,
+): Promise<void> {
+  if (!previous) return
+  for (const derived of previous.derivedPages) {
+    if (nextPageIds.has(derived.pageId)) continue
+    const page = await getWikiPage(derived.pageId, context).catch(() => null)
+    if (!page) {
+      if (derived.memoryId) await deleteManagedMemory(derived.memoryId, managedContext(context)).catch(() => undefined)
+      continue
+    }
+    const blockId = blockIdForSource(sourcePageId)
+    const nextSourceIds = parsePipeList(page.frontmatter.generatedFromSourceIds).filter((id) => id !== sourcePageId)
+    const nextBody = pruneEmptyContributionSection(removeGeneratedBlock(stripHeading(page.title, page.content), blockId))
+    const generatedShell = generatedDerivedPageIntro(page.type)
+    const remainingMeaningfulBody = nextBody
+      .replace(generatedShell, '')
+      .replace(/^## Source Contributions\s*$/gm, '')
+      .trim()
+    const removePage = !nextBody.trim()
+      || (nextSourceIds.length === 0
+        && page.frontmatter.sourceType === 'wiki-generated'
+        && !remainingMeaningfulBody)
+    if (removePage) {
+      await fs.unlink(page.path).catch(() => undefined)
+      if (page.memoryIds[0]) {
+        await deleteManagedMemory(page.memoryIds[0], managedContext(context)).catch(() => undefined)
+      }
+      continue
+    }
+    const nextFrontmatter = {
+      ...page.frontmatter,
+      generatedFromSourceIds: serializePipeList(nextSourceIds),
+      updatedAt: nowIso(),
+    }
+    await fs.writeFile(page.path, renderMarkdownWithFrontmatter(nextFrontmatter, nextBody), 'utf8')
+    await syncPageManagedMemory(page.path, context)
+  }
 }
 
 async function writeIndex(paths: WikiPaths, pages: WikiPageSummary[]): Promise<void> {
@@ -1031,10 +1509,11 @@ export async function ingestWikiSource(
   const paths = await ensureWikiVault(context)
   const state = await readIngestState(paths)
   const pageType = inferPageType(ingestInput)
+  const knownPages = await listWikiPages(context)
   const key = sourceKey(ingestInput, title)
   const previous = state.sources[key]
-  const existingPage = previous?.pageId
-    ? (await listWikiPages(context)).find((item) => item.id === previous.pageId)
+  const existingPage = (previous?.primaryPageId || previous?.pageId)
+    ? knownPages.find((item) => item.id === (previous.primaryPageId || previous.pageId))
     : undefined
   const defaultPageId = `${PAGE_DIRS[pageType]}-${slugify(title)}`
   const defaultPagePath = path.join(paths.pagesRoot, PAGE_DIRS[pageType], `${slugify(title)}.md`)
@@ -1060,10 +1539,43 @@ export async function ingestWikiSource(
     }
   }
 
+  let derivedSuggestions: WikiDerivedSuggestion[] = []
+  let derivedExtractionCompleted = false
+  if (pageType === 'source') {
+    if (wikiLlmEnabled(context) && content.length <= MAX_INGEST_LLM_CHARS) {
+      try {
+        derivedSuggestions = await extractDerivedSuggestions(
+          {
+            title,
+            content,
+            sourcePageId: pageId,
+            existingTitles: knownPages.map((page) => page.title),
+          },
+          context,
+        )
+        derivedExtractionCompleted = true
+      } catch {
+        warnings.push('wiki_llm_extract_failed')
+      }
+    }
+  }
+  const uniqueSuggestions = [...new Map(
+    derivedSuggestions.map((item) => [`${item.kind}:${item.name.toLowerCase()}`, item]),
+  ).values()]
+  const sourceContent = upsertGeneratedBlock(
+    content,
+    `${GENERATED_BLOCK_PREFIX}:related-links`,
+    buildSourceLinksBlock(
+      uniqueSuggestions
+        .map((item) => item.existingTitle?.trim() || item.name.trim())
+        .filter(Boolean),
+    ),
+  )
+
   const now = nowIso()
   const created = await addManagedMemory(
     {
-      content,
+      content: sourceContent,
       metadata: {
         sourceType: ingestInput.sourceType || (ingestInput.sourceUrl ? 'url' : ingestInput.sourcePath ? 'file' : 'manual'),
         scope: 'wiki',
@@ -1096,8 +1608,8 @@ export async function ingestWikiSource(
     managedContext(context),
   )
 
-  if (previous?.memoryId && previous.memoryId !== created.memoryId) {
-    await deleteManagedMemory(previous.memoryId, managedContext(context)).catch(() => undefined)
+  if ((previous?.primaryMemoryId || previous?.memoryId) && (previous.primaryMemoryId || previous.memoryId) !== created.memoryId) {
+    await deleteManagedMemory((previous.primaryMemoryId || previous.memoryId)!, managedContext(context)).catch(() => undefined)
   }
 
   const existed = await pathExists(pagePath)
@@ -1110,7 +1622,7 @@ export async function ingestWikiSource(
       sourceType: ingestInput.sourceType || (ingestInput.sourceUrl ? 'url' : ingestInput.sourcePath ? 'file' : 'manual'),
       sourcePath: ingestInput.sourcePath,
       sourceUrl: ingestInput.sourceUrl,
-      content,
+      content: sourceContent,
       memoryId: created.memoryId,
       fingerprint,
       createdAt: existingPage?.createdAt || previous?.updatedAt || now,
@@ -1118,10 +1630,72 @@ export async function ingestWikiSource(
     }),
     'utf8',
   )
+
+  const nextDerivedResults: WikiDerivedResult[] = []
+  let derivedUpsertFailed = false
+  for (const item of uniqueSuggestions) {
+    try {
+      const result = await upsertDerivedPage(
+        paths,
+        {
+          id: pageId,
+          title,
+          sourceUrl: ingestInput.sourceUrl,
+          sourcePath: ingestInput.sourcePath,
+        },
+        item,
+        await listWikiPages(context),
+        context,
+      )
+      nextDerivedResults.push(result)
+    } catch {
+      derivedUpsertFailed = true
+      warnings.push(`wiki_derived_page_failed:${item.name}`)
+    }
+  }
+
+  if (derivedExtractionCompleted && !derivedUpsertFailed) {
+    await cleanupRemovedDerivedPages(
+      previous,
+      new Set(nextDerivedResults.map((result) => result.pageId)),
+      pageId,
+      context,
+    )
+  }
+
+  const derivedStateResults = derivedExtractionCompleted && !derivedUpsertFailed
+    ? nextDerivedResults
+    : (() => {
+        const merged = new Map<string, WikiDerivedResult>()
+        for (const derived of previous?.derivedPages ?? []) {
+          merged.set(derived.pageId, {
+            pageId: derived.pageId,
+            pageType: derived.pageType,
+            memoryId: derived.memoryId,
+            sourceFingerprint: derived.sourceFingerprint,
+            created: false,
+          })
+        }
+        for (const result of nextDerivedResults) {
+          merged.set(result.pageId, result)
+        }
+        return [...merged.values()]
+      })()
+
   state.sources[key] = {
     fingerprint,
     pageId,
     memoryId: created.memoryId,
+    primaryPageId: pageId,
+    primaryMemoryId: created.memoryId,
+    derivedPageIds: derivedStateResults.map((result) => result.pageId),
+    memoryIds: [created.memoryId, ...derivedStateResults.map((result) => result.memoryId).filter((memoryId): memoryId is string => Boolean(memoryId))],
+    derivedPages: derivedStateResults.map((result) => ({
+      pageId: result.pageId,
+      memoryId: result.memoryId,
+      pageType: result.pageType,
+      sourceFingerprint: result.sourceFingerprint,
+    })),
     updatedAt: now,
   }
   await writeIngestState(paths, state)
@@ -1130,6 +1704,8 @@ export async function ingestWikiSource(
   await appendLog(paths, `${existed ? 'Updated' : 'Created'} [[${title}]] from ${ingestInput.sourceUrl || ingestInput.sourcePath || 'manual input'}.`)
   const evolve = await runAutoEvolveOnWrite(context, warnings)
   const refreshedPages = evolve ? await listWikiPages(context) : pages
+  const derivedCreated = nextDerivedResults.filter((result) => result.created).length
+  const derivedUpdated = nextDerivedResults.length - derivedCreated
 
   return {
     state: existed ? 'updated' : 'ingested',
@@ -1137,8 +1713,8 @@ export async function ingestWikiSource(
     message: existed ? 'Wiki article updated.' : 'Wiki article created.',
     page: refreshedPages.find((page) => page.id === pageId),
     memoryId: created.memoryId,
-    pagesCreated: existed ? 0 : 1,
-    pagesUpdated: existed ? 1 : 0,
+    pagesCreated: (existed ? 0 : 1) + derivedCreated,
+    pagesUpdated: (existed ? 1 : 0) + derivedUpdated,
     warnings,
     evolve,
   }
@@ -1146,6 +1722,31 @@ export async function ingestWikiSource(
 
 function shouldUseWikiForQuestion(query: string): boolean {
   return classifyWikiQuestion(query).useWiki
+}
+
+function buildQueryFallbackAnswer(results: WikiSearchResult[]): string {
+  const top = results.slice(0, 3)
+  return [
+    `Wiki found ${results.length} relevant article${results.length === 1 ? '' : 's'}.`,
+    ...top.map((page, index) => `${index + 1}. [[${page.title}]] - ${page.snippet}`),
+  ].join('\n')
+}
+
+function buildQuerySynthesisMessages(query: string, pages: WikiPageDetail[]): WikiLlmMessage[] {
+  return buildWikiLlmMessages(
+    'Answer questions using only the supplied local wiki pages. Cite factual claims with [[Page Title]] wiki links. If the pages are incomplete or contradictory, say so plainly.',
+    [
+      `Question: ${query}`,
+      '',
+      ...pages.flatMap((page) => [
+        `## [[${page.title}]]`,
+        `Updated: ${page.updatedAt || 'unknown'}`,
+        `Freshness: ${page.freshnessStatus}`,
+        sanitizeContentForSynthesis(page),
+        '',
+      ]),
+    ].join('\n'),
+  )
 }
 
 export async function queryWiki(
@@ -1165,19 +1766,28 @@ export async function queryWiki(
       results: [],
       citations: [],
       offerToSave: false,
+      warnings: [],
     }
   }
 
+  const topPages = await Promise.all(results.slice(0, 4).map((result) => getWikiPage(result.id, context)))
   const citations: WikiCitation[] = []
-  for (const result of results.slice(0, 3)) {
-    const page = await getWikiPage(result.id, context)
+  for (const page of topPages.slice(0, 3)) {
     citations.push(...page.citations)
   }
-  const top = results.slice(0, 3)
-  const answer = [
-    `Wiki found ${results.length} relevant article${results.length === 1 ? '' : 's'}.`,
-    ...top.map((page, index) => `${index + 1}. [[${page.title}]] - ${page.snippet}`),
-  ].join('\n')
+  const warnings: string[] = []
+  let answer = buildQueryFallbackAnswer(results)
+  if (wikiLlmEnabled(context)) {
+    try {
+      answer = await wikiLlmComplete(
+        buildQuerySynthesisMessages(trimmed, topPages),
+        { maxTokens: 1024, temperature: 0.3 },
+        context,
+      )
+    } catch {
+      warnings.push('wiki_llm_query_fallback')
+    }
+  }
 
   return {
     query: trimmed,
@@ -1186,6 +1796,7 @@ export async function queryWiki(
     results,
     citations,
     offerToSave: true,
+    warnings,
   }
 }
 
@@ -1310,7 +1921,7 @@ function scoreSentence(sentence: string, tokens: string[]): number {
 function selectSynthesisBullets(sourcePages: WikiPageDetail[], query: string): string[] {
   const tokens = importantTokens(query)
   const candidates = sourcePages.flatMap((page) => (
-    splitSentences(page.content).map((sentence) => ({
+    splitSentences(sanitizeContentForSynthesis(page)).map((sentence) => ({
       sentence,
       page,
       score: scoreSentence(sentence, tokens),
@@ -1336,7 +1947,7 @@ function renderSynthesisBody(input: {
   sourcePages: WikiPageDetail[]
 }): string {
   const bullets = selectSynthesisBullets(input.sourcePages, input.query)
-  const sourceNotes = input.sourcePages.map((page) => `- [[${page.title}]]: ${page.snippet}`)
+  const sourceNotes = input.sourcePages.map((page) => `- [[${page.title}]]: ${makeSnippet(sanitizeContentForSynthesis(page))}`)
   return [
     '## Generated Synthesis',
     '',
@@ -1352,6 +1963,35 @@ function renderSynthesisBody(input: {
   ].join('\n')
 }
 
+function resolveSynthesisTitle(
+  requestedTitle: string | undefined,
+  query: string,
+  pages: WikiPageSummary[],
+): string {
+  const baseTitle = titleCaseTopic(requestedTitle?.trim() || query)
+  if (requestedTitle?.trim()) return baseTitle
+  const occupiedTitles = new Set(
+    pages
+      .filter((page) => page.type !== 'synthesis')
+      .map((page) => page.title.toLowerCase()),
+  )
+  if (!occupiedTitles.has(baseTitle.toLowerCase())) return baseTitle
+
+  const candidates = [
+    `Synthesis ${baseTitle}`,
+    `${baseTitle} Synthesis`,
+  ]
+  for (const candidate of candidates) {
+    if (!occupiedTitles.has(candidate.toLowerCase())) return candidate
+  }
+
+  let suffix = 2
+  while (occupiedTitles.has(`${baseTitle} Synthesis ${suffix}`.toLowerCase())) {
+    suffix += 1
+  }
+  return `${baseTitle} Synthesis ${suffix}`
+}
+
 export async function synthesizeWiki(
   input: WikiSynthesizeInput,
   context: WikiServiceContext = {},
@@ -1360,7 +2000,7 @@ export async function synthesizeWiki(
   if (!query) throw new Error('Wiki synthesis query is required')
   const limit = Math.max(1, Math.min(8, input.limit ?? 5))
   const results = await searchWiki(query, { limit }, context)
-  const title = titleCaseTopic(input.title?.trim() || query)
+  const title = resolveSynthesisTitle(input.title, query, results)
   const pageId = `synthesis-${slugify(title)}`
   const sourceResults = results.filter((result) => result.id !== pageId)
   if (sourceResults.length === 0) throw new Error('Wiki synthesis requires at least one matching source')
@@ -1452,22 +2092,106 @@ export async function synthesizeWiki(
   }
 }
 
+function contradictionPairs(pages: WikiPageSummary[]): Array<[WikiPageSummary, WikiPageSummary]> {
+  const pairs: Array<[WikiPageSummary, WikiPageSummary]> = []
+  const seen = new Set<string>()
+  const titleToId = new Map<string, string>()
+  for (const page of pages) {
+    titleToId.set(page.id, page.id)
+    titleToId.set(page.title, page.id)
+  }
+  const resolveLinks = (page: WikiPageSummary): Set<string> => new Set(
+    page.links.map((link) => titleToId.get(link) ?? link).concat(page.backlinks),
+  )
+  for (let index = 0; index < pages.length; index += 1) {
+    const left = pages[index]!
+    const leftLinks = resolveLinks(left)
+    for (let otherIndex = index + 1; otherIndex < pages.length; otherIndex += 1) {
+      const right = pages[otherIndex]!
+      const rightLinks = resolveLinks(right)
+      const related = [...rightLinks].some((link) => leftLinks.has(link))
+        || leftLinks.has(right.id)
+        || rightLinks.has(left.id)
+      if (!related) continue
+      const key = [left.id, right.id].sort().join('::')
+      if (seen.has(key)) continue
+      seen.add(key)
+      pairs.push([left, right])
+      if (pairs.length >= MAX_CONTRADICTION_PAIRS) return pairs
+    }
+  }
+  return pairs
+}
+
+async function detectContradictions(
+  pages: WikiPageSummary[],
+  context: WikiServiceContext,
+): Promise<{ issues: WikiLintIssue[]; warnings: string[] }> {
+  if (!wikiLlmEnabled(context)) return { issues: [], warnings: [] }
+  const warnings: string[] = []
+  const pairs = contradictionPairs(pages)
+  const issues: WikiLintIssue[] = []
+  for (const [left, right] of pairs) {
+    try {
+      const leftPage = await getWikiPage(left.id, context)
+      const rightPage = await getWikiPage(right.id, context)
+      const result = await wikiLlmCompleteStructured<{
+        contradictions?: Array<{ claim1?: string; claim2?: string; explanation?: string }>
+      }>(
+        buildWikiLlmMessages(
+          'Compare two wiki pages and report factual contradictions only. Return an empty contradictions array when the pages are compatible.',
+          [
+            `Page 1: [[${leftPage.title}]]`,
+            leftPage.content,
+            '',
+            `Page 2: [[${rightPage.title}]]`,
+            rightPage.content,
+          ].join('\n'),
+        ),
+        {
+          contradictions: [{ claim1: 'string', claim2: 'string', explanation: 'string' }],
+        },
+        { maxTokens: 900, temperature: 0.1 },
+        context,
+      )
+      for (const contradiction of result.contradictions ?? []) {
+        if (!contradiction?.explanation?.trim()) continue
+        issues.push({
+          id: `contradiction:${left.id}:${right.id}:${issues.length}`,
+          severity: 'warning',
+          kind: 'contradiction',
+          pageId: left.id,
+          title: 'Potential contradiction',
+          detail: `${left.title} vs ${right.title}: ${contradiction.explanation.trim()}`,
+        })
+      }
+    } catch {
+      warnings.push('wiki_llm_contradiction_check_failed')
+      break
+    }
+  }
+  return { issues, warnings }
+}
+
 export async function lintWiki(context: WikiServiceContext = {}): Promise<WikiLintPayload> {
   const paths = await ensureWikiVault(context)
   const parsed = await readParsedPages(context)
   const pages = summarizeParsedPages(parsed)
   const issues = computeWikiLintIssues(parsed, pages)
+  const contradictionCheck = await detectContradictions(pages, context)
+  const allIssues = issues.concat(contradictionCheck.issues)
 
-  await writeJsonFile(paths.conflictsPath, issues.filter(isWikiConflictIssue))
+  await writeJsonFile(paths.conflictsPath, allIssues.filter(isWikiConflictIssue))
   return {
     checkedAt: nowIso(),
-    issueCount: issues.length,
-    issues,
+    issueCount: allIssues.length,
+    issues: allIssues,
+    warnings: contradictionCheck.warnings,
   }
 }
 
 function isWikiConflictIssue(issue: WikiLintIssue): boolean {
-  return issue.kind === 'duplicate-title' || issue.kind === 'missing-link' || issue.kind === 'stale'
+  return issue.kind === 'duplicate-title' || issue.kind === 'missing-link' || issue.kind === 'stale' || issue.kind === 'contradiction'
 }
 
 function computeWikiLintIssues(parsed: ParsedPage[], pages: WikiPageSummary[]): WikiLintIssue[] {
@@ -1663,6 +2387,7 @@ export async function evolveWiki(context: WikiServiceContext = {}): Promise<Wiki
   await appendLog(paths, `Evolved ${Object.keys(freshness).length} wiki page(s); ${changedPageIds.length} markdown page(s) updated.`)
 
   return {
+    mode: 'mechanical',
     evolvedAt,
     pageCount: Object.keys(freshness).length,
     staleCount: Object.values(freshness).filter((item) => item.status === 'stale').length,
@@ -1671,6 +2396,132 @@ export async function evolveWiki(context: WikiServiceContext = {}): Promise<Wiki
     related,
     warnings: evolvedConflicts.length > 0 ? ['wiki_conflicts_detected'] : [],
     freshness,
+  }
+}
+
+async function reviseStalePageWithLlm(
+  page: WikiPageDetail,
+  relatedPages: WikiPageDetail[],
+  context: WikiServiceContext,
+): Promise<{ changed: boolean; warning?: string }> {
+  try {
+    const result = await wikiLlmCompleteStructured<{
+      noChange?: boolean
+      revisedContent?: string
+      changeSummary?: string
+    }>(
+      buildWikiLlmMessages(
+        'Review a stale wiki page against related context. Keep the page structure grounded in the supplied material. Return noChange when the page is still accurate.',
+        [
+          `Current page: [[${page.title}]]`,
+          page.content,
+          '',
+          ...relatedPages.flatMap((item) => [
+            `Related page: [[${item.title}]]`,
+            item.content,
+            '',
+          ]),
+        ].join('\n'),
+      ),
+      {
+        noChange: 'boolean',
+        revisedContent: 'string',
+        changeSummary: 'string',
+      },
+      { maxTokens: 1800, temperature: 0.15 },
+      context,
+    )
+    if (result.noChange || !result.revisedContent?.trim()) return { changed: false }
+    const nextBody = result.revisedContent.trim()
+    const strippedCurrent = stripHeading(page.title, page.content)
+    if (nextBody === strippedCurrent) return { changed: false }
+    const nextFrontmatter = {
+      ...page.frontmatter,
+      updatedAt: nowIso(),
+      evolveChangedAt: nowIso(),
+      evolveChangeSummary: result.changeSummary?.trim() || 'LLM deep evolve revised a stale wiki page.',
+      evolveSource: 'llm-deep-evolve',
+      freshnessScore: 1,
+      freshnessStatus: 'fresh',
+    }
+    await fs.writeFile(page.path, renderMarkdownWithFrontmatter(nextFrontmatter, nextBody), 'utf8')
+    await syncPageManagedMemory(page.path, context)
+    return { changed: true }
+  } catch {
+    return { changed: false, warning: `wiki_llm_deep_evolve_failed:${page.id}` }
+  }
+}
+
+export async function evolveWikiDeep(context: WikiServiceContext = {}): Promise<WikiEvolvePayload> {
+  const base = await evolveWiki({ ...context, autoEvolveOnWrite: false })
+  if (!wikiLlmEnabled(context)) {
+    return {
+      ...base,
+      mode: 'deep',
+      warnings: [...base.warnings, 'wiki_llm_disabled'],
+    }
+  }
+
+  const staleIds = Object.entries(base.freshness)
+    .filter(([, item]) => item.status === 'stale')
+    .map(([pageId]) => pageId)
+    .slice(0, MAX_DEEP_EVOLVE_PAGES)
+  const warnings = [...base.warnings]
+  const changedPageIds = [...base.changedPageIds]
+
+  for (const staleId of staleIds) {
+    const page = await getWikiPage(staleId, context).catch(() => null)
+    if (!page) continue
+    const relatedIds = parsePipeList(page.frontmatter.relatedPageIds).slice(0, 4)
+    const relatedPages = await Promise.all(relatedIds.map((pageId) => getWikiPage(pageId, context).catch(() => null)))
+    const revision = await reviseStalePageWithLlm(
+      page,
+      relatedPages.filter((item): item is WikiPageDetail => Boolean(item)),
+      context,
+    )
+    if (revision.warning) warnings.push(revision.warning)
+    if (revision.changed) {
+      base.freshness[page.id] = {
+        score: 1,
+        status: 'fresh',
+        lastAccessedAt: page.lastAccessedAt,
+        updatedAt: nowIso(),
+        checkedAt: nowIso(),
+      }
+      if (!changedPageIds.includes(page.id)) changedPageIds.push(page.id)
+    }
+  }
+
+  const paths = resolveWikiPaths(context)
+  await writeJsonFile(paths.freshnessPath, base.freshness)
+  const lint = await lintWiki(context)
+  const finalFreshness = base.freshness
+  const finalPages = summarizeParsedPages(await readParsedPages(context), '', finalFreshness)
+  const finalRelated: Record<string, string[]> = {}
+  const finalById = new Map(finalPages.map((page) => [page.id, page]))
+  for (const page of finalPages) {
+    const linked = new Set<string>()
+    for (const link of page.links.concat(page.backlinks)) {
+      const target = finalById.get(link) ?? finalPages.find((candidate) => candidate.title === link)
+      if (target && target.id !== page.id) linked.add(target.id)
+    }
+    finalRelated[page.id] = [...linked].sort()
+  }
+  await writeJsonFile(path.join(paths.metaRoot, 'related.json'), finalRelated)
+  await writeJsonFile(paths.conflictsPath, lint.issues.filter(isWikiConflictIssue))
+  await writeIndex(paths, finalPages)
+  await appendLog(paths, `Deep evolved ${staleIds.length} stale wiki page candidate(s); ${changedPageIds.length - base.changedPageIds.length} page(s) revised by LLM.`)
+
+  return {
+    ...base,
+    mode: 'deep',
+    pageCount: finalPages.length,
+    staleCount: Object.values(finalFreshness).filter((item) => item.status === 'stale').length,
+    conflictCount: lint.issues.filter(isWikiConflictIssue).length,
+    changedPageIds,
+    related: finalRelated,
+    warnings,
+    freshness: finalFreshness,
   }
 }
 

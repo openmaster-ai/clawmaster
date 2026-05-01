@@ -12,6 +12,7 @@ const mockWikiQuery = vi.fn()
 const mockWikiSynthesize = vi.fn()
 const mockWikiLint = vi.fn()
 const mockWikiEvolve = vi.fn()
+const mockWikiDeepEvolve = vi.fn()
 
 vi.mock('@/shared/adapters/wiki', () => ({
   wikiStatusResult: (...args: any[]) => mockWikiStatus(...args),
@@ -23,6 +24,7 @@ vi.mock('@/shared/adapters/wiki', () => ({
   wikiSynthesizeResult: (...args: any[]) => mockWikiSynthesize(...args),
   wikiLintResult: (...args: any[]) => mockWikiLint(...args),
   wikiEvolveResult: (...args: any[]) => mockWikiEvolve(...args),
+  wikiDeepEvolveResult: (...args: any[]) => mockWikiDeepEvolve(...args),
 }))
 
 const pageSummary = {
@@ -124,6 +126,7 @@ describe('WikiPage', () => {
         results: [{ ...pageSummary, score: 90, matchType: 'semantic' }],
         citations: [],
         offerToSave: true,
+        warnings: [],
       },
     })
     mockWikiSynthesize.mockResolvedValue({
@@ -145,6 +148,7 @@ describe('WikiPage', () => {
         citations: [{ title: 'PowerMem Bridge', sourcePath: '/notes/powermem.md' }],
         warnings: [],
         evolve: {
+          mode: 'mechanical',
           evolvedAt: '2026-04-29T08:00:00.000Z',
           pageCount: 2,
           staleCount: 0,
@@ -174,6 +178,7 @@ describe('WikiPage', () => {
     mockWikiEvolve.mockResolvedValue({
       success: true,
       data: {
+        mode: 'mechanical',
         evolvedAt: '2026-04-29T08:00:00.000Z',
         pageCount: 1,
         staleCount: 0,
@@ -181,6 +186,20 @@ describe('WikiPage', () => {
         changedPageIds: [pageSummary.id],
         related: { [pageSummary.id]: [] },
         warnings: ['wiki_conflicts_detected'],
+        freshness: {},
+      },
+    })
+    mockWikiDeepEvolve.mockResolvedValue({
+      success: true,
+      data: {
+        mode: 'deep',
+        evolvedAt: '2026-04-29T08:30:00.000Z',
+        pageCount: 1,
+        staleCount: 0,
+        conflictCount: 0,
+        changedPageIds: [pageSummary.id],
+        related: { [pageSummary.id]: [] },
+        warnings: [],
         freshness: {},
       },
     })
@@ -261,6 +280,7 @@ describe('WikiPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /^Ask$/i }))
     expect(await screen.findByText(/Wiki found 1 relevant article/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PowerMem Bridge' })).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: /Save synthesis/i }))
     await waitFor(() => expect(mockWikiSynthesize).toHaveBeenCalledWith({
       query: 'what do we know about powermem?',
@@ -277,5 +297,8 @@ describe('WikiPage', () => {
     await waitFor(() => expect(mockWikiEvolve).toHaveBeenCalled())
     expect(await screen.findByText(/Updated freshness for 1 article/i)).toBeInTheDocument()
     expect(await screen.findByText(/Wiki health found 0 conflict/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Run Deep Evolve/i }))
+    await waitFor(() => expect(mockWikiDeepEvolve).toHaveBeenCalled())
   })
 })

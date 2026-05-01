@@ -9,6 +9,7 @@ import {
   classifyWikiQuestion,
   ensureWikiVault,
   evolveWiki,
+  evolveWikiDeep,
   getWikiPage,
   getWikiStatus,
   ingestWikiSource,
@@ -22,9 +23,12 @@ import {
   type WikiServiceContext,
 } from './wikiService.js'
 
+const originalFetch = globalThis.fetch
+
 async function createContext(name: string): Promise<WikiServiceContext> {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), `clawmaster-wiki-${name}-`))
   return {
+    homeDir: tempRoot,
     vaultRootOverride: path.join(tempRoot, 'wiki'),
     managedMemoryContext: {
       dataRootOverride: path.join(tempRoot, 'data'),
@@ -34,8 +38,15 @@ async function createContext(name: string): Promise<WikiServiceContext> {
   }
 }
 
+async function writeWikiConfig(context: WikiServiceContext, config: Record<string, unknown>): Promise<void> {
+  const configDir = path.join(context.homeDir!, '.openclaw')
+  await fs.mkdir(configDir, { recursive: true })
+  await fs.writeFile(path.join(configDir, 'openclaw.json'), `${JSON.stringify(config, null, 2)}\n`, 'utf8')
+}
+
 test.afterEach(async () => {
   await closeManagedMemoryRuntimesForTests()
+  globalThis.fetch = originalFetch
 })
 
 test('ensureWikiVault creates the expected wiki structure', async () => {
@@ -162,6 +173,273 @@ test('search and query combine wiki articles with managed PowerMem results', asy
   assert.equal(answer.offerToSave, true)
 })
 
+test('query uses the gateway-backed wiki llm when enabled', async () => {
+  const context = await createContext('query-llm')
+  await writeWikiConfig(context, {
+    agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
+    gateway: { port: 19191, auth: { mode: 'token', token: 'secret-wiki-token' } },
+  })
+  await ingestWikiSource(
+    {
+      title: 'Gateway Runtime',
+      content: 'The gateway runtime keeps provider auth and model routing centralized.',
+      sourcePath: '/notes/gateway-runtime.md',
+    },
+    context,
+  )
+
+  let requestedAuthorization = ''
+  let requestedUrl = ''
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    requestedUrl = String(input)
+    requestedAuthorization = String(new Headers(init?.headers).get('Authorization') ?? '')
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: 'Gateway answer with [[Gateway Runtime]] citations.' } }],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }) as typeof fetch
+
+  const result = await queryWiki('what do we know about gateway runtime?', { limit: 5 }, context)
+  assert.equal(result.answer, 'Gateway answer with [[Gateway Runtime]] citations.')
+  assert.deepEqual(result.warnings, [])
+  assert.equal(requestedAuthorization, 'Bearer secret-wiki-token')
+  assert.equal(requestedUrl, 'http://127.0.0.1:19191/v1/chat/completions')
+})
+
+test('llm ingest creates derived pages and removes outdated generated pages on re-ingest', async () => {
+  const context = await createContext('derived-ingest')
+  await writeWikiConfig(context, {
+    agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
+  })
+  let callCount = 0
+  globalThis.fetch = (async () => {
+    callCount += 1
+    const content = callCount === 1
+      ? JSON.stringify({
+          items: [
+            {
+              name: 'SeekDB Runtime',
+              kind: 'entity',
+              summary: 'SeekDB Runtime is the durable retrieval layer described by this source.',
+              confidence: 0.94,
+            },
+          ],
+        })
+      : JSON.stringify({ items: [] })
+    return new Response(JSON.stringify({
+      choices: [{ message: { content } }],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }) as typeof fetch
+
+  const first = await ingestWikiSource(
+    {
+      title: 'PowerMem Source',
+      content: 'PowerMem relies on SeekDB Runtime for durable retrieval.',
+      sourcePath: '/notes/powermem-source.md',
+    },
+    context,
+  )
+  assert.equal(first.pagesCreated, 2)
+  const derivedPage = await getWikiPage('entities-seekdb-runtime', context)
+  assert.equal(derivedPage.type, 'entity')
+  assert.equal(derivedPage.frontmatter.generatedFromSourceIds, first.page!.id)
+  assert.match(derivedPage.content, /PowerMem Source/)
+
+  const second = await ingestWikiSource(
+    {
+      title: 'PowerMem Source',
+      content: 'PowerMem no longer references a separate durable retrieval layer.',
+      sourcePath: '/notes/powermem-source.md',
+    },
+    context,
+  )
+  assert.equal(second.state, 'updated')
+  const pages = await listWikiPages(context)
+  assert.ok(!pages.some((page) => page.id === 'entities-seekdb-runtime'))
+})
+
+test('re-ingest preserves generated derived pages when extraction is unavailable and cleans them after recovery', async () => {
+  const context = await createContext('derived-ingest-disabled')
+  await writeWikiConfig(context, {
+    agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
+  })
+  let fetchMode: 'derived' | 'empty' = 'derived'
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    choices: [{
+      message: {
+        content: fetchMode === 'derived'
+          ? JSON.stringify({
+              items: [
+                {
+                  name: 'SeekDB Runtime',
+                  kind: 'entity',
+                  summary: 'SeekDB Runtime is the durable retrieval layer described by this source.',
+                  confidence: 0.94,
+                },
+              ],
+            })
+          : JSON.stringify({ items: [] }),
+      },
+    }],
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })) as typeof fetch
+
+  await ingestWikiSource(
+    {
+      title: 'PowerMem Source',
+      content: 'PowerMem relies on SeekDB Runtime for durable retrieval.',
+      sourcePath: '/notes/powermem-source.md',
+    },
+    context,
+  )
+  await writeWikiConfig(context, {})
+  await ingestWikiSource(
+    {
+      title: 'PowerMem Source',
+      content: 'PowerMem still has updated source text while the gateway is unavailable.',
+      sourcePath: '/notes/powermem-source.md',
+    },
+    context,
+  )
+
+  const preserved = await getWikiPage('entities-seekdb-runtime', context)
+  assert.equal(preserved.type, 'entity')
+  assert.match(preserved.content, /durable retrieval layer/)
+
+  await writeWikiConfig(context, {
+    agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
+  })
+  fetchMode = 'empty'
+  await ingestWikiSource(
+    {
+      title: 'PowerMem Source',
+      content: 'PowerMem no longer references a separate durable retrieval layer.',
+      sourcePath: '/notes/powermem-source.md',
+    },
+    context,
+  )
+
+  const pages = await listWikiPages(context)
+  assert.ok(!pages.some((page) => page.id === 'entities-seekdb-runtime'))
+})
+
+test('re-ingest removes generated blocks without deleting an existing matched page', async () => {
+  const context = await createContext('derived-existing-page')
+  await writeWikiConfig(context, {
+    agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
+  })
+  await ingestWikiSource(
+    {
+      title: 'SeekDB Runtime',
+      pageType: 'entity',
+      content: 'SeekDB Runtime already has manual notes that should survive source re-ingest cleanup.',
+      sourcePath: '/notes/seekdb-runtime.md',
+    },
+    context,
+  )
+
+  let callCount = 0
+  globalThis.fetch = (async () => {
+    callCount += 1
+    const content = callCount === 1
+      ? JSON.stringify({
+          items: [
+            {
+              name: 'SeekDB Runtime',
+              kind: 'entity',
+              summary: 'SeekDB Runtime is the durable retrieval layer described by this source.',
+              confidence: 0.94,
+            },
+          ],
+        })
+      : JSON.stringify({ items: [] })
+    return new Response(JSON.stringify({
+      choices: [{ message: { content } }],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }) as typeof fetch
+
+  await ingestWikiSource(
+    {
+      title: 'PowerMem Source',
+      content: 'PowerMem relies on SeekDB Runtime for durable retrieval.',
+      sourcePath: '/notes/powermem-source.md',
+    },
+    context,
+  )
+  await ingestWikiSource(
+    {
+      title: 'PowerMem Source',
+      content: 'PowerMem no longer references a separate durable retrieval layer.',
+      sourcePath: '/notes/powermem-source.md',
+    },
+    context,
+  )
+
+  const preserved = await getWikiPage('entities-seekdb-runtime', context)
+  assert.match(preserved.content, /manual notes that should survive/)
+  assert.doesNotMatch(preserved.content, /PowerMem Source/)
+})
+
+test('derived ingest does not reuse source pages with matching entity titles', async () => {
+  const context = await createContext('derived-title-collision')
+  await ingestWikiSource(
+    {
+      title: 'SeekDB Runtime',
+      content: 'SeekDB Runtime source notes should stay a source page.',
+      sourcePath: '/notes/seekdb-runtime-source.md',
+    },
+    context,
+  )
+  await writeWikiConfig(context, {
+    agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
+  })
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    choices: [{
+      message: {
+        content: JSON.stringify({
+          items: [
+            {
+              name: 'SeekDB Runtime',
+              kind: 'entity',
+              summary: 'SeekDB Runtime is the durable retrieval layer described by this source.',
+              confidence: 0.94,
+            },
+          ],
+        }),
+      },
+    }],
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })) as typeof fetch
+
+  await ingestWikiSource(
+    {
+      title: 'PowerMem Source',
+      content: 'PowerMem relies on SeekDB Runtime for durable retrieval.',
+      sourcePath: '/notes/powermem-source.md',
+    },
+    context,
+  )
+
+  const source = await getWikiPage('sources-seekdb-runtime', context)
+  const entity = await getWikiPage('entities-seekdb-runtime', context)
+  assert.equal(source.type, 'source')
+  assert.equal(entity.type, 'entity')
+  assert.doesNotMatch(source.content, /Source Contributions/)
+  assert.match(entity.content, /PowerMem Source/)
+})
+
 test('assist classifies ordinary questions before using wiki context', async () => {
   const context = await createContext('assist')
   await ingestWikiSource(
@@ -258,6 +536,63 @@ test('synthesize creates a generated citation-backed wiki page from matching sou
   assert.ok(!regenerated.sourcePageIds.includes(synthesized.page.id))
   const regeneratedPage = await getWikiPage(regenerated.page.id, context)
   assert.doesNotMatch(regeneratedPage.content, /\[\[AI Agents\]\]/)
+})
+
+test('synthesis and snippets strip generated wiki blocks before rendering durable output', async () => {
+  const context = await createContext('synthesis-sanitized')
+  await writeWikiConfig(context, {
+    agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
+  })
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    choices: [{
+      message: {
+        content: JSON.stringify({
+          items: [
+            {
+              name: 'SeekDB Runtime',
+              kind: 'entity',
+              summary: 'SeekDB Runtime provides the durable retrieval layer for PowerMem.',
+              confidence: 0.96,
+            },
+          ],
+        }),
+      },
+    }],
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })) as typeof fetch
+
+  await ingestWikiSource(
+    {
+      title: 'PowerMem Durable Retrieval',
+      content: 'PowerMem durable retrieval relies on SeekDB Runtime for persisted context and recall.',
+      sourcePath: '/notes/powermem-durable-retrieval.md',
+    },
+    context,
+  )
+
+  const results = await searchWiki('powermem durable retrieval', { limit: 5 }, context)
+  const sourceResult = results.find((result) => result.title === 'PowerMem Durable Retrieval')
+  const derivedResult = results.find((result) => result.title === 'SeekDB Runtime')
+  assert.ok(sourceResult)
+  assert.ok(derivedResult)
+  assert.doesNotMatch(sourceResult.snippet, /Extracted Wiki Links/)
+  assert.doesNotMatch(sourceResult.snippet, /\[\[SeekDB Runtime\]\]/)
+  assert.match(derivedResult.snippet, /durable retrieval layer/)
+
+  const synthesized = await synthesizeWiki(
+    { query: 'powermem durable retrieval', limit: 5 },
+    context,
+  )
+  assert.equal(synthesized.title, 'Synthesis Powermem Durable Retrieval')
+  const page = await getWikiPage(synthesized.page.id, context)
+  assert.doesNotMatch(page.content, /CLAWMASTER-GENERATED/)
+  assert.doesNotMatch(page.content, /## Extracted Wiki Links/)
+  assert.ok(!page.links.includes('durable-re-seekdb-runtime'))
+
+  const lint = await lintWiki(context)
+  assert.deepEqual(lint.issues, [])
 })
 
 test('url ingest requires explicit confirmation', async () => {
@@ -364,6 +699,7 @@ test('lint flags orphan and missing linked pages, evolve records freshness', asy
   )
 
   const evolved = await evolveWiki(context)
+  assert.equal(evolved.mode, 'mechanical')
   assert.equal(evolved.pageCount, 2)
   assert.equal(evolved.staleCount, 1)
   assert.equal(evolved.conflictCount, 2)
@@ -384,6 +720,98 @@ test('lint flags orphan and missing linked pages, evolve records freshness', asy
   assert.ok(conflicts.some((issue) => issue.kind === 'stale'))
   const related = JSON.parse(await fs.readFile(path.join(paths.metaRoot, 'related.json'), 'utf8')) as Record<string, string[]>
   assert.deepEqual(related[created.page!.id], [])
+})
+
+test('lint emits contradiction issues when llm contradiction checks find a conflict', async () => {
+  const context = await createContext('contradiction')
+  await writeWikiConfig(context, {
+    agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
+  })
+  await ingestWikiSource(
+    {
+      title: 'Runtime Claim A',
+      content: '[[Runtime Claim B]] says the runtime is local-only.',
+      sourcePath: '/notes/runtime-a.md',
+    },
+    context,
+  )
+  await ingestWikiSource(
+    {
+      title: 'Runtime Claim B',
+      content: 'Runtime Claim B says the runtime is remote-first.',
+      sourcePath: '/notes/runtime-b.md',
+    },
+    context,
+  )
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    choices: [{
+      message: {
+        content: JSON.stringify({
+          contradictions: [
+            {
+              claim1: 'local-only',
+              claim2: 'remote-first',
+              explanation: 'One page says the runtime is local-only while the other says it is remote-first.',
+            },
+          ],
+        }),
+      },
+    }],
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })) as typeof fetch
+
+  const lint = await lintWiki(context)
+  assert.ok(lint.issues.some((issue) => issue.kind === 'contradiction'))
+  const conflicts = JSON.parse(await fs.readFile(resolveWikiPaths(context).conflictsPath, 'utf8')) as Array<{ kind: string }>
+  assert.ok(conflicts.some((issue) => issue.kind === 'contradiction'))
+})
+
+test('deep evolve revises stale pages through the wiki llm without changing the mechanical endpoint', async () => {
+  const context = await createContext('deep-evolve')
+  await writeWikiConfig(context, {
+    agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
+  })
+  const created = await ingestWikiSource(
+    {
+      title: 'Stale Runtime Notes',
+      content: 'The runtime status is pending further verification.',
+      sourcePath: '/notes/stale-runtime.md',
+    },
+    context,
+  )
+  const detail = await getWikiPage(created.page!.id, context)
+  const raw = await fs.readFile(detail.path, 'utf8')
+  await fs.writeFile(
+    detail.path,
+    raw.replace(/updatedAt: .+/, 'updatedAt: "2000-01-01T00:00:00.000Z"'),
+    'utf8',
+  )
+
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    choices: [{
+      message: {
+        content: JSON.stringify({
+          noChange: false,
+          revisedContent: 'The runtime status is now verified and actively maintained.',
+          changeSummary: 'Updated the stale runtime note with the latest verified status.',
+        }),
+      },
+    }],
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })) as typeof fetch
+
+  const evolved = await evolveWikiDeep(context)
+  assert.equal(evolved.mode, 'deep')
+  assert.equal(evolved.staleCount, 0)
+  assert.ok(evolved.changedPageIds.includes(created.page!.id))
+  const revised = await getWikiPage(created.page!.id, context)
+  assert.equal(revised.frontmatter.evolveSource, 'llm-deep-evolve')
+  assert.equal(revised.freshnessStatus, 'fresh')
+  assert.match(revised.content, /verified and actively maintained/)
 })
 
 test('updated pages with evolve evidence keep the evolved lifecycle state', async () => {
