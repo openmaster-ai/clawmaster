@@ -2173,12 +2173,17 @@ async function detectContradictions(
   return { issues, warnings }
 }
 
-export async function lintWiki(context: WikiServiceContext = {}): Promise<WikiLintPayload> {
+export async function lintWiki(
+  context: WikiServiceContext = {},
+  options: { detectContradictions?: boolean } = {},
+): Promise<WikiLintPayload> {
   const paths = await ensureWikiVault(context)
   const parsed = await readParsedPages(context)
   const pages = summarizeParsedPages(parsed)
   const issues = computeWikiLintIssues(parsed, pages)
-  const contradictionCheck = await detectContradictions(pages, context)
+  const contradictionCheck = options.detectContradictions === false
+    ? { issues: [], warnings: [] as string[] }
+    : await detectContradictions(pages, context)
   const allIssues = issues.concat(contradictionCheck.issues)
 
   await writeJsonFile(paths.conflictsPath, allIssues.filter(isWikiConflictIssue))
@@ -2405,13 +2410,9 @@ async function reviseStalePageWithLlm(
   context: WikiServiceContext,
 ): Promise<{ changed: boolean; warning?: string }> {
   try {
-    const result = await wikiLlmCompleteStructured<{
-      noChange?: boolean
-      revisedContent?: string
-      changeSummary?: string
-    }>(
+    const rawRevision = await wikiLlmComplete(
       buildWikiLlmMessages(
-        'Review a stale wiki page against related context. Keep the page structure grounded in the supplied material. Return noChange when the page is still accurate.',
+        'Review a stale wiki page against related context. Treat obviously stale, placeholder, or low-information text such as "pending verification", "TBD", or generic status notes as needing revision when related pages provide stronger facts. Reply exactly NO_CHANGE only if the current page is already specific, current, and materially supported by the related context. Otherwise return only the revised markdown body for the current page with no JSON, no frontmatter, no code fences, and no commentary.',
         [
           `Current page: [[${page.title}]]`,
           page.content,
@@ -2423,23 +2424,24 @@ async function reviseStalePageWithLlm(
           ]),
         ].join('\n'),
       ),
-      {
-        noChange: 'boolean',
-        revisedContent: 'string',
-        changeSummary: 'string',
-      },
       { maxTokens: 1800, temperature: 0.15 },
       context,
     )
-    if (result.noChange || !result.revisedContent?.trim()) return { changed: false }
-    const nextBody = result.revisedContent.trim()
+    const normalizedRevision = rawRevision.trim()
+    if (!normalizedRevision || /^NO_CHANGE\b/i.test(normalizedRevision)) return { changed: false }
+    const unfencedRevision = normalizedRevision
+      .replace(/^```[a-zA-Z0-9_-]*\s*/, '')
+      .replace(/\s*```$/, '')
+      .trim()
+    const nextBody = stripHeading(page.title, unfencedRevision).trim()
+    if (!nextBody) return { changed: false }
     const strippedCurrent = stripHeading(page.title, page.content)
     if (nextBody === strippedCurrent) return { changed: false }
     const nextFrontmatter = {
       ...page.frontmatter,
       updatedAt: nowIso(),
       evolveChangedAt: nowIso(),
-      evolveChangeSummary: result.changeSummary?.trim() || 'LLM deep evolve revised a stale wiki page.',
+      evolveChangeSummary: 'LLM deep evolve revised a stale wiki page.',
       evolveSource: 'llm-deep-evolve',
       freshnessScore: 1,
       freshnessStatus: 'fresh',
@@ -2450,6 +2452,29 @@ async function reviseStalePageWithLlm(
   } catch {
     return { changed: false, warning: `wiki_llm_deep_evolve_failed:${page.id}` }
   }
+}
+
+async function collectDeepEvolveRelatedPages(
+  page: WikiPageDetail,
+  context: WikiServiceContext,
+): Promise<WikiPageDetail[]> {
+  const queue = parsePipeList(page.frontmatter.relatedPageIds)
+  const seen = new Set<string>([page.id])
+  const relatedPages: WikiPageDetail[] = []
+
+  while (queue.length > 0 && relatedPages.length < 4) {
+    const relatedId = queue.shift()
+    if (!relatedId || seen.has(relatedId)) continue
+    seen.add(relatedId)
+    const relatedPage = await getWikiPage(relatedId, context).catch(() => null)
+    if (!relatedPage) continue
+    relatedPages.push(relatedPage)
+    for (const nestedId of parsePipeList(relatedPage.frontmatter.relatedPageIds)) {
+      if (!seen.has(nestedId)) queue.push(nestedId)
+    }
+  }
+
+  return relatedPages
 }
 
 export async function evolveWikiDeep(context: WikiServiceContext = {}): Promise<WikiEvolvePayload> {
@@ -2472,11 +2497,10 @@ export async function evolveWikiDeep(context: WikiServiceContext = {}): Promise<
   for (const staleId of staleIds) {
     const page = await getWikiPage(staleId, context).catch(() => null)
     if (!page) continue
-    const relatedIds = parsePipeList(page.frontmatter.relatedPageIds).slice(0, 4)
-    const relatedPages = await Promise.all(relatedIds.map((pageId) => getWikiPage(pageId, context).catch(() => null)))
+    const relatedPages = await collectDeepEvolveRelatedPages(page, context)
     const revision = await reviseStalePageWithLlm(
       page,
-      relatedPages.filter((item): item is WikiPageDetail => Boolean(item)),
+      relatedPages,
       context,
     )
     if (revision.warning) warnings.push(revision.warning)
@@ -2494,7 +2518,7 @@ export async function evolveWikiDeep(context: WikiServiceContext = {}): Promise<
 
   const paths = resolveWikiPaths(context)
   await writeJsonFile(paths.freshnessPath, base.freshness)
-  const lint = await lintWiki(context)
+  const lint = await lintWiki(context, { detectContradictions: false })
   const finalFreshness = base.freshness
   const finalPages = summarizeParsedPages(await readParsedPages(context), '', finalFreshness)
   const finalRelated: Record<string, string[]> = {}

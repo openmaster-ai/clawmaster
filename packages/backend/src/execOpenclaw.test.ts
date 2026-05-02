@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
+import os from 'node:os'
 import test from 'node:test'
 
 import {
   execNpmInstallGlobalFile,
+  getDarwinNodeCandidatePathsForTests,
   needsShellOnWindows,
   resolveExecFileCommand,
   resolveNpmExecFileCommand,
@@ -104,5 +106,20 @@ test('execNpmInstallGlobalFile keeps non-Windows npm resolution path', async () 
   await withPlatform('linux', async () => {
     const result = await execNpmInstallGlobalFile('/tmp/openclaw-does-not-exist.tgz')
     assert.notEqual(result.code, 0)
+  })
+})
+
+test('Darwin node candidate discovery keeps the real user home when HOME points at an isolated profile', async () => {
+  await withPlatform('darwin', () => {
+    const originalHome = process.env.HOME
+    const actualUserHome = os.userInfo().homedir
+    process.env.HOME = '/tmp/clawmaster-proof-home'
+    try {
+      const candidates = getDarwinNodeCandidatePathsForTests()
+      assert.match(candidates.join('\n'), new RegExp(`${actualUserHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/\\.nvm/versions/node`))
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME
+      else process.env.HOME = originalHome
+    }
   })
 })

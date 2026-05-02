@@ -518,7 +518,12 @@ export async function syncManagedMemoryBridge(
     })
   }
   if (!installed || pathIssue) {
-    await openclawPlugins.installOpenclawPluginFromPath(paths.runtimePluginPath, { link: true })
+    await openclawPlugins.installOpenclawPluginFromPath(paths.runtimePluginPath, {
+      link: true,
+      // This ClawMaster-managed bridge intentionally uses privileged plugin APIs
+      // and workspace import helpers that OpenClaw's generic installer flags.
+      dangerouslyForceUnsafeInstall: true,
+    })
   }
   await updateConfigJson((config) => {
     setConfigAtPath(config, `plugins.slots.${MEMORY_BRIDGE_SLOT_KEY}`, MEMORY_BRIDGE_PLUGIN_ID)

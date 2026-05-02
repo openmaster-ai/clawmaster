@@ -20,6 +20,8 @@ export function useAdapterCall<T>(
   // Keep a stable ref to the latest fetcher so callers don't need to memoize
   const fetcherRef = useRef(fetcher)
   fetcherRef.current = fetcher
+  const tRef = useRef(t)
+  tRef.current = t
 
   const refetch = useCallback(async () => {
     setLoading(true)
@@ -30,14 +32,14 @@ export function useAdapterCall<T>(
         setData(res.data ?? null)
         setError(null)
       } else {
-        setError(formatAdapterResultError(res, t))
+        setError(formatAdapterResultError(res, tRef.current))
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [t])
+  }, [])
 
   useEffect(() => {
     void refetch()

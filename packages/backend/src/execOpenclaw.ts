@@ -123,22 +123,43 @@ function collectDarwinNodeCandidates(): string[] {
     out.add(candidate)
   }
 
+  const homeRoots = new Set<string>()
+  const maybeAddHome = (candidate: string | undefined) => {
+    const value = candidate?.trim()
+    if (!value) return
+    homeRoots.add(value)
+  }
+
   maybeAdd(process.execPath)
   maybeAdd('/opt/homebrew/bin/node')
   maybeAdd('/usr/local/bin/node')
   maybeAdd('/usr/bin/node')
 
-  const nvmDir = path.join(os.homedir(), '.nvm', 'versions', 'node')
+  maybeAddHome(process.env.HOME)
+  maybeAddHome(os.homedir())
   try {
-    const versions = fs.readdirSync(nvmDir)
-    for (const version of versions) {
-      maybeAdd(path.join(nvmDir, version, 'bin', 'node'))
-    }
+    maybeAddHome(os.userInfo().homedir)
   } catch {
     /* ignore */
   }
 
+  for (const homeRoot of homeRoots) {
+    const nvmDir = path.join(homeRoot, '.nvm', 'versions', 'node')
+    try {
+      const versions = fs.readdirSync(nvmDir)
+      for (const version of versions) {
+        maybeAdd(path.join(nvmDir, version, 'bin', 'node'))
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   return Array.from(out)
+}
+
+export function getDarwinNodeCandidatePathsForTests(): string[] {
+  return collectDarwinNodeCandidates()
 }
 
 function resolveDarwinCompatibleNodeBin(): string | null {

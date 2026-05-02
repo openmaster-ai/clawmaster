@@ -5,6 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import {
   resolveWikiLlm,
+  setWikiLlmCommandRunnerForTests,
   wikiLlmComplete,
   wikiLlmEnabled,
 } from './wikiLlm.js'
@@ -23,6 +24,7 @@ async function writeConfig(homeDir: string, config: Record<string, unknown>): Pr
 
 test.afterEach(() => {
   globalThis.fetch = originalFetch
+  setWikiLlmCommandRunnerForTests(null)
 })
 
 test('resolveWikiLlm disables the helper when no default model is configured', async () => {
@@ -75,4 +77,42 @@ test('wikiLlmComplete clamps max tokens to the configured cap', async () => {
   )
   assert.equal(result, 'ok')
   assert.equal(requestedMaxTokens, 512)
+})
+
+test('wikiLlmComplete uses the supported infer model gateway command in production transport', async () => {
+  const homeDir = await createHomeRoot('cli')
+  await writeConfig(homeDir, {
+    agents: { defaults: { model: { primary: 'siliconflow/Pro/zai-org/GLM-5.1' } } },
+    gateway: { bind: 'loopback', port: 18789, auth: { mode: 'token', token: 'abc123' } },
+  })
+
+  let capturedArgs: string[] | null = null
+  setWikiLlmCommandRunnerForTests(async (args) => {
+    capturedArgs = args
+    return {
+      code: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        outputs: [{ text: 'OK' }],
+      }),
+      stderr: '',
+    }
+  })
+
+  const result = await wikiLlmComplete(
+    [{ role: 'user', content: 'Reply with exactly OK.' }],
+    {},
+    { homeDir },
+  )
+
+  assert.equal(result, 'OK')
+  assert.deepEqual(capturedArgs, [
+    'infer',
+    'model',
+    'run',
+    '--gateway',
+    '--json',
+    '--prompt',
+    'USER:\nReply with exactly OK.',
+  ])
 })

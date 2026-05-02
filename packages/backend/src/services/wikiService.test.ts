@@ -792,11 +792,7 @@ test('deep evolve revises stale pages through the wiki llm without changing the 
   globalThis.fetch = (async () => new Response(JSON.stringify({
     choices: [{
       message: {
-        content: JSON.stringify({
-          noChange: false,
-          revisedContent: 'The runtime status is now verified and actively maintained.',
-          changeSummary: 'Updated the stale runtime note with the latest verified status.',
-        }),
+        content: 'The runtime status is now verified and actively maintained.',
       },
     }],
   }), {

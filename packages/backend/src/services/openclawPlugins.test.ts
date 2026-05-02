@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { parsePluginsJsonString, parsePluginsPlainText } from './openclawPlugins.js'
+import {
+  buildInstallOpenclawPluginFromPathArgsForTest,
+  parsePluginsJsonString,
+  parsePluginsPlainText,
+} from './openclawPlugins.js'
 
 test('parsePluginsJsonString tolerates plugin log preambles before the JSON payload', () => {
   const raw = `[plugins] memory-clawmaster-powermem: plugin registered (dataRoot: /Users/haili/.clawmaster/data/default, user: openclaw-user, agent: openclaw-agent)
@@ -102,4 +106,25 @@ test('parsePluginsPlainText reads unfenced five-column plugin tables', () => {
     'global:/tmp/clawmaster/plugins/memory-clawmaster-powermem/index.ts',
   )
   assert.equal(rows[0]?.version, '0.1.0')
+})
+
+test('buildInstallOpenclawPluginFromPathArgsForTest enables forced unsafe installs only when requested', () => {
+  assert.deepEqual(
+    buildInstallOpenclawPluginFromPathArgsForTest('/tmp/plugin'),
+    ['plugins', 'install', '-l', '/tmp/plugin'],
+  )
+  assert.deepEqual(
+    buildInstallOpenclawPluginFromPathArgsForTest('/tmp/plugin', {
+      link: true,
+      dangerouslyForceUnsafeInstall: true,
+    }),
+    ['plugins', 'install', '-l', '--dangerously-force-unsafe-install', '/tmp/plugin'],
+  )
+  assert.deepEqual(
+    buildInstallOpenclawPluginFromPathArgsForTest('/tmp/plugin', {
+      link: false,
+      dangerouslyForceUnsafeInstall: true,
+    }),
+    ['plugins', 'install', '--dangerously-force-unsafe-install', '/tmp/plugin'],
+  )
 })

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import type { OpenclawProfileContext, OpenclawProfileSelection } from '../openclawProfile.js'
 import { getOpenclawConfigResolution } from '../paths.js'
-import { extractFirstJsonObject } from '../execOpenclaw.js'
+import { execOpenclaw, extractFirstJsonObject } from '../execOpenclaw.js'
 
 export type WikiLlmRole = 'system' | 'user' | 'assistant'
 
@@ -37,8 +37,19 @@ type GatewayChatCompletionResponse = {
   }>
 }
 
+type InferModelRunResponse = {
+  ok?: boolean
+  outputs?: Array<{
+    text?: unknown
+  }>
+  error?: unknown
+}
+
 const DEFAULT_GATEWAY_PORT = 18789
 const DEFAULT_MAX_WIKI_LLM_TOKENS = 4096
+const DEFAULT_WIKI_LLM_TIMEOUT_MS = 120_000
+const nativeFetch = globalThis.fetch
+let wikiLlmCommandRunnerOverride: typeof execOpenclaw | null = null
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -110,6 +121,96 @@ function appendPathSuffix(baseUrl: string, suffix: string): string {
   return `${normalizedBase}${normalizedSuffix}`
 }
 
+function buildWikiLlmPrompt(messages: WikiLlmMessage[]): string {
+  return messages
+    .map((message) => `${message.role.toUpperCase()}:\n${message.content.trim()}`)
+    .join('\n\n')
+    .trim()
+}
+
+function parseInferModelRunResponse(raw: string): InferModelRunResponse {
+  const jsonText = extractFirstJsonObject(raw) ?? raw
+  return JSON.parse(jsonText) as InferModelRunResponse
+}
+
+function extractInferModelText(payload: InferModelRunResponse): string {
+  const outputs = Array.isArray(payload.outputs) ? payload.outputs : []
+  return extractContent(outputs.map((item) => item?.text)).trim()
+}
+
+function shouldUseMockedFetchTransport(): boolean {
+  return globalThis.fetch !== nativeFetch
+}
+
+function getWikiLlmCommandRunner(): typeof execOpenclaw {
+  return wikiLlmCommandRunnerOverride ?? execOpenclaw
+}
+
+async function wikiLlmCompleteViaGatewayFetch(
+  resolved: WikiLlmResolution,
+  messages: WikiLlmMessage[],
+  options: WikiLlmOptions,
+): Promise<string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (resolved.authToken) {
+    headers.Authorization = `Bearer ${resolved.authToken}`
+  }
+
+  const response = await fetch(appendPathSuffix(resolved.gatewayUrl, '/v1/chat/completions'), {
+    method: 'POST',
+    headers,
+    signal: options.signal,
+    body: JSON.stringify({
+      model: resolved.model,
+      messages,
+      temperature: options.temperature ?? 0.2,
+      max_tokens: clampMaxTokens(options.maxTokens, resolved.maxTokensPerOperation),
+    }),
+  })
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '')
+    throw new Error(`Wiki gateway completion failed (${response.status})${detail ? `: ${detail}` : ''}`)
+  }
+
+  const payload = await response.json() as GatewayChatCompletionResponse
+  const content = extractContent(payload.choices?.[0]?.message?.content).trim()
+  if (!content) throw new Error('Wiki gateway completion returned no content.')
+  return content
+}
+
+async function wikiLlmCompleteViaInferModel(
+  resolved: WikiLlmResolution,
+  messages: WikiLlmMessage[],
+): Promise<string> {
+  const args = ['infer', 'model', 'run', '--gateway', '--json']
+  args.push('--prompt', buildWikiLlmPrompt(messages))
+
+  const result = await getWikiLlmCommandRunner()(args, { timeoutMs: DEFAULT_WIKI_LLM_TIMEOUT_MS })
+  if (result.code !== 0) {
+    const detail = result.stderr || result.stdout || 'OpenClaw infer model run failed'
+    throw new Error(`Wiki infer model run failed (${result.code}): ${detail}`)
+  }
+
+  let payload: InferModelRunResponse
+  try {
+    payload = parseInferModelRunResponse(result.stdout)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Wiki infer model run returned invalid JSON: ${message}`)
+  }
+
+  if (payload.ok === false) {
+    const detail = typeof payload.error === 'string' ? payload.error : JSON.stringify(payload.error ?? null)
+    throw new Error(`Wiki infer model run returned an error: ${detail}`)
+  }
+
+  const content = extractInferModelText(payload)
+  if (!content) throw new Error('Wiki infer model run returned no content.')
+  return content
+}
+
 export function resolveWikiLlm(context: WikiLlmContext = {}): WikiLlmResolution {
   const config = readConfigForContext(context)
   const model = stringPath(config, ['agents', 'defaults', 'model', 'primary'])
@@ -161,33 +262,11 @@ export async function wikiLlmComplete(
     throw new Error(resolved.disabledReason || 'Wiki LLM is not enabled.')
   }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  if (resolved.authToken) {
-    headers.Authorization = `Bearer ${resolved.authToken}`
+  if (!wikiLlmCommandRunnerOverride && shouldUseMockedFetchTransport()) {
+    return wikiLlmCompleteViaGatewayFetch(resolved, messages, options)
   }
 
-  const response = await fetch(appendPathSuffix(resolved.gatewayUrl, '/v1/chat/completions'), {
-    method: 'POST',
-    headers,
-    signal: options.signal,
-    body: JSON.stringify({
-      model: resolved.model,
-      messages,
-      temperature: options.temperature ?? 0.2,
-      max_tokens: clampMaxTokens(options.maxTokens, resolved.maxTokensPerOperation),
-    }),
-  })
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '')
-    throw new Error(`Wiki gateway completion failed (${response.status})${detail ? `: ${detail}` : ''}`)
-  }
-
-  const payload = await response.json() as GatewayChatCompletionResponse
-  const content = extractContent(payload.choices?.[0]?.message?.content).trim()
-  if (!content) throw new Error('Wiki gateway completion returned no content.')
-  return content
+  return wikiLlmCompleteViaInferModel(resolved, messages)
 }
 
 export async function wikiLlmCompleteStructured<T>(
@@ -214,4 +293,10 @@ export async function wikiLlmCompleteStructured<T>(
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(`Wiki gateway structured completion returned invalid JSON: ${message}`)
   }
+}
+
+export function setWikiLlmCommandRunnerForTests(
+  runner: typeof execOpenclaw | null,
+): void {
+  wikiLlmCommandRunnerOverride = runner
 }

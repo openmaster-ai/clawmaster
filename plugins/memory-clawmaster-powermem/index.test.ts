@@ -6,6 +6,7 @@ import test from 'node:test'
 
 import {
   buildAutoRecallContextForTest,
+  buildAutoRecallLogForTest,
   buildWikiSourceMarkdownForTest,
   buildWikiLinkChoiceReplyForTest,
   defaultManagedEngineForTest,
@@ -110,6 +111,17 @@ test('buildAutoRecallContextForTest injects wiki context only for wiki-relevant 
   assert.equal(ordinary.wikiCount, 0)
   assert.equal(ordinary.memoryCount, 1)
   assert.doesNotMatch(ordinary.prependContext ?? '', /<relevant-wiki>/)
+})
+
+test('buildAutoRecallLogForTest summarizes wiki relevance and hit counts', () => {
+  assert.equal(
+    buildAutoRecallLogForTest('what do we know about AI agents?', { wikiCount: 2, memoryCount: 1 }),
+    'memory-clawmaster-powermem: auto-recall wikiRelevant=true wikiHits=2 memoryHits=1 query="what do we know about AI agents?"',
+  )
+  assert.equal(
+    buildAutoRecallLogForTest('what is 2 plus 2?', { wikiCount: 0, memoryCount: 0 }),
+    'memory-clawmaster-powermem: auto-recall wikiRelevant=false wikiHits=0 memoryHits=0 query="what is 2 plus 2?"',
+  )
 })
 
 test('extractStandaloneHttpUrlForTest only accepts standalone HTTP links', () => {
