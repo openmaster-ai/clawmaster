@@ -1,3 +1,4 @@
+import { isRecord } from '../serverUtils.js'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -30,6 +31,7 @@ export type WikiIngestState = 'ingested' | 'updated' | 'skipped' | 'needs_confir
 export type WikiLintSeverity = 'info' | 'warning' | 'error'
 
 export interface WikiServiceContext extends OpenclawProfileContext {
+  signal?: AbortSignal
   profileSelection?: OpenclawProfileSelection
   vaultRootOverride?: string
   managedMemoryContext?: ManagedMemoryContext
@@ -282,9 +284,22 @@ const WIKI_STATE_FILE = 'ingest-state.json'
 const DEFAULT_FRESHNESS_SCORE = 1
 const GENERATED_BLOCK_PREFIX = 'CLAWMASTER-GENERATED'
 const DERIVED_PAGE_CONFIDENCE_THRESHOLD = 0.72
+/* Skip LLM extraction for sources exceeding this character count; content at the limit is sent in full. */
 const MAX_INGEST_LLM_CHARS = 12_000
 const MAX_DEEP_EVOLVE_PAGES = 5
 const MAX_CONTRADICTION_PAIRS = 10
+
+/** Max wiki pages fetched for LLM-enhanced query synthesis. */
+const MAX_QUERY_SYNTHESIS_PAGES = 4
+
+/** Max wiki pages to include citations for in query results. */
+const MAX_QUERY_CITATION_PAGES = 3
+
+/** Max characters of wiki page content sent to the LLM for contradiction checks and deep evolve. */
+const MAX_LLM_PROMPT_CHARS = 12_000
+
+const WIKI_SCHEMA_VERSION = 2
+
 const WIKI_SCHEMA_TEMPLATE = `# Wiki Schema
 
 This vault stores durable, citation-aware wiki knowledge for OpenClaw and ClawMaster workflows.
@@ -326,6 +341,7 @@ This vault stores durable, citation-aware wiki knowledge for OpenClaw and ClawMa
 
 - Mechanical evolve recalculates freshness, related pages, and structural health
 - Deep evolve is opt-in and may revise stale pages with LLM review
+- Schema version: ${WIKI_SCHEMA_VERSION}
 - Lint checks structure first, then optional contradiction checks across related pages
 `
 
@@ -333,8 +349,9 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+
+function truncateToMaxLlmChars(content: string): string {
+  return content.length > MAX_LLM_PROMPT_CHARS ? content.slice(0, MAX_LLM_PROMPT_CHARS) : content
 }
 
 function escapeRegExp(value: string): string {
@@ -525,7 +542,9 @@ export async function ensureWikiVault(context: WikiServiceContext = {}): Promise
     `${WIKI_SCHEMA_TEMPLATE}\n`,
   )
   const existingSchema = await fs.readFile(paths.schemaPath, 'utf8').catch(() => '')
-  if (existingSchema.trim() === '# Wiki Schema\n\nPages use YAML frontmatter with id, title, type, source, freshness, and provenance fields.'.trim()) {
+  const schemaVersionMatch = existingSchema.match(/Schema version:\s*(\d+)/)
+  const existingSchemaVersion = schemaVersionMatch ? Number(schemaVersionMatch[1]) : (existingSchema.trim() ? 1 : 0)
+  if (existingSchemaVersion < WIKI_SCHEMA_VERSION) {
     await fs.writeFile(paths.schemaPath, `${WIKI_SCHEMA_TEMPLATE}\n`, 'utf8')
   }
   await writeIfMissing(paths.freshnessPath, '{}\n')
@@ -1159,7 +1178,7 @@ async function extractDerivedSuggestions(
       ].join('\n'),
     ),
     schema,
-    { maxTokens: 1400, temperature: 0.1 },
+    { maxTokens: 1400, temperature: 0.1, signal: context.signal },
     context,
   )
   return (response.items ?? [])
@@ -1281,8 +1300,9 @@ async function cleanupRemovedDerivedPages(
         && !remainingMeaningfulBody)
     if (removePage) {
       await fs.unlink(page.path).catch(() => undefined)
-      if (page.memoryIds[0]) {
-        await deleteManagedMemory(page.memoryIds[0], managedContext(context)).catch(() => undefined)
+      const memoryIdsToDelete = [...new Set([derived.memoryId, ...page.memoryIds].filter(Boolean) as string[])]
+      for (const mid of memoryIdsToDelete) {
+        await deleteManagedMemory(mid, managedContext(context)).catch(() => undefined)
       }
       continue
     }
@@ -1770,9 +1790,9 @@ export async function queryWiki(
     }
   }
 
-  const topPages = await Promise.all(results.slice(0, 4).map((result) => getWikiPage(result.id, context)))
+  const topPages = await Promise.all(results.slice(0, MAX_QUERY_SYNTHESIS_PAGES).map((result) => getWikiPage(result.id, context)))
   const citations: WikiCitation[] = []
-  for (const page of topPages.slice(0, 3)) {
+  for (const page of topPages.slice(0, MAX_QUERY_CITATION_PAGES)) {
     citations.push(...page.citations)
   }
   const warnings: string[] = []
@@ -1781,7 +1801,7 @@ export async function queryWiki(
     try {
       answer = await wikiLlmComplete(
         buildQuerySynthesisMessages(trimmed, topPages),
-        { maxTokens: 1024, temperature: 0.3 },
+        { maxTokens: 1024, temperature: 0.3, signal: context.signal },
         context,
       )
     } catch {
@@ -2119,6 +2139,7 @@ function contradictionPairs(pages: WikiPageSummary[]): Array<[WikiPageSummary, W
       pairs.push([left, right])
       if (pairs.length >= MAX_CONTRADICTION_PAIRS) return pairs
     }
+    if (pairs.length >= MAX_CONTRADICTION_PAIRS) break
   }
   return pairs
 }
@@ -2142,16 +2163,16 @@ async function detectContradictions(
           'Compare two wiki pages and report factual contradictions only. Return an empty contradictions array when the pages are compatible.',
           [
             `Page 1: [[${leftPage.title}]]`,
-            leftPage.content,
+            truncateToMaxLlmChars(leftPage.content),
             '',
             `Page 2: [[${rightPage.title}]]`,
-            rightPage.content,
+            truncateToMaxLlmChars(rightPage.content),
           ].join('\n'),
         ),
         {
           contradictions: [{ claim1: 'string', claim2: 'string', explanation: 'string' }],
         },
-        { maxTokens: 900, temperature: 0.1 },
+        { maxTokens: 900, temperature: 0.1, signal: context.signal },
         context,
       )
       for (const contradiction of result.contradictions ?? []) {
@@ -2415,16 +2436,16 @@ async function reviseStalePageWithLlm(
         'Review a stale wiki page against related context. Treat obviously stale, placeholder, or low-information text such as "pending verification", "TBD", or generic status notes as needing revision when related pages provide stronger facts. Reply exactly NO_CHANGE only if the current page is already specific, current, and materially supported by the related context. Otherwise return only the revised markdown body for the current page with no JSON, no frontmatter, no code fences, and no commentary.',
         [
           `Current page: [[${page.title}]]`,
-          page.content,
+          truncateToMaxLlmChars(page.content),
           '',
           ...relatedPages.flatMap((item) => [
             `Related page: [[${item.title}]]`,
-            item.content,
+            truncateToMaxLlmChars(item.content),
             '',
           ]),
         ].join('\n'),
       ),
-      { maxTokens: 1800, temperature: 0.15 },
+      { maxTokens: 1800, temperature: 0.15, signal: context.signal },
       context,
     )
     const normalizedRevision = rawRevision.trim()
@@ -2487,7 +2508,8 @@ export async function evolveWikiDeep(context: WikiServiceContext = {}): Promise<
     }
   }
 
-  const staleIds = Object.entries(base.freshness)
+  const freshness = { ...base.freshness }
+  const staleIds = Object.entries(freshness)
     .filter(([, item]) => item.status === 'stale')
     .map(([pageId]) => pageId)
     .slice(0, MAX_DEEP_EVOLVE_PAGES)
@@ -2505,7 +2527,7 @@ export async function evolveWikiDeep(context: WikiServiceContext = {}): Promise<
     )
     if (revision.warning) warnings.push(revision.warning)
     if (revision.changed) {
-      base.freshness[page.id] = {
+      freshness[page.id] = {
         score: 1,
         status: 'fresh',
         lastAccessedAt: page.lastAccessedAt,
@@ -2517,9 +2539,9 @@ export async function evolveWikiDeep(context: WikiServiceContext = {}): Promise<
   }
 
   const paths = resolveWikiPaths(context)
-  await writeJsonFile(paths.freshnessPath, base.freshness)
+  await writeJsonFile(paths.freshnessPath, freshness)
   const lint = await lintWiki(context, { detectContradictions: false })
-  const finalFreshness = base.freshness
+  const finalFreshness = freshness
   const finalPages = summarizeParsedPages(await readParsedPages(context), '', finalFreshness)
   const finalRelated: Record<string, string[]> = {}
   const finalById = new Map(finalPages.map((page) => [page.id, page]))

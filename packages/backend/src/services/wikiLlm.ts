@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { isRecord } from '../serverUtils.js'
 import type { OpenclawProfileContext, OpenclawProfileSelection } from '../openclawProfile.js'
 import { getOpenclawConfigResolution } from '../paths.js'
 import { execOpenclaw, extractFirstJsonObject } from '../execOpenclaw.js'
@@ -51,9 +52,6 @@ const DEFAULT_WIKI_LLM_TIMEOUT_MS = 120_000
 const nativeFetch = globalThis.fetch
 let wikiLlmCommandRunnerOverride: typeof execOpenclaw | null = null
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function normalizeGatewayHost(bind: string | undefined): string {
   const value = bind?.trim()
