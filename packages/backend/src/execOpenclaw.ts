@@ -115,25 +115,13 @@ function getNodeVersionForBin(nodeBin: string): { major: number; minor: number; 
   }
 }
 
-function collectDarwinNodeCandidates(): string[] {
-  const out = new Set<string>()
-  const maybeAdd = (candidate: string) => {
-    if (!candidate) return
-    if (!fs.existsSync(candidate)) return
-    out.add(candidate)
-  }
-
+function collectDarwinNodeHomeRoots(): string[] {
   const homeRoots = new Set<string>()
   const maybeAddHome = (candidate: string | undefined) => {
     const value = candidate?.trim()
     if (!value) return
     homeRoots.add(value)
   }
-
-  maybeAdd(process.execPath)
-  maybeAdd('/opt/homebrew/bin/node')
-  maybeAdd('/usr/local/bin/node')
-  maybeAdd('/usr/bin/node')
 
   maybeAddHome(process.env.HOME)
   maybeAddHome(os.homedir())
@@ -143,7 +131,23 @@ function collectDarwinNodeCandidates(): string[] {
     /* ignore */
   }
 
-  for (const homeRoot of homeRoots) {
+  return Array.from(homeRoots)
+}
+
+function collectDarwinNodeCandidates(): string[] {
+  const out = new Set<string>()
+  const maybeAdd = (candidate: string) => {
+    if (!candidate) return
+    if (!fs.existsSync(candidate)) return
+    out.add(candidate)
+  }
+
+  maybeAdd(process.execPath)
+  maybeAdd('/opt/homebrew/bin/node')
+  maybeAdd('/usr/local/bin/node')
+  maybeAdd('/usr/bin/node')
+
+  for (const homeRoot of collectDarwinNodeHomeRoots()) {
     const nvmDir = path.join(homeRoot, '.nvm', 'versions', 'node')
     try {
       const versions = fs.readdirSync(nvmDir)
@@ -160,6 +164,10 @@ function collectDarwinNodeCandidates(): string[] {
 
 export function getDarwinNodeCandidatePathsForTests(): string[] {
   return collectDarwinNodeCandidates()
+}
+
+export function getDarwinNodeHomeRootsForTests(): string[] {
+  return collectDarwinNodeHomeRoots()
 }
 
 function resolveDarwinCompatibleNodeBin(): string | null {

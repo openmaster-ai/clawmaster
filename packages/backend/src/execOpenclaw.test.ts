@@ -5,6 +5,7 @@ import test from 'node:test'
 import {
   execNpmInstallGlobalFile,
   getDarwinNodeCandidatePathsForTests,
+  getDarwinNodeHomeRootsForTests,
   needsShellOnWindows,
   resolveExecFileCommand,
   resolveNpmExecFileCommand,
@@ -115,8 +116,10 @@ test('Darwin node candidate discovery keeps the real user home when HOME points 
     const actualUserHome = os.userInfo().homedir
     process.env.HOME = '/tmp/clawmaster-proof-home'
     try {
-      const candidates = getDarwinNodeCandidatePathsForTests()
-      assert.match(candidates.join('\n'), new RegExp(`${actualUserHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/\\.nvm/versions/node`))
+      const homeRoots = getDarwinNodeHomeRootsForTests()
+      assert.ok(homeRoots.includes('/tmp/clawmaster-proof-home'))
+      assert.ok(homeRoots.includes(actualUserHome))
+      assert.ok(getDarwinNodeCandidatePathsForTests().includes(process.execPath))
     } finally {
       if (originalHome === undefined) delete process.env.HOME
       else process.env.HOME = originalHome
