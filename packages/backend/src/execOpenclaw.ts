@@ -297,53 +297,50 @@ function execOpenclawSpawnStdin(
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const maxBuffer = 20 * 1024 * 1024
   return new Promise((resolve, reject) => {
+    const isWin32 = process.platform === 'win32'
     const child = spawn(bin, args, {
       env: process.env,
       stdio: ['pipe', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
+      shell: isWin32,
+      windowsHide: true,
     })
     let killedByTimeout = false
     let timer: ReturnType<typeof setTimeout> | undefined
+
+    /** On Windows, `shell: true` spawns cmd.exe as the direct child; killing the
+     *  child only kills cmd.exe, leaving the real process orphaned. Use
+     *  `taskkill /T /F /PID` to kill the entire process tree instead. */
+    const killChild = () => {
+      if (isWin32 && child.pid) {
+        try {
+          execFileSync('taskkill', ['/T', '/F', '/PID', String(child.pid)], { stdio: 'ignore' })
+        } catch {
+          try { child.kill('SIGKILL') } catch { /* ignore */ }
+        }
+      } else {
+        try { child.kill('SIGKILL') } catch { /* ignore */ }
+      }
+    }
 
     const accOut = { s: '' }
     const accErr = { s: '' }
     child.stdout?.on('data', (b) => {
       accOut.s += b.toString('utf8')
       if (accOut.s.length > maxBuffer) {
-        try {
-          child.kill('SIGKILL')
-        } catch {
-          /* ignore */
-        }
+        killChild()
       }
     })
     child.stderr?.on('data', (b) => {
       accErr.s += b.toString('utf8')
       if (accErr.s.length > maxBuffer) {
-        try {
-          child.kill('SIGKILL')
-        } catch {
-          /* ignore */
-        }
+        killChild()
       }
     })
 
     if (opts.timeoutMs != null && opts.timeoutMs > 0) {
       timer = setTimeout(() => {
         killedByTimeout = true
-        try {
-          child.kill('SIGTERM')
-        } catch {
-          /* ignore */
-        }
-        const killHard = setTimeout(() => {
-          try {
-            child.kill('SIGKILL')
-          } catch {
-            /* ignore */
-          }
-        }, 5000)
-        killHard.unref()
+        killChild()
       }, opts.timeoutMs)
     }
 
@@ -417,6 +414,7 @@ export function execOpenclaw(
       maxBuffer: 20 * 1024 * 1024,
       env: command.env,
       shell: process.platform === 'win32',
+      windowsHide: true,
     }
     if (opts?.timeoutMs != null && opts.timeoutMs > 0) {
       execOpts.timeout = opts.timeoutMs
@@ -727,11 +725,26 @@ export function spawnOpenclawGatewayStart(): Promise<void> {
     repairDarwinGatewayLaunchAgentIfNeeded()
       .then(() => {
         const command = resolveOpenclawCommand()
+        const isWin32 = process.platform === 'win32'
         const child = spawn(command.bin, [...command.argsPrefix, 'gateway', 'start'], {
           stdio: ['ignore', 'pipe', 'pipe'],
           env: command.env,
-          shell: process.platform === 'win32',
+          shell: isWin32,
+          windowsHide: true,
         })
+        /** On Windows, kill the entire process tree (cmd.exe + child) so
+         *  orphaned openclaw processes don't survive a gateway start failure. */
+        const killTree = () => {
+          if (isWin32 && child.pid) {
+            try {
+              execFileSync('taskkill', ['/T', '/F', '/PID', String(child.pid)], { stdio: 'ignore' })
+            } catch {
+              try { child.kill() } catch { /* ignore */ }
+            }
+          } else {
+            try { child.kill() } catch { /* ignore */ }
+          }
+        }
         let out = ''
         let err = ''
         child.stdout?.on('data', (c) => {
@@ -740,7 +753,10 @@ export function spawnOpenclawGatewayStart(): Promise<void> {
         child.stderr?.on('data', (c) => {
           err += String(c)
         })
-        child.once('error', reject)
+        child.once('error', (e) => {
+          killTree()
+          reject(e)
+        })
         child.once('close', (code) => {
           if (code === 0) resolve()
           else {
