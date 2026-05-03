@@ -48,7 +48,6 @@ type InferModelRunResponse = {
 const DEFAULT_GATEWAY_PORT = 18789
 const DEFAULT_MAX_WIKI_LLM_TOKENS = 4096
 const DEFAULT_WIKI_LLM_TIMEOUT_MS = 120_000
-const nativeFetch = globalThis.fetch
 let wikiLlmCommandRunnerOverride: typeof execOpenclaw | null = null
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -139,7 +138,9 @@ function extractInferModelText(payload: InferModelRunResponse): string {
 }
 
 function shouldUseMockedFetchTransport(): boolean {
-  return globalThis.fetch !== nativeFetch
+  // Use an explicit environment variable instead of comparing globalThis.fetch
+  // identity, which breaks if any middleware/polyfill wraps fetch.
+  return process.env.WIKI_LLM_USE_GATEWAY === '1'
 }
 
 function getWikiLlmCommandRunner(): typeof execOpenclaw {
