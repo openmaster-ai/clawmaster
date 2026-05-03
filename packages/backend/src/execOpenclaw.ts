@@ -309,8 +309,10 @@ function execOpenclawSpawnStdin(
 
     /** On Windows, `shell: true` spawns cmd.exe as the direct child; killing the
      *  child only kills cmd.exe, leaving the real process orphaned. Use
-     *  `taskkill /T /F /PID` to kill the entire process tree instead. */
-    const killChild = () => {
+     *  `taskkill /T /F /PID` to kill the entire process tree instead.
+     *  On non-Windows, send SIGKILL directly (immediate force-kill for
+     *  buffer overflow; graceful SIGTERM is handled in the timeout path). */
+    const forceKill = () => {
       if (isWin32 && child.pid) {
         try {
           execFileSync('taskkill', ['/T', '/F', '/PID', String(child.pid)], { stdio: 'ignore' })
@@ -327,20 +329,36 @@ function execOpenclawSpawnStdin(
     child.stdout?.on('data', (b) => {
       accOut.s += b.toString('utf8')
       if (accOut.s.length > maxBuffer) {
-        killChild()
+        forceKill()
       }
     })
     child.stderr?.on('data', (b) => {
       accErr.s += b.toString('utf8')
       if (accErr.s.length > maxBuffer) {
-        killChild()
+        forceKill()
       }
     })
 
     if (opts.timeoutMs != null && opts.timeoutMs > 0) {
       timer = setTimeout(() => {
         killedByTimeout = true
-        killChild()
+        if (isWin32) {
+          forceKill()
+        } else {
+          try {
+            child.kill('SIGTERM')
+          } catch {
+            /* ignore */
+          }
+          const killHard = setTimeout(() => {
+            try {
+              child.kill('SIGKILL')
+            } catch {
+              /* ignore */
+            }
+          }, 5000)
+          killHard.unref()
+        }
       }, opts.timeoutMs)
     }
 
