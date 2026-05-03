@@ -310,6 +310,25 @@ function isWikiRelevantQuestion(query: string): boolean {
   ].some((token) => text.includes(token))
 }
 
+function clipAutoRecallQuery(query: string, maxLength = 96): string {
+  const normalized = query.trim().replace(/\s+/g, ' ')
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength - 3)}...`
+}
+
+export function buildAutoRecallLogForTest(
+  query: string,
+  summary: { wikiCount: number; memoryCount: number },
+): string {
+  return [
+    'memory-clawmaster-powermem: auto-recall',
+    `wikiRelevant=${isWikiRelevantQuestion(query)}`,
+    `wikiHits=${summary.wikiCount}`,
+    `memoryHits=${summary.memoryCount}`,
+    `query=${JSON.stringify(clipAutoRecallQuery(query))}`,
+  ].join(' ')
+}
+
 export function extractStandaloneHttpUrlForTest(input: string): string | undefined {
   const text = input.trim()
   const match = text.match(/^<?(https?:\/\/[^\s<>]+)>?$/i)
@@ -1459,6 +1478,7 @@ const plugin = {
             .filter((item) => (item.score ?? 0) >= cfg.recallScoreThreshold)
 
           const recallContext = buildAutoRecallContextForTest(query, results, cfg.recallLimit)
+          api.logger.info(buildAutoRecallLogForTest(query, recallContext))
           return {
             prependSystemContext: MEMORY_RECALL_GUIDANCE,
             ...(recallContext.prependContext

@@ -13,7 +13,7 @@
 | `05-config-and-security.yaml` | 18 | 配置编辑 + API Key 脱敏 + 主题切换 + 版本更新 + Profile 与横幅联动 |
 | `06-skills-marketplace.yaml` | 13 | 技能市场（ClawHub 前置/4 个重点技能/过滤/SkillGuard/运行时启停/OpenClaw WebUI 效果） |
 | `07-setup-install-real.yaml` | 16 | 安装向导真实安装全流程（检测/卸载/安装/CapabilityGuard/错误处理/API） |
-| `08-onboarding-config.yaml` | 17 | 安装后配置引导（初始化/API Key/模型/网关/通道/跳过/汇总） |
+| `08-onboarding-config.yaml` | 10 | 安装后配置引导（初始化/API Key/模型/网关/通道/跳过/汇总） |
 | `09-gateway-module.yaml` | 7 | 网关管理（状态指示/启动停止/配置概览/Token 复制/重启/最近日志与诊断入口） |
 | `10-mcp-servers.yaml` | 8 | MCP 服务器管理（推荐配置/导入/手动添加/安装进度/OpenClaw WebUI 可见性） |
 | `11-sessions-module.yaml` | 8 | 会话管理（列表/Agent 过滤/Token 进度条/对话历史/清理/轮询与 useAdapterCall 稳定性） |
@@ -23,12 +23,14 @@
 | `15-plugins-module.yaml` | 9 | 插件管理（运行快照/安装清理/筛选/启停/卸载确认/描述展开/OpenClaw WebUI 效果） |
 | `16-docs-module.yaml` | 5 | 文档中心（快速链接/搜索交互/结果展示/外部链接/实时文档回退） |
 | `17-logs-module.yaml` | 6 | 日志查看（列表/级别过滤/搜索/颜色编码/刷新/模块上下文入口） |
-| `18-dashboard-module.yaml` | 11 | 概览页面（系统信息/网关状态/通道/速览卡片/快捷操作/任务清单/页脚一致性） |
-| `19-cross-module-workflows.yaml` | 6 | 跨模块主流程（onboarding→模型→网关→首聊 / 通道→上下文日志 / 技能插件MCP→OpenClaw WebUI 生效） |
+| `18-dashboard-module.yaml` | 12 | 概览页面（系统信息/网关状态/通道/速览卡片/快捷操作/任务清单/页脚一致性） |
+| `19-cross-module-workflows.yaml` | 8 | 跨模块主流程（onboarding→模型→网关→首聊 / 通道→上下文日志 / 技能插件MCP→OpenClaw WebUI 生效） |
 | `20-command-palette.yaml` | 7 | 共享命令面板（快捷键打开/页面跳转/区块跳转/主题操作/空状态/移动端入口） |
 | `21-ocr-workflow.yaml` | 5 | OCR 主流程（页面引导/保存配置/样例解析/上传解析/OpenClaw WebUI 技能执行） |
 | `22-cron-module.yaml` | 6 | Cron 模块（页面渲染/网关依赖/调度助手/Observe 模板导入/创建执行/运行记录） |
-| **合计** | **208** | |
+| `23-content-drafts-module.yaml` | 5 | 内容草稿模块（草稿库列表 / 平台过滤 / 搜索 / Markdown 与图片预览切换） |
+| `24-wiki-powermem-workflow.yaml` | 6 | Wiki + PowerMem 跨界面证明（ClawMaster Wiki 维护链路 + OpenClaw WebUI 自动 recall 正负控） |
+| **合计** | **219** | |
 
 ## 用例格式
 
@@ -121,6 +123,32 @@ page.screenshot({ path: '/tmp/observe-refreshed.png' })
 - After i18n key additions/modifications
 - After adapter/API changes that affect displayed data
 - Before committing structural refactors
+
+## Wiki + PowerMem Proof (Manual)
+
+`24-wiki-powermem-workflow.yaml` is intentionally a real-gateway, browser-use suite and is **not** part of `CI_SAFE_SUITES`.
+
+Recommended setup:
+
+```bash
+# 1. Create an isolated HOME, copy a working openclaw.json, write fixtures, sync the managed bridge
+node --import tsx tests/ui/wiki-powermem-proof-helper.ts init --source-config ~/.openclaw/openclaw.json
+
+# 2. Start the app with the HOME printed by the helper manifest
+env HOME="/tmp/clawmaster-wiki-proof-XXXX/home" NO_PROXY="127.0.0.1,localhost,::1" no_proxy="127.0.0.1,localhost,::1" npm run dev:web
+
+# 3. After ingesting 06-stale-runtime-notes.md through the Wiki UI, mark it stale for deep evolve
+node --import tsx tests/ui/wiki-powermem-proof-helper.ts mark-stale --home "/tmp/clawmaster-wiki-proof-XXXX/home" --title "Stale Runtime Notes"
+
+# 4. For the negative control, disable autoRecall and restart the gateway
+node --import tsx tests/ui/wiki-powermem-proof-helper.ts set-autorecall --home "/tmp/clawmaster-wiki-proof-XXXX/home" --enabled false
+```
+
+What this suite must prove:
+- ClawMaster `/memory` shows the OpenClaw bridge ready, the slot aligned to `memory-clawmaster-powermem`, and `autoRecall: true`.
+- ClawMaster `/wiki` can ingest deterministic local fixtures, save a synthesis, and show contradiction + deep-evolve evidence.
+- OpenClaw WebUI answers a wiki-relevant question using the same isolated profile, with positive `memory-clawmaster-powermem: auto-recall` log evidence.
+- After disabling `autoRecall`, OpenClaw WebUI loses the automatic wiki recall path while ClawMaster `/wiki` remains functional.
 
 ## Golden Regression Checklist
 

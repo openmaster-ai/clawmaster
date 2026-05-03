@@ -2,6 +2,7 @@ import express from 'express'
 import {
   assistWithWiki,
   evolveWiki,
+  evolveWikiDeep,
   getWikiPage,
   getWikiStatus,
   ingestWikiSource,
@@ -143,7 +144,7 @@ export function registerWikiRoutes(app: express.Express): void {
 
   app.post('/api/wiki/lint', async (_req, res) => {
     try {
-      res.json(await lintWiki())
+      res.json(await lintWiki({}, { detectContradictions: false }))
     } catch (error: unknown) {
       sendWikiError(res, error)
     }
@@ -152,6 +153,14 @@ export function registerWikiRoutes(app: express.Express): void {
   app.post('/api/wiki/evolve', async (_req, res) => {
     try {
       res.json(await evolveWiki())
+    } catch (error: unknown) {
+      sendWikiError(res, error)
+    }
+  })
+
+  app.post('/api/wiki/evolve/deep', async (_req, res) => {
+    try {
+      res.json(await evolveWikiDeep())
     } catch (error: unknown) {
       sendWikiError(res, error)
     }

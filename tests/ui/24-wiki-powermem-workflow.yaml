@@ -1,0 +1,129 @@
+suite: wiki-powermem-workflow
+name: Wiki + PowerMem 跨界面证明
+description: |
+  验证 PR #138 的真实工作路径：
+  1. ClawMaster /memory 中 OpenClaw bridge 已就绪，memory slot 指向 memory-clawmaster-powermem
+  2. ClawMaster /wiki 通过本地 fixture ingest、Ask Wiki、保存 synthesis、lint、mechanical evolve、deep evolve 完成完整维护链路
+  3. OpenClaw WebUI 新会话会自动消费同一 profile 的 managed PowerMem wiki recall
+  4. 关闭 autoRecall 后，OpenClaw WebUI 的自动 wiki recall 消失，但 ClawMaster /wiki 仍能继续工作
+
+preconditions:
+  - 已运行 `node --import tsx tests/ui/wiki-powermem-proof-helper.ts init --source-config <working-openclaw.json>`，并记录输出的 manifest / HOME / fixture 路径
+  - 已使用 helper 输出的 `HOME`、`NO_PROXY`、`no_proxy` 启动 `npm run dev:web`
+  - helper 输出的 source config 已包含可用的默认文本模型与真实 gateway 凭据
+  - ClawMaster 与 OpenClaw WebUI 必须读取同一个 helper 创建的隔离 profile
+  - suite 24 为 browser-use / manual proof，故意不加入 CI-safe suites
+
+viewport: { width: 1440, height: 960 }
+
+cases:
+  - id: wiki-proof-01
+    name: ClawMaster /memory 证明 bridge ready 与 autoRecall 配置
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/memory"
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: wiki-proof-memory-bridge-ready
+    assertions:
+      - 页面显示 OpenClaw bridge 区块，状态为 "Bridge ready"、"桥接已就绪" 或等价文案
+      - 页面显示 current slot 指向 `memory-clawmaster-powermem`
+      - 页面显示 effective config，且其中包含 `autoRecall: true`
+      - 页面可见 managed data root、plugin path、runtime plugin path
+      - 该页面截图将作为 suite 24 的第一张必备证据
+
+  - id: wiki-proof-02
+    name: ClawMaster /wiki 使用本地 fixture ingest 并验证可搜索性
+    preconditions:
+      - 使用 helper manifest 中的 6 个 fixture 文件路径
+      - 至少包含 `01-gateway-runtime.md`、`02-agent-patterns.md`、`03-agent-runtime.md`、`04-runtime-claim-a.md`、`05-runtime-claim-b.md`、`06-stale-runtime-notes.md`
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/wiki"
+      - action: wait
+        duration: 2000ms
+      - action: screenshot
+        name: wiki-proof-ingest-ready
+    assertions:
+      - 页面标题显示 Wiki，副标题说明其由 managed PowerMem 支撑
+      - 通过 UI ingest 本地 fixture 后，文章列表出现 Gateway Runtime、Agent Patterns、Agent Runtime、Runtime Claim A、Runtime Claim B、Stale Runtime Notes
+      - Ask Wiki / Search 区块可正常工作，没有 500 或空白渲染
+      - 该步骤结束后，ClawMaster /wiki 已具备后续 query / synthesis / lint / evolve 的基础数据
+
+  - id: wiki-proof-03
+    name: ClawMaster /wiki Ask Wiki、链接弹窗与 synthesis 保存
+    preconditions:
+      - 使用 helper manifest 中的 `what do we know about AI agents?` 作为 ClawMaster 查询
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/wiki"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: wiki-proof-query-and-synthesis
+    assertions:
+      - Ask Wiki 返回自然语言答案，而不是只有裸搜索列表
+      - 答案内渲染可点击的 `[[Wiki Links]]`
+      - 点击其中一个链接后，会打开对应 article detail modal，而不是跳转失败
+      - 点击 Save synthesis 后，页面出现 "Saved synthesis: AI Agents" 或等价成功文案
+      - 保存后，文章列表中出现新的 synthesis 页面，用于后续 OpenClaw WebUI follow-up 证明
+
+  - id: wiki-proof-04
+    name: ClawMaster /wiki lint、mechanical evolve 与 deep evolve
+    preconditions:
+      - 先运行 `node --import tsx tests/ui/wiki-powermem-proof-helper.ts mark-stale --home <helper-home> --title "Stale Runtime Notes"`
+      - 运行 mark-stale 后刷新 `/wiki`，再继续 maintenance proof
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/wiki"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: wiki-proof-maintenance
+    assertions:
+      - Run Lint 后显示 contradiction issue，来源于 Runtime Claim A / Runtime Claim B 这组 fixture
+      - Run Evolve 后页面 summary 反映 stale / changed / conflict / related 统计变化
+      - Run Deep Evolve 后页面显示 changed-page evidence，Stale Runtime Notes 被标记为已由 LLM 修订
+      - backend / plugin log 中可捕获 `/api/wiki/evolve/deep` 对应的调用证据
+      - 该步骤截图与日志将作为 deep evolve 的必备证据
+
+  - id: wiki-proof-05
+    name: OpenClaw WebUI 新会话证明自动 wiki recall
+    preconditions:
+      - 通过 ClawMaster 网关页面或 helper manifest 的 WebUI URL 打开 OpenClaw WebUI
+      - 必须在新会话中提问 helper manifest 中的 `what do we know about AI agents?`
+      - 随后再提问 helper manifest 中的 follow-up 问题，要求依赖刚保存的 synthesis
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/gateway"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: wiki-proof-openclaw-handoff
+    assertions:
+      - OpenClaw WebUI 侧回答明显依赖刚才的 wiki fixture / synthesis，而不是通用模型常识
+      - 回答中包含 `Wiki used` 风格提示，或等价的 source / freshness / health disclosure
+      - backend / plugin log 出现 `memory-clawmaster-powermem: auto-recall` 且 `wikiHits` 大于 0
+      - follow-up 回答能体现 AI Agents synthesis 页面形成的归纳结论，而不是只复读单条原始 source 文本
+      - 该步骤至少保留 1 张 OpenClaw WebUI 截图与 1 条 auto-recall 正向日志
+
+  - id: wiki-proof-06
+    name: 关闭 autoRecall 后的负控与普通问题控件
+    preconditions:
+      - 先运行 `node --import tsx tests/ui/wiki-powermem-proof-helper.ts set-autorecall --home <helper-home> --enabled false`
+      - 运行后必须重启 gateway，再在 OpenClaw WebUI 新开会话
+      - 同时保留一个普通问题 `what is 2 plus 2?` 作为非 wiki 控件
+    steps:
+      - action: navigate
+        url: "{BASE_URL}/memory"
+      - action: wait
+        duration: 1500ms
+      - action: screenshot
+        name: wiki-proof-negative-control
+    assertions:
+      - ClawMaster /wiki query 仍然可用，证明 wiki backend 自身没有被破坏
+      - OpenClaw WebUI 对同一 wiki 问题不再显示 auto-recall 的 wiki 证据或等价披露
+      - plugin / runtime log 中不再出现该 turn 的 `memory-clawmaster-powermem: auto-recall` 正向 wiki hit 证据
+      - 对普通问题 `what is 2 plus 2?`，即使 autoRecall 重新打开，也不应出现 wiki-specific recall 证据；若有日志，`wikiHits` 应为 0
+      - 只有当正控和负控同时成立时，才能宣称 OpenClaw WebUI 的 wiki context recall 已被真实证明

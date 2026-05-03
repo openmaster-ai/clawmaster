@@ -550,6 +550,7 @@ export interface WikiQueryPayload {
   results: WikiSearchResult[]
   citations: WikiCitation[]
   offerToSave: boolean
+  warnings?: string[]
 }
 
 export type WikiAssistReason = 'explicit_wiki' | 'knowledge_question' | 'project_context' | 'not_relevant'
@@ -580,7 +581,7 @@ export interface WikiSynthesizePayload {
 export interface WikiLintIssue {
   id: string
   severity: WikiLintSeverity
-  kind: 'orphan' | 'missing-link' | 'duplicate-title' | 'stale' | 'schema'
+  kind: 'orphan' | 'missing-link' | 'duplicate-title' | 'stale' | 'schema' | 'contradiction'
   pageId?: string
   title: string
   detail: string
@@ -590,9 +591,11 @@ export interface WikiLintPayload {
   checkedAt: string
   issueCount: number
   issues: WikiLintIssue[]
+  warnings?: string[]
 }
 
 export interface WikiEvolvePayload {
+  mode: 'mechanical' | 'deep'
   evolvedAt: string
   pageCount: number
   staleCount: number

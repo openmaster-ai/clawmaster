@@ -573,10 +573,10 @@ export async function installOpenclawPlugin(id: string): Promise<void> {
   }
 }
 
-export async function installOpenclawPluginFromPath(
+export function buildInstallOpenclawPluginFromPathArgsForTest(
   pluginPath: string,
-  options?: { link?: boolean }
-): Promise<void> {
+  options?: { link?: boolean; dangerouslyForceUnsafeInstall?: boolean }
+): string[] {
   const normalized = pluginPath.trim()
   if (!normalized) {
     throw new Error('Plugin path is required')
@@ -585,7 +585,18 @@ export async function installOpenclawPluginFromPath(
   if (options?.link !== false) {
     args.push('-l')
   }
+  if (options?.dangerouslyForceUnsafeInstall === true) {
+    args.push('--dangerously-force-unsafe-install')
+  }
   args.push(normalized)
+  return args
+}
+
+export async function installOpenclawPluginFromPath(
+  pluginPath: string,
+  options?: { link?: boolean; dangerouslyForceUnsafeInstall?: boolean }
+): Promise<void> {
+  const args = buildInstallOpenclawPluginFromPathArgsForTest(pluginPath, options)
   const r = await execOpenclaw(args, PLUGIN_INSTALL_CLI_OPTS)
   if (r.code !== 0) {
     throw new Error(

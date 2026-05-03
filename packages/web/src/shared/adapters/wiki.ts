@@ -109,3 +109,8 @@ export async function wikiEvolveResult(): Promise<AdapterResult<WikiEvolvePayloa
   if (getIsTauri()) return desktopWikiUnavailable()
   return webFetchJson<WikiEvolvePayload>('/api/wiki/evolve', { method: 'POST' })
 }
+
+export async function wikiDeepEvolveResult(): Promise<AdapterResult<WikiEvolvePayload>> {
+  if (getIsTauri()) return desktopWikiUnavailable()
+  return webFetchJson<WikiEvolvePayload>('/api/wiki/evolve/deep', { method: 'POST' })
+}
