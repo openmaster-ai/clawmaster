@@ -563,6 +563,7 @@ export function defaultRunOpenclaw(args) {
   const result = spawnSync('openclaw', args, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    shell: process.platform === 'win32',
   })
   const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim()
   if (result.error) throw result.error

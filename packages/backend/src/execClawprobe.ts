@@ -508,6 +508,7 @@ export async function runClawprobeJson(
     const out = await execFileAsync(cmd, cmdArgs, {
       maxBuffer: 20 * 1024 * 1024,
       env,
+      shell: process.platform === 'win32',
     })
     stdout = String(out.stdout ?? '').trim()
     stderr = String(out.stderr ?? '').trim()
@@ -596,6 +597,7 @@ export async function runClawprobeCommand(
     const out = await execFileAsync(cmd, cmdArgs, {
       maxBuffer: 20 * 1024 * 1024,
       env,
+      shell: process.platform === 'win32',
     })
     return {
       ok: true,

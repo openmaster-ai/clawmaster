@@ -414,6 +414,7 @@ function getGlobalNpmRoot() {
       encoding: 'utf8',
       env: process.env,
       windowsHide: true,
+      shell: process.platform === 'win32',
     }).trim()
   } catch {
     return null
