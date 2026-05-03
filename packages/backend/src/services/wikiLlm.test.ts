@@ -6,6 +6,7 @@ import test from 'node:test'
 import {
   resolveWikiLlm,
   setWikiLlmCommandRunnerForTests,
+  setWikiLlmUseGatewayFetchForTests,
   wikiLlmComplete,
   wikiLlmEnabled,
 } from './wikiLlm.js'
@@ -25,6 +26,7 @@ async function writeConfig(homeDir: string, config: Record<string, unknown>): Pr
 test.afterEach(() => {
   globalThis.fetch = originalFetch
   setWikiLlmCommandRunnerForTests(null)
+  setWikiLlmUseGatewayFetchForTests(false)
 })
 
 test('resolveWikiLlm disables the helper when no default model is configured', async () => {
@@ -58,6 +60,7 @@ test('wikiLlmComplete clamps max tokens to the configured cap', async () => {
     maxWikiLlmTokensPerOperation: 512,
   })
 
+  setWikiLlmUseGatewayFetchForTests(true)
   let requestedMaxTokens = -1
   globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? '{}')) as { max_tokens?: number }

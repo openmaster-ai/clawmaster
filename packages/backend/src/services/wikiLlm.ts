@@ -48,6 +48,7 @@ type InferModelRunResponse = {
 const DEFAULT_GATEWAY_PORT = 18789
 const DEFAULT_MAX_WIKI_LLM_TOKENS = 4096
 const DEFAULT_WIKI_LLM_TIMEOUT_MS = 120_000
+const nativeFetch = globalThis.fetch
 let wikiLlmCommandRunnerOverride: typeof execOpenclaw | null = null
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -138,9 +139,19 @@ function extractInferModelText(payload: InferModelRunResponse): string {
 }
 
 function shouldUseMockedFetchTransport(): boolean {
-  // Use an explicit environment variable instead of comparing globalThis.fetch
-  // identity, which breaks if any middleware/polyfill wraps fetch.
-  return process.env.WIKI_LLM_USE_GATEWAY === '1'
+  if (useGatewayFetchForTests) return true
+  // Explicit opt-in environment variable takes precedence.
+  if (process.env.WIKI_LLM_USE_GATEWAY !== undefined) {
+    return process.env.WIKI_LLM_USE_GATEWAY === '1'
+  }
+  // Fall back to detecting whether globalThis.fetch has been replaced
+  // (e.g. by test mocks) by comparing against the native reference captured
+  // at module load time.  This preserves the existing behaviour where tests
+  // that mock fetch automatically route through the gateway-fetch path.
+  // Production code that merely wraps fetch (APM agents, polyfills) should
+  // set WIKI_LLM_USE_GATEWAY=1 explicitly instead of relying on this
+  // identity check.
+  return globalThis.fetch !== nativeFetch
 }
 
 function getWikiLlmCommandRunner(): typeof execOpenclaw {
@@ -300,4 +311,11 @@ export function setWikiLlmCommandRunnerForTests(
   runner: typeof execOpenclaw | null,
 ): void {
   wikiLlmCommandRunnerOverride = runner
+}
+
+let useGatewayFetchForTests = false
+
+/** @internal Allow tests to force the gateway-fetch transport path. */
+export function setWikiLlmUseGatewayFetchForTests(flag: boolean): void {
+  useGatewayFetchForTests = flag
 }

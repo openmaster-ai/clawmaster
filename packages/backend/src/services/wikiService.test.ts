@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { closeManagedMemoryRuntimesForTests } from './managedMemory.js'
+import { setWikiLlmUseGatewayFetchForTests } from './wikiLlm.js'
 import {
   assistWithWiki,
   classifyWikiQuestion,
@@ -47,6 +48,7 @@ async function writeWikiConfig(context: WikiServiceContext, config: Record<strin
 test.afterEach(async () => {
   await closeManagedMemoryRuntimesForTests()
   globalThis.fetch = originalFetch
+  setWikiLlmUseGatewayFetchForTests(false)
 })
 
 test('ensureWikiVault creates the expected wiki structure', async () => {
@@ -190,6 +192,7 @@ test('query uses the gateway-backed wiki llm when enabled', async () => {
 
   let requestedAuthorization = ''
   let requestedUrl = ''
+  setWikiLlmUseGatewayFetchForTests(true)
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     requestedUrl = String(input)
     requestedAuthorization = String(new Headers(init?.headers).get('Authorization') ?? '')
@@ -214,6 +217,7 @@ test('llm ingest creates derived pages and removes outdated generated pages on r
     agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
   })
   let callCount = 0
+  setWikiLlmUseGatewayFetchForTests(true)
   globalThis.fetch = (async () => {
     callCount += 1
     const content = callCount === 1
@@ -269,6 +273,7 @@ test('re-ingest preserves generated derived pages when extraction is unavailable
     agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
   })
   let fetchMode: 'derived' | 'empty' = 'derived'
+  setWikiLlmUseGatewayFetchForTests(true)
   globalThis.fetch = (async () => new Response(JSON.stringify({
     choices: [{
       message: {
@@ -346,6 +351,7 @@ test('re-ingest removes generated blocks without deleting an existing matched pa
   )
 
   let callCount = 0
+  setWikiLlmUseGatewayFetchForTests(true)
   globalThis.fetch = (async () => {
     callCount += 1
     const content = callCount === 1
@@ -403,6 +409,7 @@ test('derived ingest does not reuse source pages with matching entity titles', a
   await writeWikiConfig(context, {
     agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
   })
+  setWikiLlmUseGatewayFetchForTests(true)
   globalThis.fetch = (async () => new Response(JSON.stringify({
     choices: [{
       message: {
@@ -543,6 +550,7 @@ test('synthesis and snippets strip generated wiki blocks before rendering durabl
   await writeWikiConfig(context, {
     agents: { defaults: { model: { primary: 'openai/gpt-4o-mini' } } },
   })
+  setWikiLlmUseGatewayFetchForTests(true)
   globalThis.fetch = (async () => new Response(JSON.stringify({
     choices: [{
       message: {
@@ -743,6 +751,7 @@ test('lint emits contradiction issues when llm contradiction checks find a confl
     },
     context,
   )
+  setWikiLlmUseGatewayFetchForTests(true)
   globalThis.fetch = (async () => new Response(JSON.stringify({
     choices: [{
       message: {
@@ -789,6 +798,7 @@ test('deep evolve revises stale pages through the wiki llm without changing the 
     'utf8',
   )
 
+  setWikiLlmUseGatewayFetchForTests(true)
   globalThis.fetch = (async () => new Response(JSON.stringify({
     choices: [{
       message: {
