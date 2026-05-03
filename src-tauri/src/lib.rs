@@ -666,7 +666,24 @@ fn openclaw_cmd() -> Command {
         return c;
     }
 
-    let mut c = Command::new(openclaw_executable_path());
+    let exe_path = openclaw_executable_path();
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, npm-installed CLIs are .cmd scripts that cmd.exe must interpret.
+        // Command::new cannot execute .cmd files directly.
+        let needs_cmd = exe_path.extension().map_or(true, |ext| ext == "cmd" || ext == "CMD");
+        if needs_cmd {
+            let mut c = Command::new("cmd");
+            c.stdin(Stdio::null())
+                .arg("/C")
+                .arg(&exe_path);
+            for arg in get_openclaw_profile_args(&get_openclaw_profile_selection()) {
+                c.arg(arg);
+            }
+            return c;
+        }
+    }
+    let mut c = Command::new(exe_path);
     c.stdin(Stdio::null());
     for arg in get_openclaw_profile_args(&get_openclaw_profile_selection()) {
         c.arg(arg);
@@ -690,7 +707,19 @@ fn clawprobe_cmd() -> Command {
         return c;
     }
 
-    Command::new(clawprobe_executable_path())
+    let exe_path = clawprobe_executable_path();
+    #[cfg(target_os = "windows")]
+    {
+        let needs_cmd = exe_path.extension().map_or(true, |ext| ext == "cmd" || ext == "CMD");
+        if needs_cmd {
+            let mut c = Command::new("cmd");
+            c.stdin(Stdio::null())
+                .arg("/C")
+                .arg(&exe_path);
+            return c;
+        }
+    }
+    Command::new(exe_path)
 }
 
 fn try_resolve_clawprobe_via_login_shell() -> Option<PathBuf> {
@@ -3153,6 +3182,20 @@ fn normalize_skillguard_scan_output(
 
 fn run_skillguard_scan_host(skill_dir: &Path) -> Result<serde_json::Value, String> {
     let skill_dir_string = skill_dir.to_string_lossy().to_string();
+    #[cfg(target_os = "windows")]
+    let output = {
+        let npm_path = resolve_system_command_path("npm");
+        let mut all_args = vec!["/C".to_string(), npm_path.to_string_lossy().to_string()];
+        all_args.extend(["exec", "--yes", "@clawmaster/skillguard-cli", "--", &skill_dir_string, "--json"].iter().map(|s| s.to_string()));
+        Command::new("cmd")
+            .args(&all_args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| cmd_err_d("SKILLGUARD_SCAN_FAILED", e))?
+    };
+    #[cfg(not(target_os = "windows"))]
     let output = Command::new(resolve_system_command_path("npm"))
         .args([
             "exec",
@@ -6352,6 +6395,12 @@ fn save_clawmaster_npm_proxy(enabled: Option<bool>) -> Result<ClawmasterNpmProxy
 }
 
 fn npm_root_g() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    let output = Command::new("cmd")
+        .args(["/C", "npm", "root", "-g"])
+        .output()
+        .map_err(|e| cmd_err_d("NPM_ROOT_SPAWN_FAILED", e))?;
+    #[cfg(not(target_os = "windows"))]
     let output = Command::new("npm")
         .args(["root", "-g"])
         .output()
@@ -6381,7 +6430,15 @@ fn npm_uninstall_global_robust(pkg: &str) -> (bool, i32, String, String) {
     }
 
     fn run_npm(args: &[&str]) -> (bool, i32, String, String) {
-        match Command::new("npm").args(args).output() {
+        #[cfg(target_os = "windows")]
+        let result = {
+            let mut all_args = vec!["/C".to_string(), "npm".to_string()];
+            all_args.extend(args.iter().map(|s| s.to_string()));
+            Command::new("cmd").args(&all_args).output()
+        };
+        #[cfg(not(target_os = "windows"))]
+        let result = Command::new("npm").args(args).output();
+        match result {
             Ok(output) => {
                 let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -6522,6 +6579,14 @@ fn cmp_openclaw_version_desc(a: &str, b: &str) -> std::cmp::Ordering {
 fn list_npm_package_versions(package_name: &str) -> Result<OpenclawNpmVersionsDto, String> {
     fn npm_stdout(args: &[String]) -> Result<String, String> {
         let args = with_configured_npm_registry_args(args);
+        #[cfg(target_os = "windows")]
+        let output = {
+            let mut all_args = vec!["/C".to_string(), "npm".to_string()];
+            all_args.extend(args.iter().cloned());
+            Command::new("cmd").args(&all_args).output()
+                .map_err(|e| cmd_err_d("NPM_SPAWN_FAILED", e))?
+        };
+        #[cfg(not(target_os = "windows"))]
         let output = Command::new("npm")
             .args(args)
             .output()
@@ -6605,6 +6670,14 @@ fn run_npm_install_openclaw_global(spec: &str) -> Result<NpmUninstallOutput, Str
     };
     let args =
         with_configured_npm_registry_args(&["install".to_string(), "-g".to_string(), pkg.clone()]);
+    #[cfg(target_os = "windows")]
+    let output = {
+        let mut all_args = vec!["/C".to_string(), "npm".to_string()];
+        all_args.extend(args.iter().cloned());
+        Command::new("cmd").args(&all_args).output()
+            .map_err(|e| cmd_err_d("NPM_SPAWN_FAILED", e))?
+    };
+    #[cfg(not(target_os = "windows"))]
     let output = Command::new("npm")
         .args(&args)
         .output()
@@ -6650,6 +6723,14 @@ fn npm_install_openclaw_from_file(file_path: String) -> Result<NpmUninstallOutpu
     let s = canon.to_string_lossy().to_string();
     let args =
         with_configured_npm_registry_args(&["install".to_string(), "-g".to_string(), s.clone()]);
+    #[cfg(target_os = "windows")]
+    let output = {
+        let mut all_args = vec!["/C".to_string(), "npm".to_string()];
+        all_args.extend(args.iter().cloned());
+        Command::new("cmd").args(&all_args).output()
+            .map_err(|e| cmd_err_d("NPM_SPAWN_FAILED", e))?
+    };
+    #[cfg(not(target_os = "windows"))]
     let output = Command::new("npm")
         .args(&args)
         .output()
@@ -8369,6 +8450,28 @@ fn run_system_command(cmd: String, args: Vec<String>) -> Result<String, String> 
         return Err(cmd_err_d("SYSTEM_CMD_FAILED", msg.trim()));
     }
 
+    // On Windows, npm-installed CLIs (npm, clawhub) are .cmd scripts that cmd.exe must interpret.
+    #[cfg(target_os = "windows")]
+    {
+        let needs_cmd = program.extension().map_or(trimmed == "npm" || trimmed == "clawhub", |ext| ext == "cmd" || ext == "CMD");
+        if needs_cmd {
+            let mut all_args = vec![program.to_string_lossy().to_string()];
+            all_args.extend(normalized_args.iter().cloned());
+            let output = Command::new("cmd")
+                .arg("/C")
+                .args(&all_args)
+                .stdin(Stdio::null())
+                .output()
+                .map_err(|e| cmd_err_d("SYSTEM_CMD_SPAWN_FAILED", e))?;
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            if output.status.success() {
+                return Ok(stdout);
+            }
+            let msg = if !stderr.trim().is_empty() { stderr } else if !stdout.trim().is_empty() { stdout } else { format!("exit {:?}", output.status.code()) };
+            return Err(cmd_err_d("SYSTEM_CMD_FAILED", msg.trim()));
+        }
+    }
     let output = Command::new(program)
         .args(&normalized_args)
         .stdin(Stdio::null())

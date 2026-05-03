@@ -32,15 +32,21 @@ test('resolveExecFileCommand resolves clawhub to clawhub.cmd on Windows', async 
   })
 })
 
-test('resolveExecFileCommand keeps ollama bare on Windows (native binary)', async () => {
+test('resolveExecFileCommand resolves openclaw to openclaw.cmd on Windows', async () => {
   await withPlatform('win32', () => {
-    assert.equal(resolveExecFileCommand('ollama'), 'ollama')
+    assert.equal(resolveExecFileCommand('openclaw'), 'openclaw.cmd')
   })
 })
 
-test('resolveExecFileCommand keeps openclaw bare on Windows', async () => {
+test('resolveExecFileCommand resolves clawprobe to clawprobe.cmd on Windows', async () => {
   await withPlatform('win32', () => {
-    assert.equal(resolveExecFileCommand('openclaw'), 'openclaw')
+    assert.equal(resolveExecFileCommand('clawprobe'), 'clawprobe.cmd')
+  })
+})
+
+test('resolveExecFileCommand keeps ollama bare on Windows (native binary)', async () => {
+  await withPlatform('win32', () => {
+    assert.equal(resolveExecFileCommand('ollama'), 'ollama')
   })
 })
 
@@ -50,6 +56,7 @@ test('resolveExecFileCommand returns bare command on non-Windows for all command
     assert.equal(resolveExecFileCommand('clawhub'), 'clawhub')
     assert.equal(resolveExecFileCommand('ollama'), 'ollama')
     assert.equal(resolveExecFileCommand('openclaw'), 'openclaw')
+    assert.equal(resolveExecFileCommand('clawprobe'), 'clawprobe')
   })
 })
 
@@ -59,13 +66,14 @@ test('needsShellOnWindows returns true for npm-installed commands on Windows', a
   await withPlatform('win32', () => {
     assert.equal(needsShellOnWindows('npm'), true)
     assert.equal(needsShellOnWindows('clawhub'), true)
+    assert.equal(needsShellOnWindows('openclaw'), true)
+    assert.equal(needsShellOnWindows('clawprobe'), true)
   })
 })
 
 test('needsShellOnWindows returns false for native binaries on Windows', async () => {
   await withPlatform('win32', () => {
     assert.equal(needsShellOnWindows('ollama'), false)
-    assert.equal(needsShellOnWindows('openclaw'), false)
   })
 })
 
@@ -74,6 +82,8 @@ test('needsShellOnWindows returns false for everything on non-Windows', async ()
     assert.equal(needsShellOnWindows('npm'), false)
     assert.equal(needsShellOnWindows('clawhub'), false)
     assert.equal(needsShellOnWindows('ollama'), false)
+    assert.equal(needsShellOnWindows('openclaw'), false)
+    assert.equal(needsShellOnWindows('clawprobe'), false)
   })
 })
 

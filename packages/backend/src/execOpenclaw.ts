@@ -300,6 +300,7 @@ function execOpenclawSpawnStdin(
     const child = spawn(bin, args, {
       env: process.env,
       stdio: ['pipe', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
     })
     let killedByTimeout = false
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -415,6 +416,7 @@ export function execOpenclaw(
     const execOpts: ExecOpenclawFileOpts = {
       maxBuffer: 20 * 1024 * 1024,
       env: command.env,
+      shell: process.platform === 'win32',
     }
     if (opts?.timeoutMs != null && opts.timeoutMs > 0) {
       execOpts.timeout = opts.timeoutMs
@@ -515,7 +517,7 @@ export function execShellCommand(command: string): Promise<{
   })
 }
 
-const NPM_INSTALLED_COMMANDS = new Set(['npm', 'clawhub'])
+const NPM_INSTALLED_COMMANDS = new Set(['npm', 'clawhub', 'openclaw', 'clawprobe'])
 
 export function resolveExecFileCommand(cmd: string): string {
   if (process.platform === 'win32' && NPM_INSTALLED_COMMANDS.has(cmd)) {
@@ -728,6 +730,7 @@ export function spawnOpenclawGatewayStart(): Promise<void> {
         const child = spawn(command.bin, [...command.argsPrefix, 'gateway', 'start'], {
           stdio: ['ignore', 'pipe', 'pipe'],
           env: command.env,
+          shell: process.platform === 'win32',
         })
         let out = ''
         let err = ''
